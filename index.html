@@ -1,0 +1,2774 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1B1B24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Keep In Touch">
+  <title>Keep In Touch</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #F6F5F2; -webkit-font-smoothing: antialiased; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js" crossorigin></script>
+  <script type="text/babel" data-type="module">
+
+/* ═══════ PASSWORD AUTH ═══════ */
+var PWD_KEY = "kit-crm-pwd";
+var LAST_EXPORT_KEY = "kit-crm-last-export";
+var AUTH_KEY = "kit-crm-auth";
+
+async function hashPassword(pwd) {
+  var encoder = new TextEncoder();
+  var data = encoder.encode(pwd + "kit-crm-salt-2025");
+  var hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  var hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+}
+
+function AuthScreen({ onAuth }) {
+  var [mode, setMode] = useState("loading");
+  var [pwd, setPwd] = useState("");
+  var [pwd2, setPwd2] = useState("");
+  var [error, setError] = useState("");
+  useEffect(function () { setMode(localStorage.getItem(PWD_KEY) ? "login" : "setup"); }, []);
+
+  async function handleLogin() {
+    setError(""); if (!pwd) { setError("Entrez votre mot de passe."); return; }
+    var h = await hashPassword(pwd);
+    if (h === localStorage.getItem(PWD_KEY)) { sessionStorage.setItem(AUTH_KEY, "1"); onAuth(); }
+    else { setError("Mot de passe incorrect."); setPwd(""); }
+  }
+  async function handleSetup() {
+    setError(""); if (pwd.length < 4) { setError("Minimum 4 caractères."); return; }
+    if (pwd !== pwd2) { setError("Les mots de passe ne correspondent pas."); return; }
+    localStorage.setItem(PWD_KEY, await hashPassword(pwd));
+    sessionStorage.setItem(AUTH_KEY, "1"); onAuth();
+  }
+  function handleKeyDown(e) { if (e.key === "Enter") { mode === "login" ? handleLogin() : (pwd2 && handleSetup()); } }
+
+  var ff = "system-ui, -apple-system, sans-serif"; var ac = "#1B1B24"; var bd = "#E6E3DD";
+  if (mode === "loading") return React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: ff, color: "#64748B" } }, "Chargement…");
+
+  return React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", fontFamily: ff, background: "#F6F5F2", padding: 20 } },
+    React.createElement("div", { style: { background: "#fff", borderRadius: 16, border: "1px solid " + bd, padding: 36, maxWidth: 380, width: "100%", textAlign: "center" } },
+      React.createElement(KitLogo, { size: 60, style: { margin: "0 auto 20px" } }),
+      React.createElement("h1", { style: { margin: "0 0 6px", fontSize: 22, fontWeight: 600 } }, React.createElement("span", { style: { color: "#1B1B24" } }, "Keep In "), React.createElement("span", { style: { color: "#6CA8B4" } }, "Touch")),
+      React.createElement("p", { style: { margin: "0 0 28px", fontSize: 14, color: "#64748B" } }, mode === "setup" ? "Créez votre mot de passe." : "Entrez votre mot de passe."),
+      React.createElement("div", { style: { textAlign: "left" } },
+        React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5, textTransform: "uppercase" } }, "Mot de passe"),
+        React.createElement("input", { type: "password", value: pwd, onChange: function (e) { setPwd(e.target.value); }, onKeyDown: handleKeyDown, autoFocus: true, style: { width: "100%", padding: 12, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", marginBottom: mode === "setup" ? 14 : 0 } })
+      ),
+      mode === "setup" ? React.createElement("div", { style: { textAlign: "left" } },
+        React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5, textTransform: "uppercase" } }, "Confirmer"),
+        React.createElement("input", { type: "password", value: pwd2, onChange: function (e) { setPwd2(e.target.value); }, onKeyDown: handleKeyDown, style: { width: "100%", padding: 12, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" } })
+      ) : null,
+      error ? React.createElement("p", { style: { margin: "12px 0 0", fontSize: 13, color: "#BE3C1A", fontWeight: 600 } }, error) : null,
+      React.createElement("button", { onClick: mode === "setup" ? handleSetup : handleLogin, style: { width: "100%", marginTop: 20, background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: ff } }, mode === "setup" ? "Créer et accéder" : "Accéder"),
+      React.createElement("p", { style: { margin: "22px 0 0", fontSize: 11, color: "#A8A49C" } }, "Conçue par Uriel S.")
+    )
+  );
+}
+
+function ProtectedApp() {
+  var [authed, setAuthed] = useState(false);
+  useEffect(function () { if (sessionStorage.getItem(AUTH_KEY) === "1") setAuthed(true); }, []);
+  if (!authed) return React.createElement(AuthScreen, { onAuth: function () { setAuthed(true); } });
+  return React.createElement(App);
+}
+
+var { useState, useEffect, useCallback, useMemo } = React;
+
+const STORAGE_KEY = "kit-crm-v5";
+const DEFAULT_CATS = ["Client", "Prospect"];
+const PRIORITIES = [
+  { value: "high", label: "Élevé", color: "#BE3C1A", bg: "#FBEAE5" },
+  { value: "medium", label: "Moyen", color: "#B5790B", bg: "#FAF0D4" },
+  { value: "low", label: "Faible", color: "#64748B", bg: "#F1EFEB" },
+  { value: "none", label: "Nulle", color: "#CBD5E1", bg: "#F6F5F2" },
+];
+var INTER_TYPES = [
+  { value: "appel_echange", label: "Appel avec échange", icon: "✆" },
+  { value: "appel_message", label: "Appel avec message", icon: "📩" },
+  { value: "email", label: "Email", icon: "✉" },
+  { value: "linkedin", label: "LinkedIn", icon: "in" },
+  { value: "sms", label: "SMS / WhatsApp", icon: "💬" },
+  { value: "petitdej", label: "Petit-déjeuner", icon: "☕" },
+  { value: "dejeuner", label: "Déjeuner", icon: "🍽" },
+  { value: "diner", label: "Dîner", icon: "🍷" },
+  { value: "verre", label: "Verre", icon: "🥂" },
+  { value: "evenement", label: "Événement", icon: "📅" },
+  { value: "reunion", label: "Réunion", icon: "👥" },
+  { value: "formation_repas", label: "Formation avec repas", icon: "🎓" },
+  { value: "formation", label: "Formation sans repas", icon: "🎓" },
+  { value: "conference_repas", label: "Conférence avec verre / repas", icon: "🎤" },
+  { value: "autre", label: "Autre", icon: "…" },
+  { value: "appel", label: "Appel", icon: "✆", legacy: true },
+];
+
+// Formats conviviaux qui réinitialisent le cycle de 12 mois
+var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
+
+/* ── KIT_SYNC_HELPERS ── */
+var APP_VERSION = "1.0";
+var TS_BASE = "2000-01-01T00:00:00.000Z";
+function nowTS() { return new Date().toISOString(); }
+function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived"];
+function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
+function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
+function downloadJSON(obj, filename) {
+  var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a"); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+function migrateData(d) {
+  var changed = false; d = d || {};
+  if (!Array.isArray(d.contacts)) { d.contacts = []; changed = true; }
+  if (!Array.isArray(d.deletedContacts)) { d.deletedContacts = []; changed = true; }
+  if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
+  d.contacts.forEach(function (c) {
+    if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
+    if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
+    var seen = {};
+    (c.interactions || []).forEach(function (x) {
+      if (!x.iid) {
+        var base = detHash((x.date || "") + "|" + (x.type || "") + "|" + (x.comment || ""));
+        var n = seen[base] || 0; seen[base] = n + 1;
+        x.iid = base + (n ? "_" + n : ""); changed = true;
+      } else { seen[x.iid] = 1; }
+    });
+  });
+  return { d: d, changed: changed };
+}
+function mergeData(localData, importedData) {
+  var L = migrateData(JSON.parse(JSON.stringify(localData || {}))).d;
+  var I = migrateData(JSON.parse(JSON.stringify(importedData || {}))).d;
+  var delInterAll = (L.deletedInteractions || []).concat(I.deletedInteractions || []);
+  var delInterMap = {}; delInterAll.forEach(function (t) { delInterMap[t.cid + "|" + t.iid] = 1; });
+  var tombL = {}, tombI = {};
+  (L.deletedContacts || []).forEach(function (t) { var p = tombL[t.id]; if (!p || t.deletedAt > p.deletedAt) tombL[t.id] = t; });
+  (I.deletedContacts || []).forEach(function (t) { var p = tombI[t.id]; if (!p || t.deletedAt > p.deletedAt) tombI[t.id] = t; });
+  var mapL = {}, mapI = {};
+  L.contacts.forEach(function (c) { mapL[c.id] = c; });
+  I.contacts.forEach(function (c) { mapI[c.id] = c; });
+  var ids = {};
+  L.contacts.concat(I.contacts).forEach(function (c) { ids[c.id] = 1; });
+  Object.keys(tombL).forEach(function (k) { ids[k] = ids[k] || 1; });
+  Object.keys(tombI).forEach(function (k) { ids[k] = ids[k] || 1; });
+  var out = [];
+  var report = { added: [], updated: [], pending: [], revived: [], conflicts: [], interAdded: 0 };
+  var keepTomb = {};
+  Object.keys(ids).forEach(function (id) {
+    var a = mapL[id], b = mapI[id];
+    var t = null;
+    if (tombL[id] && tombI[id]) t = tombL[id].deletedAt > tombI[id].deletedAt ? tombL[id] : tombI[id];
+    else t = tombL[id] || tombI[id] || null;
+    if (a && b) {
+      var m = { id: id }, fu = {}, changedFields = [], nInterAdd = 0;
+      MERGE_FIELDS.forEach(function (f) {
+        var ta = fieldTS(a, f), tb = fieldTS(b, f);
+        var va = a[f], vb = b[f];
+        var same = JSON.stringify(va === undefined ? null : va) === JSON.stringify(vb === undefined ? null : vb);
+        var pick, ts;
+        if (same) { pick = va; ts = ta > tb ? ta : tb; }
+        else if (tb > ta) { pick = vb; ts = tb; changedFields.push(f); }
+        else if (ta > tb) { pick = va; ts = ta; }
+        else { pick = vb; ts = tb; changedFields.push(f); report.conflicts.push({ id: id, label: contactLabel(a), field: f }); }
+        if (pick !== undefined) m[f] = pick;
+        if (ts && ts !== TS_BASE) fu[f] = ts;
+      });
+      Object.keys(a).forEach(function (k) { if (m[k] === undefined && k !== "interactions" && k !== "fieldsUpdatedAt" && k !== "updatedAt") m[k] = a[k]; });
+      Object.keys(b).forEach(function (k) { if (m[k] === undefined && k !== "interactions" && k !== "fieldsUpdatedAt" && k !== "updatedAt") m[k] = b[k]; });
+      var seen = {}, ints = [];
+      (a.interactions || []).forEach(function (x) { if (delInterMap[id + "|" + x.iid]) return; if (!seen[x.iid]) { seen[x.iid] = 1; ints.push(x); } });
+      (b.interactions || []).forEach(function (x) { if (delInterMap[id + "|" + x.iid]) return; if (!seen[x.iid]) { seen[x.iid] = 1; ints.push(x); nInterAdd++; } });
+      ints.sort(function (x, y) { return (y.date || "").localeCompare(x.date || ""); });
+      m.interactions = ints;
+      m.fieldsUpdatedAt = fu;
+      m.updatedAt = (a.updatedAt || TS_BASE) > (b.updatedAt || TS_BASE) ? (a.updatedAt || TS_BASE) : (b.updatedAt || TS_BASE);
+      out.push(m);
+      if (changedFields.length || nInterAdd) { report.updated.push({ id: id, label: contactLabel(m), fields: changedFields, inter: nInterAdd }); report.interAdded += nInterAdd; }
+    } else if (a && !b) {
+      if (t && t.deletedAt > (a.updatedAt || TS_BASE)) { report.pending.push({ id: id, label: contactLabel(a), deletedAt: t.deletedAt, alive: a, tomb: t }); }
+      else { if (t) report.revived.push({ id: id, label: contactLabel(a) }); out.push(a); }
+    } else if (b && !a) {
+      if (t && t.deletedAt > (b.updatedAt || TS_BASE)) { report.pending.push({ id: id, label: contactLabel(b), deletedAt: t.deletedAt, alive: b, tomb: t }); }
+      else {
+        if (t) { report.revived.push({ id: id, label: contactLabel(b) }); }
+        else { report.added.push({ id: id, label: contactLabel(b) }); }
+        out.push(b);
+      }
+    } else if (t) { keepTomb[id] = t; }
+  });
+  var cats = (localData.categories || []).slice();
+  (importedData.categories || []).forEach(function (x) { if (cats.indexOf(x) === -1) cats.push(x); });
+  var seenDI = {}, dInter = [];
+  delInterAll.forEach(function (x) { var k = x.cid + "|" + x.iid; if (!seenDI[k]) { seenDI[k] = 1; dInter.push(x); } });
+  return { contacts: out, categories: cats, keepTomb: keepTomb, deletedInteractions: dInter, report: report };
+}
+/* ── KIT_SYNC_HELPERS_END ── */
+
+
+/* ═══════ EXPORT FORMAT (forme maison) ═══════ */
+// Largeurs de colonnes (forme maison) ; null = largeur Excel par défaut
+var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null];
+// Listes déroulantes : { colonne Excel : formule } ; la CCN de branche pointe vers l'onglet CCN de branche
+var EXPORT_DV = {
+  M: '"Nulle,Faible,Moyen,Élevé"',
+  P: '"Déjeuner,Dîner,Verre,Petit-déjeuner,Formation avec repas,Conférence avec verre / repas"',
+  R: '"Appel avec échange,Appel avec message,Email,LinkedIn,SMS / WhatsApp,Formation sans repas,Réunion,Événement,Autre"',
+  N: "'CCN de branche'!$C$2:$C$117"
+};
+var EXPORT_DATE_COLS = { 15: true, 17: true, 19: true }; // O Dernière rencontre, Q Dernier contact, S Anniversaire (1-based)
+// Bordures et fonds (forme maison)
+var EXPORT_HEADER_BORDER = "FFFFFFFF"; // blanc (thème 0) — bordures de l'en-tête
+var EXPORT_DATA_BORDER = "FF115692";   // bleu maison — quadrillage des données
+var EXPORT_AE_FILL = "FFC1E5F5";       // accent1 + teinte 0.8 — fond des colonnes A et E
+var EXPORT_FILL_COLS = { 1: true, 5: true }; // A = Nom, E = Entreprise (1-based)
+var EXPORT_TEXT_COLOR = "FF115692";    // texte des données en bleu maison
+var EXPORT_BLACK_COLS = { 8: true, 9: true }; // H Tél. pro, I Tél. perso → noir automatique
+
+// Convertit une date stockée (ISO "AAAA-MM-JJ" ou "JJ/MM/AAAA") en objet Date local (évite le décalage de fuseau)
+function parseLocalDate(v) {
+  if (v instanceof Date) return v;
+  var s = String(v == null ? "" : v).trim();
+  if (!s) return null;
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  var m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (m2) return new Date(parseInt(m2[3], 10), parseInt(m2[2], 10) - 1, parseInt(m2[1], 10));
+  return null;
+}
+
+// Seuils du cycle de rencontre (en mois)
+var RENCONTRE_WARN_MONTHS = 10;
+var RENCONTRE_OVERDUE_MONTHS = 12;
+
+// Fenêtre avant alerte de relance d'un message resté sans réponse (en jours)
+var FOLLOWUP_DAYS = 14;
+var FOLLOWUP_RETRY_DAYS = 21;
+
+/* ═══════ NOTIFICATIONS DE RELANCE ═══════ */
+// Miroir des données dans IndexedDB (le service worker ne peut pas lire le localStorage)
+function idbSet(key, val) {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        var db = rq.result;
+        try {
+          var tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").put(val, key);
+          tx.oncomplete = function () { res(); };
+          tx.onerror = function () { res(); };
+        } catch (e) { res(); }
+      };
+      rq.onerror = function () { res(); };
+    } catch (e) { res(); }
+  });
+}
+// Ensemble « à suivre » actionnable maintenant — mêmes règles que la vue À suivre
+function computeDue(contacts) {
+  contacts = (contacts || []).filter(function (c) { return !c.archived; });
+  var info = { total: 0, retard: 0, planifiees: 0, attente: 0, relance: 0 };
+  (contacts || []).forEach(function (c) {
+    var cyc = cycleFor(c);
+    var r = !!cyc && !isSnoozed(c) && !awaitingActive(c) && monthsSince(lastRencontre(c)) >= cyc.due;
+    var p = !!c.followUpDate && daysUntil(c.followUpDate) <= 0;
+    var a = awaitStale(c);
+    var rt = retryStale(c);
+    if (!(r || p || a || rt)) return;
+    info.total++;
+    if (a) info.attente++;
+    else if (rt) info.relance++;
+    else if (p) info.planifiees++;
+    else info.retard++;
+  });
+  return info;
+}
+function notifBody(info) {
+  var parts = [];
+  if (info.retard) parts.push(info.retard + " en retard");
+  if (info.planifiees) parts.push(info.planifiees + " relance" + (info.planifiees > 1 ? "s" : "") + " due" + (info.planifiees > 1 ? "s" : ""));
+  if (info.attente) parts.push(info.attente + " sans réponse");
+  if (info.relance) parts.push(info.relance + " à recontacter");
+  return parts.join(" · ");
+}
+
+var CCN_LIST = [
+  { dom: "Industrie & énergie", idcc: "3248", lib: "Métallurgie", rem: "Unifiée depuis 2024 (vérifié)" },
+  { dom: "Industrie & énergie", idcc: "0044", lib: "Industries chimiques", rem: "" },
+  { dom: "Industrie & énergie", idcc: "0176", lib: "Industrie pharmaceutique (fabrication)", rem: "" },
+  { dom: "Industrie & énergie", idcc: "0292", lib: "Plasturgie", rem: "" },
+  { dom: "Industrie & énergie", idcc: "0045", lib: "Industries du caoutchouc", rem: "" },
+  { dom: "Industrie & énergie", idcc: "1388", lib: "Industries du pétrole", rem: "" },
+  { dom: "Industrie & énergie", idcc: "", lib: "Industries électriques et gazières (IEG)", rem: "Statut national — pas d'IDCC de branche classique" },
+  { dom: "Industrie & énergie", idcc: "1495", lib: "Papiers-cartons (production et transformation)", rem: "Plusieurs IDCC (production/transformation) — à confirmer" },
+  { dom: "Industrie & énergie", idcc: "3224", lib: "Papiers-cartons : distribution et commerce de gros", rem: "Distinct de la production/transformation (1495)" },
+  { dom: "Industrie & énergie", idcc: "0018", lib: "Industrie textile", rem: "" },
+  { dom: "Industrie & énergie", idcc: "0247", lib: "Industries de l'habillement", rem: "" },
+  { dom: "Industrie & énergie", idcc: "1947", lib: "Industries du bois et scieries", rem: "Plusieurs IDCC (scieries, menuiserie-charpente) — à confirmer" },
+  { dom: "Industrie & énergie", idcc: "1411", lib: "Ameublement", rem: "Fabrication vs négoce : IDCC distincts — à confirmer" },
+  { dom: "Industrie & énergie", idcc: "0669", lib: "Industries du verre", rem: "Plusieurs IDCC selon sous-secteur — à confirmer" },
+  { dom: "Industrie & énergie", idcc: "0184", lib: "Imprimerie et industries graphiques", rem: "" },
+  { dom: "Industrie & énergie", idcc: "2121", lib: "Édition de livres", rem: "" },
+  { dom: "Industrie & énergie", idcc: "0112", lib: "Industries laitières", rem: "" },
+  { dom: "BTP & matériaux", idcc: "1597", lib: "Bâtiment (ouvriers)", rem: "≤10 salariés : 1596 / >10 : 1597" },
+  { dom: "BTP & matériaux", idcc: "2609", lib: "Bâtiment (ETAM et cadres)", rem: "ETAM : 2609 / cadres : 2420" },
+  { dom: "BTP & matériaux", idcc: "1702", lib: "Travaux publics", rem: "Ouvriers 1702 / ETAM 2614 / cadres 2409" },
+  { dom: "BTP & matériaux", idcc: "", lib: "Négoce de matériaux de construction", rem: "à confirmer" },
+  { dom: "BTP & matériaux", idcc: "0135", lib: "Carrières et matériaux (UNICEM)", rem: "Plusieurs IDCC (ouvriers/ETAM/cadres) — à confirmer" },
+  { dom: "BTP & matériaux", idcc: "1512", lib: "Promotion-construction immobilière", rem: "" },
+  { dom: "Agriculture & agroalimentaire", idcc: "7024", lib: "Production agricole et CUMA", rem: "CCN nationale 2021 (vérifié)" },
+  { dom: "Agriculture & agroalimentaire", idcc: "", lib: "Travaux et services agricoles, ruraux et forestiers (ETARF)", rem: "CCN nationale 2021 — IDCC 7xxx à confirmer" },
+  { dom: "Agriculture & agroalimentaire", idcc: "", lib: "Coopératives agricoles", rem: "Plusieurs IDCC 7xxx selon filière — à préciser" },
+  { dom: "Agriculture & agroalimentaire", idcc: "", lib: "Entreprises du paysage", rem: "IDCC 7xxx à confirmer" },
+  { dom: "Agriculture & agroalimentaire", idcc: "7023", lib: "Déshydratation : entreprises agricoles", rem: "" },
+  { dom: "Agriculture & agroalimentaire", idcc: "0843", lib: "Boulangerie-pâtisserie (entreprises artisanales)", rem: "" },
+  { dom: "Agriculture & agroalimentaire", idcc: "", lib: "Industries alimentaires diverses", rem: "Regroupement — plusieurs IDCC" },
+  { dom: "Agriculture & agroalimentaire", idcc: "2728", lib: "Sucreries, sucreries-distilleries, raffineries de sucre", rem: "" },
+  { dom: "Agriculture & agroalimentaire", idcc: "0493", lib: "Vins, spiritueux et boissons (négoce)", rem: "" },
+  { dom: "Commerce", idcc: "2216", lib: "Commerce de détail et de gros à prédominance alimentaire", rem: "" },
+  { dom: "Commerce", idcc: "1517", lib: "Commerce de détail non alimentaire", rem: "" },
+  { dom: "Commerce", idcc: "0675", lib: "Commerces de l'habillement (succursales)", rem: "" },
+  { dom: "Commerce", idcc: "1557", lib: "Commerce des articles de sport et de loisirs", rem: "" },
+  { dom: "Commerce", idcc: "0733", lib: "Commerce de la chaussure", rem: "" },
+  { dom: "Commerce", idcc: "0567", lib: "Bijouterie, joaillerie, horlogerie", rem: "" },
+  { dom: "Commerce", idcc: "1606", lib: "Bricolage", rem: "" },
+  { dom: "Commerce", idcc: "1431", lib: "Optique-lunetterie de détail", rem: "" },
+  { dom: "Commerce", idcc: "1996", lib: "Pharmacie d'officine", rem: "" },
+  { dom: "Commerce", idcc: "3013", lib: "Librairie / papeterie", rem: "Papeterie : IDCC distinct — à confirmer" },
+  { dom: "Commerce", idcc: "0573", lib: "Commerce de gros", rem: "" },
+  { dom: "Commerce", idcc: "0043", lib: "Import-export et commerce international", rem: "" },
+  { dom: "Commerce", idcc: "2198", lib: "Commerce à distance (entreprises)", rem: "" },
+  { dom: "Commerce", idcc: "1090", lib: "Services de l'automobile", rem: "" },
+  { dom: "Hôtellerie – restauration – tourisme", idcc: "1979", lib: "Hôtels, cafés, restaurants (HCR)", rem: "" },
+  { dom: "Hôtellerie – restauration – tourisme", idcc: "1501", lib: "Restauration rapide", rem: "" },
+  { dom: "Hôtellerie – restauration – tourisme", idcc: "1266", lib: "Restauration collective", rem: "" },
+  { dom: "Hôtellerie – restauration – tourisme", idcc: "1710", lib: "Agences de voyages et de tourisme", rem: "" },
+  { dom: "Hôtellerie – restauration – tourisme", idcc: "2257", lib: "Casinos", rem: "" },
+  { dom: "Transport & logistique", idcc: "0016", lib: "Transports routiers et activités auxiliaires", rem: "Inclut logistique et déménagement" },
+  { dom: "Transport & logistique", idcc: "1424", lib: "Transport public urbain de voyageurs", rem: "" },
+  { dom: "Transport & logistique", idcc: "0275", lib: "Transport aérien (personnel au sol)", rem: "" },
+  { dom: "Transport & logistique", idcc: "", lib: "Manutention et ports", rem: "à confirmer" },
+  { dom: "Services aux entreprises & numérique", idcc: "1486", lib: "Bureaux d'études, ingénierie, conseil et numérique (Syntec)", rem: "" },
+  { dom: "Services aux entreprises & numérique", idcc: "1351", lib: "Prévention et sécurité", rem: "" },
+  { dom: "Services aux entreprises & numérique", idcc: "3043", lib: "Propreté et services associés", rem: "" },
+  { dom: "Services aux entreprises & numérique", idcc: "2149", lib: "Déchets (activités de)", rem: "" },
+  { dom: "Services aux entreprises & numérique", idcc: "2098", lib: "Prestataires de services dans le domaine du secteur tertiaire", rem: "Centres d'appels, services tertiaires" },
+  { dom: "Services aux entreprises & numérique", idcc: "2378", lib: "Travail temporaire", rem: "Salariés permanents des ETT" },
+  { dom: "Services aux entreprises & numérique", idcc: "3219", lib: "Portage salarial", rem: "" },
+  { dom: "Services aux entreprises & numérique", idcc: "0086", lib: "Publicité", rem: "" },
+  { dom: "Services aux entreprises & numérique", idcc: "1516", lib: "Organismes de formation", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "1000", lib: "Cabinets d'avocats (personnel salarié)", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "1850", lib: "Avocats salariés", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "2205", lib: "Notariat (clercs et employés)", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "1921", lib: "Commissaires de justice (personnel)", rem: "Ex-huissiers — à confirmer" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "0787", lib: "Cabinets d'experts-comptables et de commissaires aux comptes", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "2543", lib: "Cabinets ou entreprises de géomètres-experts", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "2332", lib: "Entreprises d'architecture", rem: "" },
+  { dom: "Professions libérales, juridiques & techniques", idcc: "1619", lib: "Cabinets dentaires (personnel)", rem: "" },
+  { dom: "Banque / assurance / finance", idcc: "2120", lib: "Banque", rem: "" },
+  { dom: "Banque / assurance / finance", idcc: "1672", lib: "Sociétés d'assurances", rem: "" },
+  { dom: "Banque / assurance / finance", idcc: "2335", lib: "Agences générales d'assurances (personnel)", rem: "" },
+  { dom: "Banque / assurance / finance", idcc: "2247", lib: "Courtage d'assurances", rem: "" },
+  { dom: "Banque / assurance / finance", idcc: "2128", lib: "Mutualité", rem: "" },
+  { dom: "Banque / assurance / finance", idcc: "1794", lib: "Retraite complémentaire et prévoyance", rem: "Institutions de retraite complémentaire — à confirmer" },
+  { dom: "Banque / assurance / finance", idcc: "0478", lib: "Sociétés financières", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "2264", lib: "Hospitalisation privée (à but lucratif – FHP)", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "0029", lib: "Établissements privés non lucratifs (CCN 51 – FEHAP)", rem: "Fusion en cours d'une CCN unique du secteur non lucratif" },
+  { dom: "Santé / médico-social / social", idcc: "0413", lib: "Établissements pour personnes inadaptées et handicapées (CCN 66)", rem: "Fusion en cours d'une CCN unique du secteur non lucratif" },
+  { dom: "Santé / médico-social / social", idcc: "", lib: "Sanitaire, social et médico-social : accords de branche du secteur", rem: "Accords de branche du secteur non lucratif (BASS) — pas d'IDCC unique" },
+  { dom: "Santé / médico-social / social", idcc: "2941", lib: "Aide à domicile (BAD)", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "3127", lib: "Services à la personne (entreprises)", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "0959", lib: "Laboratoires de biologie médicale", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "1147", lib: "Cabinets médicaux (personnel)", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "1875", lib: "Cliniques et cabinets vétérinaires", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "1261", lib: "Acteurs du lien social et familial (centres sociaux – ALISFA)", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "", lib: "Foyers et habitat de jeunes travailleurs", rem: "à confirmer" },
+  { dom: "Santé / médico-social / social", idcc: "2190", lib: "Missions locales et PAIO", rem: "" },
+  { dom: "Santé / médico-social / social", idcc: "", lib: "Ateliers et chantiers d'insertion", rem: "à confirmer" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "1527", lib: "Immobilier (administrateurs de biens, agents immobiliers)", rem: "" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "1043", lib: "Gardiens, concierges et employés d'immeubles", rem: "" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "2150", lib: "HLM – sociétés anonymes et fondations (personnel)", rem: "Bailleurs sociaux (SA et fondations d'HLM)" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "3220", lib: "Offices publics de l'habitat (OPH)", rem: "Personnel des OPH et sociétés de coordination ; intègre les coopératives d'HLM depuis 2018 (vérifié)" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "3239", lib: "Particuliers employeurs et emploi à domicile", rem: "Unifiée 2022 (vérifié)" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "2596", lib: "Coiffure", rem: "" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "3032", lib: "Esthétique-cosmétique", rem: "" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "1978", lib: "Fleuristes, animaux familiers", rem: "" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "0759", lib: "Pompes funèbres", rem: "" },
+  { dom: "Immobilier / services aux particuliers / artisanat de service", idcc: "2002", lib: "Blanchisserie, laverie, pressing", rem: "" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "2511", lib: "Sport", rem: "" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "1518", lib: "Animation (ÉCLAT)", rem: "" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "3218", lib: "Enseignement privé (hors contrat / EPNL)", rem: "Plusieurs CCN (EPNL 3218, indépendant 2691) — à confirmer" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "2101", lib: "Enseignement privé à distance", rem: "" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "2148", lib: "Télécommunications", rem: "" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "2642", lib: "Production audiovisuelle", rem: "" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "3090", lib: "Spectacle vivant privé", rem: "à confirmer" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "1480", lib: "Presse et agences de presse (journalistes)", rem: "Journalistes 1480 / agences 1083 — plusieurs CCN" },
+  { dom: "Culture / médias / enseignement / sport", idcc: "3230", lib: "Presse d'information spécialisée", rem: "Distinct des journalistes (1480)" },
+  { dom: "Hors branches privées", idcc: "0218", lib: "Personnel des organismes de sécurité sociale", rem: "Vérifié" },
+  { dom: "Hors branches privées", idcc: "7502", lib: "Mutualité sociale agricole", rem: "Organisme de sécurité sociale agricole (vérifié)" },
+  { dom: "Hors branches privées", idcc: "", lib: "Établissement public", rem: "Statut de droit public — hors champ conventionnel" },
+  { dom: "Hors branches privées", idcc: "", lib: "Autre", rem: "CCN de branche non listée" },
+  { dom: "Hors branches privées", idcc: "", lib: "Sans CCN", rem: "Aucune convention collective applicable" },
+];
+
+function daysSince(d) {
+  if (!d) return Infinity;
+  return Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+}
+
+function daysUntil(s) {
+  if (!s) return Infinity;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  var d = new Date(s); d.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+function monthsSince(d) {
+  if (!d) return Infinity;
+  var dt = new Date(d);
+  var now = new Date();
+  var months = (now.getFullYear() - dt.getFullYear()) * 12 + (now.getMonth() - dt.getMonth());
+  if (now.getDate() < dt.getDate()) months -= 1;
+  return months < 0 ? 0 : months;
+}
+
+// Date de la dernière rencontre conviviale (petit-déj, déjeuner, dîner, verre)
+function lastRencontre(c) {
+  var best = null;
+  (c.interactions || []).forEach(function (x) {
+    if (RENCONTRE_TYPES.indexOf(x.type) >= 0) {
+      if (!best || x.date > best) best = x.date;
+    }
+  });
+  return best;
+}
+
+function isSnoozed(c) {
+  return !!(c.snoozedUntil && c.snoozedUntil > todayStr());
+}
+
+function getStatus(c) {
+  if (isSnoozed(c)) return "ok";
+  if (awaitingActive(c)) return "awaiting";
+  var cyc = cycleFor(c);
+  if (!cyc) return "ok";
+  var m = monthsSince(lastRencontre(c));
+  if (m === Infinity || m >= cyc.due) return "overdue";
+  if (m >= cyc.warn) return "approaching";
+  return "ok";
+}
+
+function addMonthsStr(n) {
+  var d = new Date();
+  d.setMonth(d.getMonth() + n);
+  return d.toISOString().split("T")[0];
+}
+
+function addDaysStr(n) {
+  var d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split("T")[0];
+}
+
+function statusLabel(s) {
+  if (s === "overdue") return "En retard";
+  if (s === "awaiting") return "En attente de retour";
+  if (s === "approaching") return "Bientôt";
+  return "À jour";
+}
+
+// Interaction la plus récente (par date)
+function latestInteraction(c) {
+  var best = null;
+  (c.interactions || []).forEach(function (x) {
+    if (!best || x.date > best.date) best = x;
+  });
+  return best;
+}
+
+// Le contact est-il en attente d'un retour ? (dernière interaction marquée "en attente")
+function isAwaiting(c) {
+  var li = latestInteraction(c);
+  return !!(li && li.awaitingResponse);
+}
+
+function daysAwaiting(c) {
+  var li = latestInteraction(c);
+  if (!li || !li.awaitingResponse) return -1;
+  return daysSince(li.date);
+}
+
+function isRetry(c) {
+  var li = latestInteraction(c);
+  return !!(li && li.retryPending);
+}
+
+function daysRetry(c) {
+  var li = latestInteraction(c);
+  if (!li || !li.retryPending) return -1;
+  return daysSince(li.date);
+}
+
+// Re-report manuel "+14 j" : la fiche est parquée en attente jusqu'à awaitingUntil
+function isParked(c) {
+  return !!(c.awaitingUntil && c.awaitingUntil > todayStr());
+}
+// Sollicitation en cours (balle dans leur camp) : fenêtre 14 j (en attente) / 21 j (nouvel échange) ou re-report manuel
+function awaitingActive(c) {
+  if (isParked(c)) return true;
+  var da = daysAwaiting(c); if (da >= 0 && da < FOLLOWUP_DAYS) return true;
+  var dr = daysRetry(c); if (dr >= 0 && dr < FOLLOWUP_RETRY_DAYS) return true;
+  return false;
+}
+// Fenêtre expirée et non re-reportée : action requise
+function awaitStale(c) {
+  return daysAwaiting(c) >= FOLLOWUP_DAYS && !isParked(c);
+}
+function retryStale(c) {
+  return daysRetry(c) >= FOLLOWUP_RETRY_DAYS && !isParked(c);
+}
+
+function fmtDate(s) {
+  if (!s) return "Jamais";
+  return new Date(s).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function fmtAgo(d) {
+  var days = daysSince(d);
+  if (days === Infinity) return "Jamais";
+  if (days < 60) return "Il y a " + String(days) + "j";
+  return "Il y a " + String(monthsSince(d)) + " mois";
+}
+
+function norm(s) {
+  return (s == null ? "" : String(s)).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+function todayStr() {
+  return new Date().toISOString().split("T")[0];
+}
+
+// Mois restants avant la prochaine rencontre due (négatif = en retard)
+function monthsUntilDue(c) {
+  var cyc = cycleFor(c);
+  if (!cyc) return 999;
+  var lr = lastRencontre(c);
+  if (!lr) return -999;
+  return cyc.due - monthsSince(lr);
+}
+
+function makeId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function displayName(c) {
+  if (c.firstName || c.lastName) {
+    var parts = [];
+    if (c.firstName) parts.push(c.firstName);
+    if (c.lastName) parts.push(c.lastName.toUpperCase());
+    return parts.join(" ");
+  }
+  return c.name || "";
+}
+
+function sortName(c) {
+  if (c.lastName) return c.lastName.toLowerCase();
+  return (c.name || "").toLowerCase();
+}
+
+function typeLabel(t) {
+  for (var i = 0; i < INTER_TYPES.length; i++) {
+    if (INTER_TYPES[i].value === t) return INTER_TYPES[i].label;
+  }
+  return "";
+}
+
+function prioLabel(v) {
+  for (var i = 0; i < PRIORITIES.length; i++) {
+    if (PRIORITIES[i].value === v) return PRIORITIES[i].label;
+  }
+  return "";
+}
+
+function isClient(c) {
+  return (c.category || "").toLowerCase() === "client";
+}
+
+function cycleFor(c) {
+  if (c.inTransition) return { due: 6, warn: 5 };
+  if (c.priority === "high") return { due: 6, warn: 5 };
+  if (c.priority === "none") return null;
+  if (c.priority === "low") return { due: 18, warn: 16 };
+  return isClient(c) ? { due: 12, warn: 9 } : { due: 12, warn: 11 };
+}
+
+
+function initials(c) {
+  var f = (c.firstName || "").trim();
+  var l = (c.lastName || "").trim();
+  if (f || l) return ((f[0] || "") + (l[0] || "")).toUpperCase();
+  var n = (c.name || "").trim();
+  if (!n) return "?";
+  var parts = n.split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return n.slice(0, 2).toUpperCase();
+}
+
+var AVATAR_COLORS = [
+  ["#1E3A5F", "#E0E7FF"], ["#0F766E", "#CCFBF1"], ["#9D174D", "#FCE7F3"],
+  ["#C2410C", "#FFEDD5"], ["#4338CA", "#E0E7FF"], ["#155E75", "#CFFAFE"],
+  ["#6D28D9", "#EDE9FE"], ["#B45309", "#FEF3C7"], ["#15803D", "#DCFCE7"],
+  ["#9F1239", "#FFE4E6"], ["#235C68", "#D5E8EC"], ["#7C2D12", "#FAF0D4"]
+];
+
+function avatarColors(c) {
+  var key = (c.lastName || c.name || c.firstName || "x");
+  var h = 0;
+  for (var i = 0; i < key.length; i++) { h = (h * 31 + key.charCodeAt(i)) % 100000; }
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+}
+
+function statusColor(s) {
+  if (s === "overdue") return "#BE3C1A";
+  if (s === "awaiting") return "#2F7C8C";
+  if (s === "approaching") return "#B5790B";
+  return "#2F6055";
+}
+
+var STAT_ICONS = {
+  users: ["M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0", "M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2", "M16 3.13a4 4 0 0 1 0 7.75", "M21 21v-2a4 4 0 0 0 -3 -3.85"],
+  alert: ["M12 9v4", "M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0", "M12 16h.01"],
+  clock: ["M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0", "M12 7v5l3 3"],
+  calendar: ["M4 7a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12", "M16 3v4", "M8 3v4", "M4 11h16", "M11 15h1", "M12 15v3"],
+  check: ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0", "M9 12l2 2l4 -4"]
+};
+function StatIcon(props) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {props.paths.map(function (d, i) { return <path key={i} d={d} />; })}
+    </svg>
+  );
+}
+function KitLogo(props) {
+  var s = props.size || 44;
+  var st = Object.assign({ display: "block", flexShrink: 0 }, props.style || {});
+  return (
+    <svg width={s} height={s} viewBox="0 0 56 56" aria-hidden="true" style={st}>
+      <rect x="0.5" y="0.5" width="55" height="55" rx="14" fill="#FFFFFF" stroke="#DDE3E8" strokeWidth="1" />
+      <path d="M23.5 25.5 Q30 30 33.5 31" fill="none" stroke="#1B1B24" strokeWidth="2.5" strokeLinecap="round" />
+      <circle cx="20" cy="22" r="5" fill="#BE3C1A" />
+      <circle cx="37" cy="34" r="5" fill="none" stroke="#6CA8B4" strokeWidth="2.5" />
+    </svg>
+  );
+}
+function Avatar(props) {
+  var c = props.c;
+  var size = props.size || 40;
+  var cols = avatarColors(c);
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", background: cols[1], color: cols[0], display: "flex", alignItems: "center", justifyContent: "center", fontSize: Math.round(size * 0.38), fontWeight: 700, flexShrink: 0, letterSpacing: 0.3, fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      {initials(c)}
+    </div>
+  );
+}
+
+/* ═══════ APP ═══════ */
+function App() {
+  var [data, setData] = useState(null);
+  var [loading, setLoading] = useState(true);
+  var [view, setView] = useState("dashboard");
+  var [selId, setSelId] = useState(null);
+  var [fCat, setFCat] = useState("all");
+  var [fSta, setFSta] = useState("all");
+  var [fPri, setFPri] = useState("all");
+  var [fTag, setFTag] = useState("all");
+  var [fSec, setFSec] = useState("all");
+  var [search, setSearch] = useState("");
+  var [fComp, setFComp] = useState("all");
+  var [persistOk, setPersistOk] = useState(null);
+  var [lastExport, setLastExport] = useState(function () { try { return localStorage.getItem(LAST_EXPORT_KEY) || ""; } catch (e) { return ""; } });
+  var [updReady, setUpdReady] = useState(false);
+  var [mergePrev, setMergePrev] = useState(null);
+  var [logCmt, setLogCmt] = useState("");
+  var [logDate, setLogDate] = useState("");
+  var [logType, setLogType] = useState("appel_echange");
+  var [logAwait, setLogAwait] = useState(false);
+  var [logRetry, setLogRetry] = useState(false);
+  var [showLog, setShowLog] = useState(false);
+  var [logId, setLogId] = useState(null);
+  var [showImp, setShowImp] = useState(false);
+  var [showMenu, setShowMenu] = useState(false);
+  var [showBackup, setShowBackup] = useState(false);
+  var [showChangePwd, setShowChangePwd] = useState(false);
+  var [showAbout, setShowAbout] = useState(false);
+  var [oldPwd, setOldPwd] = useState("");
+  var [newPwd, setNewPwd] = useState("");
+  var [newPwd2, setNewPwd2] = useState("");
+  var [pwdMsg, setPwdMsg] = useState("");
+
+  // Form state
+  var [fLastName, setFLastName] = useState("");
+  var [fFirstName, setFFirstName] = useState("");
+  var [fInTransition, setFInTransition] = useState(false);
+  var [fCatV, setFCatV] = useState("");
+  var [fPriV, setFPriV] = useState("medium");
+  var [fMet, setFMet] = useState("");
+  var [fNotes, setFNotes] = useState("");
+  var [fSec2, setFSec2] = useState("");
+  var [fNxt, setFNxt] = useState("");
+  var [fFollowDate, setFFollowDate] = useState("");
+  var [fFollowNote, setFFollowNote] = useState("");
+  var [fTagsStr, setFTagsStr] = useState("");
+  var [fKdLabel, setFKdLabel] = useState("");
+  var [fKdDate, setFKdDate] = useState("");
+  var [fKds, setFKds] = useState([]);
+  var [fBday, setFBday] = useState("");
+  var [fCompany, setFCompany] = useState("");
+  var [fCompFocus, setFCompFocus] = useState(false);
+  var [fJobTitle, setFJobTitle] = useState("");
+  var [fWorkLoc, setFWorkLoc] = useState("");
+  var [fEmail, setFEmail] = useState("");
+  var [fPhonePro, setFPhonePro] = useState("");
+  var [fPhonePerso, setFPhonePerso] = useState("");
+  var [fAddress, setFAddress] = useState("");
+  var [fLinkedin, setFLinkedin] = useState("");
+  var [fOrigin, setFOrigin] = useState("");
+  var [fNewCat, setFNewCat] = useState("");
+  var [showNewCat, setShowNewCat] = useState(false);
+
+  useEffect(function () {
+    async function load() {
+      try { if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().then(function (v) { setPersistOk(v); }).catch(function () {}); } } catch (e0) {}
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          var parsed = JSON.parse(raw);
+          var mig = migrateData(parsed);
+          setData(mig.d);
+          if (mig.changed) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mig.d)); } catch (e2) { /* silent */ } }
+          idbSet("data", mig.d);
+        } else {
+          setData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] });
+        }
+      } catch (e) {
+        setData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] });
+      }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  useEffect(function () {
+    function hUpd() { setUpdReady(true); }
+    window.addEventListener("kit-sw-updated", hUpd);
+    return function () { window.removeEventListener("kit-sw-updated", hUpd); };
+  }, []);
+
+  var save = useCallback(function (partial) {
+    setData(function (prev) {
+      var nd = Object.assign({}, prev || {}, partial);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nd)); } catch (e) { /* silent */ }
+      idbSet("data", nd);
+      return nd;
+    });
+  }, []);
+
+  async function enableNotifs() {
+    setShowMenu(false);
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) { alert("Les notifications ne sont pas supportées par ce navigateur."); return; }
+    var perm = await Notification.requestPermission();
+    if (perm !== "granted") { alert("Permission refusée. Tu peux la réactiver dans les réglages du navigateur."); return; }
+    idbSet("data", data);
+    try {
+      var reg = await navigator.serviceWorker.ready;
+      if (reg && reg.periodicSync) {
+        await reg.periodicSync.register("kit-relances", { minInterval: 24 * 60 * 60 * 1000 });
+        alert("\u2705 Notifications activ\u00e9es.\n\nUn rappel quotidien des relances en attente s'affichera (la fr\u00e9quence exacte est d\u00e9cid\u00e9e par le navigateur, et l'app doit \u00eatre install\u00e9e). Utilise \u00ab Tester la notif \u00bb pour v\u00e9rifier tout de suite.");
+      } else {
+        alert("\u2705 Notifications autoris\u00e9es.\n\nLa synchro p\u00e9riodique en arri\u00e8re-plan n'est pas disponible ici (Chrome/Edge + app install\u00e9e requis). Le bouton \u00ab Tester la notif \u00bb fonctionne, et tu seras notifi\u00e9 \u00e0 l'ouverture.");
+      }
+    } catch (e) {
+      alert("\u2705 Notifications autoris\u00e9es, mais la synchro p\u00e9riodique a \u00e9t\u00e9 refus\u00e9e par le navigateur. \u00ab Tester la notif \u00bb reste disponible.");
+    }
+  }
+
+  async function testNotif() {
+    setShowMenu(false);
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) { alert("Notifications non support\u00e9es par ce navigateur."); return; }
+    var perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (perm !== "granted") { alert("Permission refus\u00e9e."); return; }
+    var info = computeDue(contacts);
+    var reg = await navigator.serviceWorker.ready;
+    if (info.total === 0) {
+      reg.showNotification("Keep In Touch", { body: "Aucune relance en attente pour le moment. \ud83d\udc4c", icon: "./icons/icon-192.png", tag: "kit-relances" });
+    } else {
+      reg.showNotification("Keep In Touch \u2014 " + info.total + " \u00e0 suivre", { body: notifBody(info), icon: "./icons/icon-192.png", badge: "./icons/icon-192.png", tag: "kit-relances", renotify: true, data: { url: "./" } });
+    }
+  }
+
+  if (loading || !data) {
+    return React.createElement("div", {
+      style: { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "system-ui", color: "#64748B" }
+    }, "Chargement\u2026");
+  }
+
+  var contacts = data.contacts || [];
+  var activeContacts = contacts.filter(function (c) { return !c.archived; });
+  var lastExportDays = lastExport ? Math.floor((Date.now() - new Date(lastExport).getTime()) / 86400000) : null;
+  var categories = data.categories || DEFAULT_CATS.slice();
+  var allTags = [];
+  contacts.forEach(function (c) {
+    (c.tags || []).forEach(function (t) {
+      if (allTags.indexOf(t) === -1) allTags.push(t);
+    });
+  });
+  allTags.sort();
+
+  var allSectors = [];
+  contacts.forEach(function (c) {
+    if (c.sector && allSectors.indexOf(c.sector) === -1) allSectors.push(c.sector);
+  });
+  allSectors.sort();
+
+  var allCompanies = [];
+  var _seenComp = {};
+  contacts.forEach(function (c) {
+    var nm = (c.company || "").trim();
+    if (nm && !_seenComp[norm(nm)]) { _seenComp[norm(nm)] = 1; allCompanies.push(nm); }
+  });
+  allCompanies.sort(function (a, b) { return a.localeCompare(b); });
+
+  var allOrigins = [];
+  var _seenOrig = {};
+  contacts.forEach(function (c) {
+    var nm = (c.origin || "").trim();
+    if (nm && !_seenOrig[norm(nm)]) { _seenOrig[norm(nm)] = 1; allOrigins.push(nm); }
+  });
+  allOrigins.sort(function (a, b) { return a.localeCompare(b); });
+
+  /* ── CRUD ── */
+  function addContact(payload) {
+    var id = makeId();
+    var nc = {
+      id: id, name: payload.name, lastName: payload.lastName || "", firstName: payload.firstName || "",
+      inTransition: payload.inTransition || false,
+      category: payload.category, priority: payload.priority,
+      metAt: payload.metAt, notes: payload.notes,
+      sector: payload.sector, nextAction: payload.nextAction,
+      followUpDate: payload.followUpDate || "", followUpNote: payload.followUpNote || "",
+      tags: payload.tags, keyDates: payload.keyDates,
+      birthday: payload.birthday || "",
+      company: payload.company || "", jobTitle: payload.jobTitle || "",
+      workLocation: payload.workLocation || "",
+      email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
+      address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
+      interactions: [], createdAt: todayStr(), updatedAt: nowTS(), fieldsUpdatedAt: {}, archived: false
+    };
+    save({ contacts: contacts.concat([nc]), categories: categories });
+    setView("contact");
+    setSelId(id);
+  }
+
+  function updContact(id, updates) {
+    var newContacts = contacts.map(function (c) {
+      if (c.id !== id) return c;
+      var copy = {};
+      Object.keys(c).forEach(function (k) { copy[k] = c[k]; });
+      var now = nowTS(); var fu = Object.assign({}, c.fieldsUpdatedAt || {}); var touched = false;
+      Object.keys(updates).forEach(function (k) {
+        var oldV = c[k], newV = updates[k];
+        copy[k] = newV;
+        if (JSON.stringify(oldV === undefined ? null : oldV) !== JSON.stringify(newV === undefined ? null : newV)) { fu[k] = now; touched = true; }
+      });
+      if (touched) { copy.updatedAt = now; copy.fieldsUpdatedAt = fu; }
+      return copy;
+    });
+    save({ contacts: newContacts, categories: categories });
+  }
+
+  function delContact(id) {
+    var cDel = contacts.find(function (x) { return x.id === id; });
+    var tombs = (data.deletedContacts || []).concat(cDel ? [{ id: id, label: contactLabel(cDel), deletedAt: nowTS() }] : []);
+    save({ contacts: contacts.filter(function (c) { return c.id !== id; }), categories: categories, deletedContacts: tombs });
+    setView("dashboard");
+    setSelId(null);
+  }
+
+  function logInteraction(id, comment, date, type, awaiting, retry) {
+    var c = contacts.find(function (x) { return x.id === id; });
+    if (!c) return;
+    var logDay = date || todayStr();
+    var entry = { iid: makeId(), date: logDay, comment: comment || "", type: type || "autre", awaitingResponse: !!awaiting, retryPending: !!retry };
+    var newInts = [entry].concat(c.interactions || []);
+    newInts.sort(function (a, b) { return b.date.localeCompare(a.date); });
+    var patch = { interactions: newInts };
+    // Une rencontre conviviale réinitialise le cycle : on lève tout report en cours
+    if (RENCONTRE_TYPES.indexOf(type) >= 0) patch.snoozedUntil = "";
+    // Contacter la personne accomplit la relance planifiée éventuelle
+    if (c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
+    if (c.awaitingUntil) patch.awaitingUntil = "";
+    updContact(id, patch);
+  }
+
+  function deleteInteraction(id, idx) {
+    var c = contacts.find(function (x) { return x.id === id; });
+    if (!c) return;
+    if (!confirm("Supprimer cette interaction de l'historique ? Cette action est irréversible.")) return;
+    var arr = (c.interactions || []).slice();
+    var removed = arr.splice(idx, 1)[0];
+    if (removed && removed.iid) {
+      save({ deletedInteractions: (data.deletedInteractions || []).concat([{ cid: id, iid: removed.iid, deletedAt: nowTS() }]) });
+    }
+    updContact(id, { interactions: arr });
+  }
+
+  function reAwait(id) {
+    updContact(id, { awaitingUntil: addDaysStr(FOLLOWUP_DAYS) });
+  }
+
+  function snoozeRencontre(id) {
+    var cSn = contacts.find(function (x) { return x.id === id; });
+    var cyc = cSn ? cycleFor(cSn) : null;
+    updContact(id, { snoozedUntil: addMonthsStr(cyc ? cyc.due : 12) });
+  }
+
+  function cancelSnooze(id) {
+    updContact(id, { snoozedUntil: "" });
+  }
+
+  function archiveContact(id) { updContact(id, { archived: true }); }
+  function unarchiveContact(id) { updContact(id, { archived: false }); }
+
+  function openLogModal(id) { setLogId(id); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+
+  function addCategory(nm) {
+    if (nm && categories.indexOf(nm) === -1) {
+      save({ contacts: contacts, categories: categories.concat([nm]) });
+    }
+  }
+
+  function initForm(ex) {
+    setFLastName(ex ? (ex.lastName || "") : "");
+    setFFirstName(ex ? (ex.firstName || "") : "");
+    setFInTransition(ex ? (ex.inTransition || false) : false);
+    setFCatV(ex ? ex.category : (categories[0] || "Client"));
+    setFPriV(ex ? (ex.priority || "medium") : "medium");
+    setFMet(ex ? (ex.metAt || "") : "");
+    setFNotes(ex ? (ex.notes || "") : "");
+    setFSec2(ex ? (ex.sector || "") : "");
+    setFNxt(ex ? (ex.nextAction || "") : "");
+    setFFollowDate(ex ? (ex.followUpDate || "") : "");
+    setFFollowNote(ex ? (ex.followUpNote || "") : "");
+    setFTagsStr(ex ? (ex.tags || []).join(", ") : "");
+    setFKds(ex ? (ex.keyDates || []) : []);
+    setFBday(ex ? (ex.birthday || "") : "");
+    setFCompany(ex ? (ex.company || "") : "");
+    setFJobTitle(ex ? (ex.jobTitle || "") : "");
+    setFWorkLoc(ex ? (ex.workLocation || "") : "");
+    setFEmail(ex ? (ex.email || "") : "");
+    setFPhonePro(ex ? (ex.phonePro || ex.phone || "") : "");
+    setFPhonePerso(ex ? (ex.phonePerso || "") : "");
+    setFAddress(ex ? (ex.address || "") : "");
+    setFLinkedin(ex ? (ex.linkedin || "") : "");
+    setFOrigin(ex ? (ex.origin || "") : "");
+    setFKdLabel("");
+    setFKdDate("");
+    setFNewCat("");
+    setShowNewCat(false);
+  }
+
+  function submitForm(existingId) {
+    if (!fLastName.trim()) return;
+    var tagsArr = fTagsStr.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+    var payload = {
+      lastName: fLastName.trim(), firstName: fFirstName.trim(),
+      name: (fFirstName.trim() + " " + fLastName.trim()).trim(),
+      inTransition: fInTransition,
+      category: fCatV, priority: fPriV,
+      metAt: fMet, notes: fNotes,
+      sector: fSec2, nextAction: fNxt, tags: tagsArr, keyDates: fKds,
+      followUpDate: fFollowDate, followUpNote: fFollowNote,
+      birthday: fBday, company: fCompany, jobTitle: fJobTitle, workLocation: fWorkLoc,
+      email: fEmail, phonePro: fPhonePro, phonePerso: fPhonePerso,
+      address: fAddress, linkedin: fLinkedin, origin: fOrigin
+    };
+    if (existingId) {
+      updContact(existingId, payload);
+      setView("contact");
+    } else {
+      addContact(payload);
+    }
+  }
+
+  /* ── CSV Export ── */
+  function exportExcel() {
+    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions"];
+    var rows = contacts.map(function (c) {
+      var kdStr = (c.keyDates || []).map(function (k) { return k.label + ": " + k.date; }).join("; ");
+      var lastRdvInt = null, lastContactInt = null;
+      (c.interactions || []).forEach(function (x) {
+        if (RENCONTRE_TYPES.indexOf(x.type) >= 0) { if (!lastRdvInt || x.date > lastRdvInt.date) lastRdvInt = x; }
+        else { if (!lastContactInt || x.date > lastContactInt.date) lastContactInt = x; }
+      });
+      return [
+        (c.lastName || c.name || "").toUpperCase(), c.firstName || "", c.inTransition ? "Oui" : "Non",
+        c.jobTitle || "", c.company || "", c.workLocation || "",
+        c.email || "", c.phonePro || c.phone || "", c.phonePerso || "", c.linkedin || "", c.address || "",
+        c.category || "", prioLabel(c.priority), c.sector || "",
+        lastRdvInt ? lastRdvInt.date : "", lastRdvInt ? typeLabel(lastRdvInt.type) : "",
+        lastContactInt ? lastContactInt.date : "", lastContactInt ? typeLabel(lastContactInt.type) : "",
+        c.birthday || "", (c.tags || []).join("; "),
+        c.nextAction || "", c.metAt || "", c.notes || "", kdStr, c.origin || "",
+        statusLabel(getStatus(c)), c.archived ? "Oui" : "Non", (c.interactions || []).length
+      ];
+    });
+
+    // Export mis en forme (forme maison) via ExcelJS
+    if (typeof ExcelJS !== "undefined") {
+      buildStyledXlsx(headers, rows).catch(function (err) {
+        console.error("Export ExcelJS échoué, repli CSV:", err);
+        exportCSV(headers, rows, true);
+      });
+      return;
+    }
+    // Repli SheetJS (mise en forme limitée : largeurs seulement) si ExcelJS indisponible
+    if (typeof XLSX !== "undefined") {
+      try {
+        var wsData = [headers].concat(rows);
+        var ws = XLSX.utils.aoa_to_sheet(wsData);
+        ws["!cols"] = EXPORT_COLW.map(function (w) { return { wch: w || 10 }; });
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Fichier");
+        XLSX.writeFile(wb, "keep_in_touch_" + todayStr() + ".xlsx");
+        return;
+      } catch (err) {
+        console.error("Export Excel échoué, repli CSV:", err);
+      }
+    }
+    exportCSV(headers, rows, true);
+  }
+
+  async function buildStyledXlsx(headers, rows) {
+    var wb = new ExcelJS.Workbook();
+    var ws = wb.addWorksheet("Fichier", { views: [{ state: "frozen", ySplit: 1 }] });
+
+    // Colonnes + largeurs (forme maison)
+    ws.columns = headers.map(function (h, i) {
+      var col = { header: h };
+      if (EXPORT_COLW[i] != null) col.width = EXPORT_COLW[i];
+      return col;
+    });
+
+    // En-tête : fond #115692, Aptos 10 blanc, aligné gauche-centré, bordures blanches (G/D/H)
+    ws.getRow(1).eachCell(function (cell) {
+      cell.font = { name: "Aptos", size: 10, bold: false, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF115692" } };
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin", color: { argb: EXPORT_HEADER_BORDER } },
+        left: { style: "thin", color: { argb: EXPORT_HEADER_BORDER } },
+        right: { style: "thin", color: { argb: EXPORT_HEADER_BORDER } }
+      };
+    });
+
+    // Lignes de données : Aptos 10, quadrillage bleu, fond bleu clair sur A et E ; dates réelles (JJ/MM/AAAA)
+    rows.forEach(function (r) {
+      var row = ws.addRow(r);
+      row.eachCell({ includeEmpty: true }, function (cell, col) {
+        cell.font = EXPORT_BLACK_COLS[col]
+          ? { name: "Aptos", size: 10 }
+          : { name: "Aptos", size: 10, color: { argb: EXPORT_TEXT_COLOR } };
+        cell.alignment = { vertical: "middle" };
+        cell.border = {
+          top: { style: "thin", color: { argb: EXPORT_DATA_BORDER } },
+          left: { style: "thin", color: { argb: EXPORT_DATA_BORDER } },
+          right: { style: "thin", color: { argb: EXPORT_DATA_BORDER } },
+          bottom: { style: "thin", color: { argb: EXPORT_DATA_BORDER } }
+        };
+        if (EXPORT_FILL_COLS[col]) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: EXPORT_AE_FILL } };
+        }
+        if (EXPORT_DATE_COLS[col] && cell.value) {
+          var d = parseLocalDate(cell.value);
+          if (d) { cell.value = d; cell.numFmt = "dd/mm/yyyy"; }
+        }
+      });
+    });
+
+    // Onglet "CCN de branche" (source du menu déroulant ; Domaine / IDCC / Libellé / Remarque)
+    var ws2 = wb.addWorksheet("CCN de branche", { views: [{ state: "frozen", ySplit: 1 }] });
+    ws2.getColumn(1).width = 42; ws2.getColumn(2).width = 8; ws2.getColumn(3).width = 58; ws2.getColumn(4).width = 52;
+    ["Domaine", "IDCC", "CCN de branche", "Remarque"].forEach(function (h, i) {
+      var hc = ws2.getCell(["A", "B", "C", "D"][i] + "1");
+      hc.value = h;
+      hc.font = { name: "Aptos", size: 10, bold: true, color: { argb: "FFFFFFFF" } };
+      hc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF115692" } };
+      hc.alignment = { horizontal: "left", vertical: "middle" };
+    });
+    CCN_LIST.forEach(function (x, i) {
+      var rr = i + 2;
+      ws2.getCell("A" + rr).value = x.dom;
+      ws2.getCell("B" + rr).value = x.idcc;
+      ws2.getCell("C" + rr).value = x.lib;
+      ws2.getCell("D" + rr).value = x.rem;
+    });
+
+    // Listes déroulantes : une par colonne, sur toute la plage des contacts
+    var lastRow = rows.length + 1;
+    if (lastRow >= 2) {
+      Object.keys(EXPORT_DV).forEach(function (col) {
+        ws.dataValidations.add(col + "2:" + col + lastRow, { type: "list", allowBlank: true, formulae: [EXPORT_DV[col]] });
+      });
+    }
+
+    var buf = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "keep_in_touch_" + todayStr() + ".xlsx";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1500);
+  }
+
+  function exportCSV(headers, rows, notify) {
+    function esc(v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; }
+    var csvRows = rows.map(function (r) { return r.map(esc).join(","); });
+    var csv = "\uFEFF" + headers.map(esc).join(",") + "\n" + csvRows.join("\n");
+    var blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "keep_in_touch_" + todayStr() + ".csv";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    if (notify) alert("Note : l'export Excel n'a pas pu se charger. Un fichier CSV a été généré à la place.");
+  }
+
+
+  /* ── JSON Backup ── */
+  function backupJSON() {
+    var backup = { version: "kit-crm-v5", exportDate: todayStr(), data: data };
+    var json = JSON.stringify(backup, null, 2);
+    var blob = new Blob([json], { type: "application/json" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "keep_in_touch_backup_" + todayStr() + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    try { localStorage.setItem(LAST_EXPORT_KEY, todayStr()); } catch (eE) {}
+    setLastExport(todayStr());
+  }
+
+    function handleRestoreJSON(e) {
+    var file = e.target.files && e.target.files[0]; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var parsed = JSON.parse(ev.target.result);
+        var restored = parsed.data || parsed;
+        if (!restored.contacts || !Array.isArray(restored.contacts)) { alert("Fichier invalide."); return; }
+        if (!confirm("Remplacer vos " + String(contacts.length) + " contacts par " + String(restored.contacts.length) + " contacts du fichier ?")) return;
+        if (!confirm("Derni\u00e8re confirmation : cette op\u00e9ration \u00e9crase TOUT sur cet appareil (fiches, historiques, suppressions m\u00e9moris\u00e9es). Pour une synchronisation sans perte, utilise plut\u00f4t \u00ab Importer / fusionner \u00bb.")) return;
+        var mig = migrateData(restored);
+        save({ contacts: mig.d.contacts, categories: mig.d.categories || DEFAULT_CATS.slice(), deletedContacts: mig.d.deletedContacts, deletedInteractions: mig.d.deletedInteractions });
+        alert(String(mig.d.contacts.length) + " contact(s) restaur\u00e9(s).");
+        setShowBackup(false);
+      } catch (err) { alert("Erreur: " + err.message); }
+    };
+    reader.readAsText(file); e.target.value = "";
+  }
+
+  function handleImportJSON(e) {
+    var file = e.target.files && e.target.files[0]; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var parsed = JSON.parse(ev.target.result);
+        var imported = parsed.data || parsed;
+        if (!imported.contacts || !Array.isArray(imported.contacts)) { alert("Fichier invalide."); return; }
+        var res = mergeData(data, imported);
+        var checked = {};
+        res.report.pending.forEach(function (p) { checked[p.id] = true; });
+        setMergePrev({ res: res, checked: checked });
+      } catch (err) { alert("Erreur: " + err.message); }
+    };
+    reader.readAsText(file); e.target.value = "";
+  }
+
+  function applyMerge() {
+    if (!mergePrev) return;
+    var res = mergePrev.res, checked = mergePrev.checked;
+    downloadJSON({ version: "kit-crm-v5", exportDate: todayStr(), data: data }, "kit-sauvegarde-avant-fusion-" + todayStr() + ".json");
+    var finalContacts = res.contacts.slice();
+    var tombs = [];
+    Object.keys(res.keepTomb).forEach(function (k) { tombs.push(res.keepTomb[k]); });
+    res.report.pending.forEach(function (p) {
+      if (checked[p.id] !== false) { tombs.push(p.tomb); }
+      else { var cAlive = JSON.parse(JSON.stringify(p.alive)); cAlive.updatedAt = nowTS(); finalContacts.push(cAlive); }
+    });
+    save({ contacts: finalContacts, categories: res.categories, deletedContacts: tombs, deletedInteractions: res.deletedInteractions });
+    var r = res.report;
+    alert("Fusion appliqu\u00e9e : " + r.added.length + " ajout\u00e9e(s), " + r.updated.length + " mise(s) \u00e0 jour, " + r.interAdded + " interaction(s) ajout\u00e9e(s).");
+    setMergePrev(null); setShowBackup(false);
+  }
+
+  /* ── Change Password ── */
+  async function handleChangePwd() {
+    setPwdMsg("");
+    if (!oldPwd) { setPwdMsg("Entrez votre mot de passe actuel."); return; }
+    var oldHash = await hashPassword(oldPwd);
+    var storedHash = localStorage.getItem(PWD_KEY);
+    if (oldHash !== storedHash) { setPwdMsg("Mot de passe actuel incorrect."); return; }
+    if (newPwd.length < 4) { setPwdMsg("Nouveau: minimum 4 caractères."); return; }
+    if (newPwd !== newPwd2) { setPwdMsg("Les nouveaux mots de passe ne correspondent pas."); return; }
+    var newHash = await hashPassword(newPwd);
+    localStorage.setItem(PWD_KEY, newHash);
+    setPwdMsg("OK"); setOldPwd(""); setNewPwd(""); setNewPwd2("");
+    setTimeout(function () { setShowChangePwd(false); setPwdMsg(""); }, 1500);
+  }
+
+  /* ── CSV Import ── */
+  function parseCSVLine(line) {
+    var result = [];
+    var current = "";
+    var inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line[i];
+      if (inQuotes) {
+        if (ch === '"' && i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else if (ch === '"') {
+          inQuotes = false;
+        } else {
+          current += ch;
+        }
+      } else {
+        if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ',') {
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += ch;
+        }
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  function stripAccents(str) {
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function findCol(headers, keywords) {
+    for (var i = 0; i < headers.length; i++) {
+      var h = stripAccents(headers[i]);
+      for (var k = 0; k < keywords.length; k++) {
+        if (h.indexOf(stripAccents(keywords[k])) >= 0) return i;
+      }
+    }
+    return -1;
+  }
+
+  function colVal(vals, idx) {
+    if (idx < 0 || idx >= vals.length) return "";
+    return vals[idx] || "";
+  }
+
+  function parsePriority(val) {
+    if (!val) return "medium";
+    var v = val.toLowerCase().trim();
+    if (v === "élevé" || v === "eleve" || v === "high" || v === "haut") return "high";
+    if (v === "faible" || v === "low" || v === "bas") return "low";
+    if (v === "nulle" || v === "nul" || v === "none" || v === "aucune") return "none";
+    return "medium";
+  }
+
+  function normalizeDate(val) {
+    if (!val) return "";
+    var s = String(val).trim();
+    if (!s) return "";
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    // DD/MM/YYYY or DD-MM-YYYY
+    var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (m) return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
+    // MM/DD/YYYY (US)
+    var m2 = s.match(/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})/);
+    if (m2) return m2[1] + "-" + m2[2].padStart(2, "0") + "-" + m2[3].padStart(2, "0");
+    // Excel serial number (number of days since 1900-01-01)
+    var num = Number(s);
+    if (!isNaN(num) && num > 30000 && num < 60000) {
+      var d = new Date((num - 25569) * 86400000);
+      return d.toISOString().split("T")[0];
+    }
+    // Try native Date parse
+    var d2 = new Date(s);
+    if (!isNaN(d2.getTime()) && d2.getFullYear() > 1900) return d2.toISOString().split("T")[0];
+    return s;
+  }
+
+  function parseRencontreType(val) {
+    var t = stripAccents(String(val || "")).toLowerCase().trim();
+    if (!t) return "dejeuner";
+    if (t.indexOf("formation") >= 0) return "formation_repas";
+    if (t.indexOf("conference") >= 0) return "conference_repas";
+    if (t.indexOf("petit") >= 0) return "petitdej";
+    if (t.indexOf("diner") >= 0) return "diner";
+    if (t.indexOf("verre") >= 0 || t.indexOf("apero") >= 0 || t.indexOf("drink") >= 0) return "verre";
+    return "dejeuner";
+  }
+
+  function parseContactType(val) {
+    var t = stripAccents(String(val || "")).toLowerCase().trim();
+    if (!t) return "autre";
+    if (t.indexOf("message") >= 0 || t.indexOf("repondeur") >= 0 || t.indexOf("vocal") >= 0) return "appel_message";
+    if (t.indexOf("echange") >= 0) return "appel_echange";
+    if (t.indexOf("appel") >= 0 || t.indexOf("tel") >= 0 || t.indexOf("phone") >= 0 || t.indexOf("call") >= 0) return "appel_echange";
+    if (t.indexOf("sms") >= 0 || t.indexOf("whatsapp") >= 0 || t.indexOf("texto") >= 0) return "sms";
+    if (t.indexOf("mail") >= 0 || t.indexOf("courriel") >= 0) return "email";
+    if (t.indexOf("linkedin") >= 0) return "linkedin";
+    if (t.indexOf("formation") >= 0) return "formation";
+    if (t.indexOf("reunion") >= 0 || t.indexOf("meeting") >= 0) return "reunion";
+    if (t.indexOf("even") >= 0 || t.indexOf("salon") >= 0 || t.indexOf("conf") >= 0) return "evenement";
+    return "autre";
+  }
+
+  function normalizePhone(raw) {
+    if (!raw) return "";
+    var s = String(raw).trim();
+    if (!s) return "";
+    var compact = s.replace(/[\s.\-()]/g, "");
+    if (/^\+33\d{9}$/.test(compact)) compact = "0" + compact.slice(3);
+    else if (/^0033\d{9}$/.test(compact)) compact = "0" + compact.slice(4);
+    if (/^\+/.test(compact)) return s;
+    var digits = compact.replace(/\D/g, "");
+    if (digits.length === 9 && /^[1-9]/.test(digits)) digits = "0" + digits;
+    if (digits.length === 10 && digits.charAt(0) === "0") {
+      return digits.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, "$1 $2 $3 $4 $5");
+    }
+    return s;
+  }
+
+  function processImportRows(headerRow, dataRows) {
+    var hd = headerRow.map(function (h) { return String(h || "").trim().toLowerCase(); });
+
+    var iNom = findCol(hd, ["nom", "name"]);
+    var iArch = findCol(hd, ["archive", "archivé", "archived"]);
+    var iOrigin = findCol(hd, ["origine", "source", "apporteur"]);
+    if (iNom < 0) { alert("Colonne 'Nom' introuvable."); return; }
+
+    var iPrenom = findCol(hd, ["prénom", "prenom", "firstname", "first name"]);
+    var iFonc = findCol(hd, ["fonction", "titre", "poste", "job", "title"]);
+    var iEntr = findCol(hd, ["entreprise", "company", "societe", "société"]);
+    var iLieuEx = findCol(hd, ["lieu d'exercice", "lieu d exercice", "work location", "ville exercice"]);
+    var iEmail = findCol(hd, ["email", "mail", "e-mail", "courriel"]);
+    var iPhonePro = findCol(hd, ["tel. pro", "tel pro", "telephone pro", "phone pro"]);
+    var iPhonePerso = findCol(hd, ["tel. perso", "tel perso", "telephone perso", "phone perso", "portable", "mobile"]);
+    var iPhone = findCol(hd, ["phone", "tel", "telephone", "téléphone"]);
+    var iLinkedin = findCol(hd, ["linkedin", "profil linkedin"]);
+    var iAddress = findCol(hd, ["adresse", "address", "adresse postale"]);
+    var iTransition = findCol(hd, ["transition", "en transition"]);
+    var iCat = findCol(hd, ["categ", "category"]);
+    var iPrio = findCol(hd, ["priorit", "priority"]);
+    var iSect = findCol(hd, ["ccn de branche", "ccn", "convention collective", "secteur", "sector", "branche"]);
+    var iAnniv = findCol(hd, ["anniversaire", "birthday", "naissance"]);
+    var iTags = findCol(hd, ["tag"]);
+    var iNext = findCol(hd, ["prochaine", "next", "action"]);
+    var iLieu = findCol(hd, ["lieu rencontre", "lieu de rencontre", "contexte"]);
+    var iNotes = findCol(hd, ["note"]);
+    var iRencontre = findCol(hd, ["derniere rencontre", "dernier repas", "last meeting", "last meal"]);
+    var iRdvType = findCol(hd, ["type de rencontre", "type rencontre", "format rencontre"]);
+    var iLastContact = findCol(hd, ["dernier contact", "last contact"]);
+    var iContactType = findCol(hd, ["type de contact", "type contact", "format contact"]);
+    var iKeyDates = findCol(hd, ["dates cles", "key dates"]);
+
+    var nc = [];
+    for (var i = 0; i < dataRows.length; i++) {
+      var vals = dataRows[i].map(function (v) { return String(v == null ? "" : v).trim(); });
+      var nm = vals[iNom] || "";
+      if (!nm) continue;
+
+      var catN = (iCat >= 0 && vals[iCat]) ? vals[iCat] : categories[0];
+      if (categories.indexOf(catN) === -1) addCategory(catN);
+
+      var tagsStr = (iTags >= 0 && vals[iTags]) ? vals[iTags] : "";
+      var tagsArr = tagsStr ? tagsStr.split(";").map(function (t) { return t.trim(); }).filter(Boolean) : [];
+
+      var firstName = (iPrenom >= 0 && vals[iPrenom]) ? vals[iPrenom] : "";
+      var lastName = nm;
+      var fullName = (firstName + " " + lastName).trim();
+
+      var rdvVal = normalizeDate(iRencontre >= 0 ? vals[iRencontre] : "");
+      var rdvType = parseRencontreType(iRdvType >= 0 ? vals[iRdvType] : "");
+      var contactVal = normalizeDate(iLastContact >= 0 ? vals[iLastContact] : "");
+      var contactType = parseContactType(iContactType >= 0 ? vals[iContactType] : "");
+      var birthdayVal = normalizeDate(iAnniv >= 0 ? vals[iAnniv] : "");
+      var keyDates = [];
+      var kdRaw = (iKeyDates >= 0 ? vals[iKeyDates] : "") || "";
+      if (kdRaw) {
+        String(kdRaw).split(";").forEach(function (part) {
+          var seg = part.trim(); if (!seg) return;
+          var ci = seg.lastIndexOf(":");
+          if (ci > 0) {
+            var lbl = seg.slice(0, ci).trim();
+            var dt = normalizeDate(seg.slice(ci + 1).trim());
+            if (lbl && dt) keyDates.push({ label: lbl, date: dt });
+          }
+        });
+      }
+
+      var interactions = [];
+      if (rdvVal) {
+        interactions.push({ date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
+      }
+      if (contactVal && contactVal !== rdvVal) {
+        interactions.push({ date: contactVal, comment: "Importé depuis Excel", type: contactType });
+      }
+      interactions.sort(function (a, b) { return b.date.localeCompare(a.date); });
+
+      nc.push({
+        id: makeId() + "_" + i,
+        name: fullName,
+        lastName: lastName,
+        firstName: firstName,
+        jobTitle: (iFonc >= 0 ? vals[iFonc] : "") || "",
+        company: (iEntr >= 0 ? vals[iEntr] : "") || "",
+        workLocation: (iLieuEx >= 0 ? vals[iLieuEx] : "") || "",
+        email: (iEmail >= 0 ? vals[iEmail] : "") || "",
+        phone: normalizePhone((iPhone >= 0 ? vals[iPhone] : "") || ""),
+        phonePro: normalizePhone((iPhonePro >= 0 ? vals[iPhonePro] : "") || ""),
+        phonePerso: normalizePhone((iPhonePerso >= 0 ? vals[iPhonePerso] : "") || ""),
+        linkedin: (iLinkedin >= 0 ? vals[iLinkedin] : "") || "",
+        address: (iAddress >= 0 ? vals[iAddress] : "") || "",
+        inTransition: (iTransition >= 0 && vals[iTransition]) ? vals[iTransition].toLowerCase() === "oui" : false,
+        category: catN,
+        priority: parsePriority(iPrio >= 0 ? vals[iPrio] : ""),
+        sector: (iSect >= 0 ? vals[iSect] : "") || "",
+        birthday: birthdayVal,
+        tags: tagsArr,
+        nextAction: (iNext >= 0 ? vals[iNext] : "") || "",
+        metAt: (iLieu >= 0 ? vals[iLieu] : "") || "",
+        notes: (iNotes >= 0 ? vals[iNotes] : "") || "",
+
+        archived: iArch >= 0 && /^(oui|yes|true|vrai|x|1)$/i.test(String(vals[iArch] || "").trim()),
+        origin: (iOrigin >= 0 ? vals[iOrigin] : "") || "",
+        keyDates: keyDates,
+        interactions: interactions,
+        createdAt: todayStr()
+      });
+    }
+    if (nc.length === 0) { alert("Aucun contact trouvé."); return; }
+    var dupes = []; var uniques = [];
+    nc.forEach(function (newC) {
+      var isDupe = contacts.some(function (existC) {
+        var sameName = (existC.name || "").toLowerCase().trim() === (newC.name || "").toLowerCase().trim();
+        if (!sameName) return false;
+        if (newC.company && existC.company) return existC.company.toLowerCase().trim() === newC.company.toLowerCase().trim();
+        return true;
+      });
+      if (isDupe) { dupes.push(newC.name + (newC.company ? " (" + newC.company + ")" : "")); } else { uniques.push(newC); }
+    });
+    if (dupes.length > 0 && uniques.length > 0) {
+      if (!confirm(String(dupes.length) + " doublon(s) détecté(s).\nImporter uniquement les " + String(uniques.length) + " nouveau(x) contact(s) ?")) return;
+      save({ contacts: contacts.concat(uniques), categories: categories });
+      alert(String(uniques.length) + " importé(s), " + String(dupes.length) + " doublon(s) ignoré(s).");
+    } else if (dupes.length > 0) {
+      alert("Tous les contacts existent déjà. Aucun import.");
+    } else {
+      save({ contacts: contacts.concat(nc), categories: categories });
+      alert(String(nc.length) + " contact(s) importé(s) avec succès.");
+    }
+    setShowImp(false);
+  }
+
+  function handleImport(e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    var ext = file.name.split(".").pop().toLowerCase();
+
+    if (ext === "xlsx" || ext === "xls") {
+      if (typeof XLSX === "undefined") {
+        alert("La bibliothèque Excel n'a pas pu se charger. Essayez avec un fichier CSV (dans Excel : Fichier > Enregistrer sous > CSV UTF-8).");
+        e.target.value = "";
+        return;
+      }
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        try {
+          var data = new Uint8Array(ev.target.result);
+          var wb = XLSX.read(data, { type: "array" });
+          var wsName = wb.SheetNames[0];
+          var ws = wb.Sheets[wsName];
+          var allRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+          if (allRows.length < 2) { alert("Fichier vide."); return; }
+          processImportRows(allRows[0], allRows.slice(1));
+        } catch (err) { alert("Erreur de lecture Excel: " + err.message); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      var reader2 = new FileReader();
+      reader2.onload = function (ev) {
+        try {
+          var lines = ev.target.result.split("\n").filter(function (l) { return l.trim().length > 0; });
+          if (lines.length < 2) { alert("Fichier vide."); return; }
+          var headerRow = parseCSVLine(lines[0]);
+          var dataRows = [];
+          for (var i = 1; i < lines.length; i++) { dataRows.push(parseCSVLine(lines[i])); }
+          processImportRows(headerRow, dataRows);
+        } catch (err) { alert("Erreur: " + err.message); }
+      };
+      reader2.readAsText(file);
+    }
+    e.target.value = "";
+  }
+
+  /* ── Derived ── */
+  var filtered = contacts.filter(function (c) {
+    if (fCat !== "all" && c.category !== fCat) return false;
+    if (fSta === "archived") { if (!c.archived) return false; }
+    else if (c.archived) { return false; }
+    else if (fSta === "transition") { if (!c.inTransition) return false; }
+    else if (fSta === "never") { if ((c.interactions || []).some(function (x) { return RENCONTRE_TYPES.indexOf(x.type) >= 0; })) return false; }
+    else if (fSta !== "all" && getStatus(c) !== fSta) return false;
+    if (fPri !== "all" && c.priority !== fPri) return false;
+    if (fTag !== "all" && (c.tags || []).indexOf(fTag) === -1) return false;
+    if (fSec !== "all" && c.sector !== fSec) return false;
+    if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return false;
+    if (search) {
+      var q = norm(search);
+      var hay = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes];
+      var hit = hay.some(function (v) { return v && norm(String(v)).indexOf(q) >= 0; });
+      if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
+      if (!hit) return false;
+    }
+    return true;
+  }).sort(function (a, b) {
+    var sa = getStatus(a) === "overdue" ? 0 : getStatus(a) === "approaching" ? 1 : 2;
+    var sb = getStatus(b) === "overdue" ? 0 : getStatus(b) === "approaching" ? 1 : 2;
+    if (sa !== sb) return sa - sb;
+    var pri = function (c) {
+      if (isClient(c)) return 1.5; // clients entre high/medium pour ne pas les enterrer
+      return c.priority === "high" ? 0 : c.priority === "medium" ? 1 : c.priority === "low" ? 2 : 3;
+    };
+    var pa = pri(a), pb = pri(b);
+    if (pa !== pb) return pa - pb;
+    var rel = function (c) { var cy = cycleFor(c); var m = monthsSince(lastRencontre(c)); return (m === Infinity ? 999 : m) - (cy ? cy.due : 12); };
+    return rel(b) - rel(a);
+  });
+
+  // Rencontres à programmer : zone d'alerte (>= 10 mois), hors profils reportés
+  var rencontreList = activeContacts.filter(function (c) {
+    if (isSnoozed(c)) return false;
+    var cyc = cycleFor(c);
+    if (!cyc) return false;
+    return monthsSince(lastRencontre(c)) >= cyc.warn;
+  }).sort(function (a, b) {
+    var rel = function (c) { var cy = cycleFor(c); var m = monthsSince(lastRencontre(c)); return (m === Infinity ? 999 : m) - (cy ? cy.due : 12); };
+    return rel(b) - rel(a);
+  });
+
+  // Relances en attente : dernière interaction marquée "en attente" depuis >= seuil
+  var awaitingList = activeContacts.filter(function (c) {
+    return awaitStale(c);
+  }).sort(function (a, b) {
+    return daysAwaiting(b) - daysAwaiting(a);
+  });
+
+  // À recontacter : dernière interaction marquée "nouvel échange" depuis >= seuil
+  var retryList = activeContacts.filter(function (c) {
+    return retryStale(c);
+  }).sort(function (a, b) {
+    return daysRetry(b) - daysRetry(a);
+  });
+
+  // Relances planifiées : rappels datés dus ou à venir sous 30 jours
+  var followUpList = activeContacts.filter(function (c) {
+    return c.followUpDate && daysUntil(c.followUpDate) <= 30;
+  }).sort(function (a, b) {
+    return daysUntil(a.followUpDate) - daysUntil(b.followUpDate);
+  });
+
+  var upcomingKDs = [];
+  activeContacts.forEach(function (c) {
+    (c.keyDates || []).forEach(function (kd) {
+      var now = new Date();
+      var d = new Date(kd.date);
+      d.setFullYear(now.getFullYear());
+      if (d < now) d.setFullYear(now.getFullYear() + 1);
+      var diff = Math.floor((d.getTime() - now.getTime()) / 86400000);
+      if (diff >= 0 && diff <= 30) {
+        upcomingKDs.push({ label: kd.label, contactName: displayName(c), daysLeft: diff });
+      }
+    });
+  });
+  upcomingKDs.sort(function (a, b) { return a.daysLeft - b.daysLeft; });
+
+  var upcomingBdays = [];
+  activeContacts.forEach(function (c) {
+    if (!c.birthday) return;
+    var now = new Date();
+    var bd = new Date(c.birthday);
+    bd.setFullYear(now.getFullYear());
+    if (bd < now) bd.setFullYear(now.getFullYear() + 1);
+    var diff = Math.floor((bd.getTime() - now.getTime()) / 86400000);
+    if (diff >= 0 && diff <= 30) {
+      upcomingBdays.push({ contactName: displayName(c), contactId: c.id, daysLeft: diff, date: bd.toISOString().split("T")[0] });
+    }
+  });
+  upcomingBdays.sort(function (a, b) { return a.daysLeft - b.daysLeft; });
+
+  var stTotal = activeContacts.length;
+  var stOverdue = activeContacts.filter(function (c) { return getStatus(c) === "overdue"; }).length;
+  var stAwaiting = activeContacts.filter(function (c) { return getStatus(c) === "awaiting"; }).length;
+  var stApproaching = activeContacts.filter(function (c) { return getStatus(c) === "approaching"; }).length;
+  var stOk = activeContacts.filter(function (c) { return getStatus(c) === "ok"; }).length;
+  var stSuivies = activeContacts.filter(function (c) { return cycleFor(c) !== null; });
+  var stOkS = stSuivies.filter(function (c) { return getStatus(c) === "ok"; }).length;
+  var coverage = stSuivies.length > 0 ? Math.round(stOkS / stSuivies.length * 100) : 0;
+
+  var monthlyData = [];
+  var now = new Date();
+  for (var mi = 5; mi >= 0; mi--) {
+    var md = new Date(now.getFullYear(), now.getMonth() - mi, 1);
+    var mKey = md.getFullYear() + "-" + String(md.getMonth() + 1).padStart(2, "0");
+    var mLabel = md.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+    var mCount = 0;
+    activeContacts.forEach(function (c) {
+      (c.interactions || []).forEach(function (x) { if (x.date && x.date.indexOf(mKey) === 0) mCount++; });
+    });
+    monthlyData.push({ key: mKey, label: mLabel, count: mCount });
+  }
+  var maxMonthly = 1;
+  monthlyData.forEach(function (m) { if (m.count > maxMonthly) maxMonthly = m.count; });
+
+  // Rencontres (repas/verre) par trimestre — 4 derniers trimestres
+  var quarterData = [];
+  var nowQ = new Date();
+  var curQ = Math.floor(nowQ.getMonth() / 3);
+  for (var qi = 3; qi >= 0; qi--) {
+    var qIndex = curQ - qi;
+    var qYear = nowQ.getFullYear();
+    while (qIndex < 0) { qIndex += 4; qYear -= 1; }
+    var qStartMonth = qIndex * 3;
+    var qStart = new Date(qYear, qStartMonth, 1);
+    var qEnd = new Date(qYear, qStartMonth + 3, 1);
+    var qCount = 0;
+    activeContacts.forEach(function (c) {
+      (c.interactions || []).forEach(function (x) {
+        if (RENCONTRE_TYPES.indexOf(x.type) >= 0 && x.date) {
+          var xd = new Date(x.date);
+          if (xd >= qStart && xd < qEnd) qCount++;
+        }
+      });
+    });
+    quarterData.push({ label: "T" + String(qIndex + 1) + " " + String(qYear).slice(2), count: qCount });
+  }
+  var maxQuarter = 1;
+  quarterData.forEach(function (q) { if (q.count > maxQuarter) maxQuarter = q.count; });
+
+  /* ════ STYLES ════ */
+  var ff = "system-ui, -apple-system, sans-serif";
+  var ac = "#1B1B24";
+  var abl = "#2F7C8C";
+  var bd = "#E6E3DD";
+
+  /* ════ RENDER HELPERS ════ */
+
+  function renderStatusBadge(status) {
+    var bg, color, dot, label;
+    if (status === "overdue") { bg = "#FBEAE5"; color = "#9A3115"; dot = "#BE3C1A"; label = "En retard"; }
+    else if (status === "awaiting") { bg = "#D5E8EC"; color = "#235C68"; dot = "#2F7C8C"; label = "En attente de retour"; }
+    else if (status === "approaching") { bg = "#F1E3B4"; color = "#8A5E08"; dot = "#B5790B"; label = "Bientôt"; }
+    else { bg = "#D2E5DD"; color = "#234A41"; dot = "#2F6055"; label = "À jour"; }
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 20, background: bg, color: color, fontSize: 11, fontWeight: 600 }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: dot }}></span>
+        {label}
+      </span>
+    );
+  }
+
+  function renderCatBadge(catName) {
+    var h = 0;
+    for (var i = 0; i < catName.length; i++) h += catName.charCodeAt(i);
+    h = h % 360;
+    return (
+      <span style={{ padding: "2px 8px", borderRadius: 4, background: "hsla(" + h + ",40%,50%,0.12)", color: "hsl(" + h + ",45%,35%)", fontSize: 11, fontWeight: 600, textTransform: "uppercase" }}>
+        {catName}
+      </span>
+    );
+  }
+
+  function renderPrioBadge(value) {
+    var p = PRIORITIES[2];
+    for (var i = 0; i < PRIORITIES.length; i++) { if (PRIORITIES[i].value === value) { p = PRIORITIES[i]; break; } }
+    return <span style={{ padding: "2px 8px", borderRadius: 4, background: p.bg, color: p.color, fontSize: 11, fontWeight: 600 }}>{p.label}</span>;
+  }
+
+  /* ════ VIEWS ════ */
+
+  // ─── LOG MODAL ───
+  function renderLogModal() {
+    if (!showLog) return null;
+    var c = null;
+    for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === logId) { c = contacts[i]; break; } }
+    if (!c) return null;
+    return (
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={function () { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>Enregistrer un contact</h3>
+          <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TYPE D'INTERACTION</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+            {INTER_TYPES.filter(function (t) { return !t.legacy; }).map(function (t) {
+              var active = logType === t.value;
+              return React.createElement("button", {
+                key: t.value,
+                onClick: function () { setLogType(t.value); setLogRetry(t.value === "appel_message"); },
+                style: { padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: active ? ac : "#64748B" }
+              }, t.icon + " " + t.label);
+            })}
+          </div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATE</label>
+          <input type="date" value={logDate} onChange={function (e) { setLogDate(e.target.value); }} style={{ width: "100%", maxWidth: 200, padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", marginBottom: 14 }} />
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>COMMENTAIRE (OPTIONNEL)</label>
+          <textarea value={logCmt} onChange={function (e) { setLogCmt(e.target.value); }} placeholder="Ex: Parlé du dossier X…" rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", resize: "vertical" }} />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogAwait(!logAwait); }}>
+            <span style={{ width: 18, height: 18, borderRadius: 4, border: "1.5px solid " + (logAwait ? "#2F7C8C" : bd), background: logAwait ? "#2F7C8C" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>{logAwait ? "✓" : ""}</span>
+            {"⏳ En attente d'un retour (relance conseillée après " + String(FOLLOWUP_DAYS) + " jours)"}
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogRetry(!logRetry); }}>
+            <span style={{ width: 18, height: 18, borderRadius: 4, border: "1.5px solid " + (logRetry ? "#2F7C8C" : bd), background: logRetry ? "#2F7C8C" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>{logRetry ? "✓" : ""}</span>
+            {"🔁 Tentative de nouvel échange (relance conseillée après " + String(FOLLOWUP_RETRY_DAYS) + " jours)"}
+          </label>
+          <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>Annuler</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>Confirmer</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── FORM ───
+  function pickCompany(name) {
+    var up = (name || "").toUpperCase();
+    setFCompany(up);
+    setFCompFocus(false);
+    var sibs = contacts.filter(function (c) { return c.company && norm(c.company) === norm(name); });
+    if (!sibs.length) return;
+    var consensus = function (getter) {
+      var vals = sibs.map(getter).map(function (v) { return (v || "").trim(); }).filter(function (v) { return v; });
+      if (!vals.length) return null;
+      for (var i = 1; i < vals.length; i++) { if (vals[i] !== vals[0]) return null; }
+      return vals[0];
+    };
+    var wl = consensus(function (c) { return c.workLocation; });
+    var ad = consensus(function (c) { return c.address; });
+    var sc = consensus(function (c) { return c.sector; });
+    if (wl) setFWorkLoc(wl);
+    if (ad) setFAddress(ad);
+    if (sc) setFSec2(sc);
+  }
+
+  function renderForm() {
+    var compSugg = fCompany.trim() ? allCompanies.filter(function (n) { return norm(n).indexOf(norm(fCompany)) >= 0 && norm(n) !== norm(fCompany); }).slice(0, 6) : [];
+    var existing = null;
+    if (view === "editContact") {
+      for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === selId) { existing = contacts[i]; break; } }
+    }
+    return (
+      <div>
+        <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff, marginBottom: 20 }} onClick={function () { existing ? setView("contact") : setView("dashboard"); }}>{"← Retour"}</button>
+        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 24 }}>
+          <h2 style={{ margin: "0 0 24px", fontSize: 22, color: ac }}>{existing ? "Modifier" : "Nouveau contact"}</h2>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>NOM *</label>
+              <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fLastName} onChange={function (e) { setFLastName(e.target.value.toUpperCase()); }} placeholder="DURAND" />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>PRÉNOM</label>
+              <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fFirstName} onChange={function (e) { setFFirstName(e.target.value); }} placeholder="Marie" />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} onClick={function () { setFInTransition(false); }}>
+              <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (!fInTransition ? ac : bd), display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{!fInTransition ? React.createElement("span", { style: { width: 10, height: 10, borderRadius: "50%", background: ac } }) : null}</span>
+              {"En exercice"}
+            </label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }} onClick={function () { setFInTransition(true); }}>
+              <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (fInTransition ? "#786078" : bd), display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{fInTransition ? React.createElement("span", { style: { width: 10, height: 10, borderRadius: "50%", background: "#786078" } }) : null}</span>
+              {"En transition"}
+            </label>
+          </div>
+
+          {!fInTransition ? React.createElement("div", null,
+            React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 } },
+              React.createElement("div", null,
+                React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "FONCTION"),
+                React.createElement("input", { style: { width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }, value: fJobTitle, onChange: function (e) { setFJobTitle(e.target.value); }, placeholder: "Ex: DRH, Directeur général, DAF\u2026" })
+              ),
+              React.createElement("div", { style: { position: "relative" } },
+                React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "ENTREPRISE"),
+                React.createElement("input", { style: { width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }, value: fCompany, onChange: function (e) { setFCompany(e.target.value.toUpperCase()); }, onFocus: function () { setFCompFocus(true); }, onBlur: function () { setTimeout(function () { setFCompFocus(false); }, 150); }, placeholder: "Ex: RENAULT, SANOFI, CARREFOUR\u2026" }),
+                (fCompFocus && compSugg.length > 0) ? React.createElement("div", { style: { position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, background: "#fff", border: "1px solid " + bd, borderRadius: 8, boxShadow: "0 6px 18px rgba(16,24,40,0.10)", zIndex: 60, maxHeight: 210, overflowY: "auto" } },
+                  compSugg.map(function (nm) {
+                    var cnt = contacts.filter(function (c) { return c.company && norm(c.company) === norm(nm); }).length;
+                    return React.createElement("div", { key: nm, className: "kit-row", onMouseDown: function (e) { e.preventDefault(); pickCompany(nm); }, style: { padding: "9px 12px", fontSize: 13, cursor: "pointer", borderBottom: "1px solid #F1EFEB", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 } },
+                      React.createElement("span", null, nm),
+                      React.createElement("span", { style: { fontSize: 11, color: "#94A3B8" } }, String(cnt) + (cnt > 1 ? " fiches" : " fiche"))
+                    );
+                  })
+                ) : null
+              )
+            ),
+            React.createElement("div", { style: { marginBottom: 16 } },
+              React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "LIEU D'EXERCICE"),
+              React.createElement("input", { style: { width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }, value: fWorkLoc, onChange: function (e) { setFWorkLoc(e.target.value); }, placeholder: "Ex: Paris La D\u00e9fense, Lyon Part-Dieu\u2026" })
+            ),
+            React.createElement("div", { style: { marginBottom: 16 } },
+              React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "ADRESSE POSTALE"),
+              React.createElement("input", { style: { width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }, value: fAddress, onChange: function (e) { setFAddress(e.target.value); }, placeholder: "Ex: 12 avenue des Champs-\u00c9lys\u00e9es, 75008 Paris" })
+            )
+          ) : null}
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>EMAIL</label>
+            <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} type="email" value={fEmail} onChange={function (e) { setFEmail(e.target.value); }} placeholder="prenom.nom@entreprise.fr" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TÉLÉPHONE PRO</label>
+              <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} type="tel" value={fPhonePro} onChange={function (e) { setFPhonePro(e.target.value); }} placeholder="01 23 45 67 89" />
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TÉLÉPHONE PERSO</label>
+              <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} type="tel" value={fPhonePerso} onChange={function (e) { setFPhonePerso(e.target.value); }} placeholder="06 12 34 56 78" />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>PROFIL LINKEDIN</label>
+            <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fLinkedin} onChange={function (e) { setFLinkedin(e.target.value); }} placeholder="Ex: https://www.linkedin.com/in/marie-durand" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: ((fCatV || "").toLowerCase() === "client") ? "1fr" : "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>CATÉGORIE</label>
+              <select style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fCatV} onChange={function (e) { setFCatV(e.target.value); }}>
+                {categories.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+              </select>
+              {!showNewCat && <button style={{ marginTop: 6, background: "none", border: "none", color: abl, fontSize: 12, cursor: "pointer", fontFamily: ff }} onClick={function () { setShowNewCat(true); }}>{"+ Nouvelle catégorie"}</button>}
+              {showNewCat && (
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <input style={{ flex: 1, padding: 8, borderRadius: 6, border: "1px solid " + bd, fontSize: 12, fontFamily: ff }} value={fNewCat} onChange={function (e) { setFNewCat(e.target.value); }} placeholder="Nom" />
+                  <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: ff }} onClick={function () { if (fNewCat.trim()) { addCategory(fNewCat.trim()); setFCatV(fNewCat.trim()); setFNewCat(""); setShowNewCat(false); } }}>OK</button>
+                </div>
+              )}
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{"ORIGINE / APPORTEUR"}</label>
+              <input list="kit-origins" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fOrigin} onChange={function (e) { setFOrigin(e.target.value); }} placeholder="Ex : ANDRH, Me Dupont, formation…" />
+              <datalist id="kit-origins">{allOrigins.map(function (o) { return <option key={o} value={o} />; })}</datalist>
+            </div>
+            <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>PRIORITÉ</label>
+              <select style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fPriV} onChange={function (e) { setFPriV(e.target.value); }}>
+                {PRIORITIES.map(function (p) { return <option key={p.value} value={p.value}>{p.label}</option>; })}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>CCN DE BRANCHE</label>
+            <select style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fSec2} onChange={function (e) { setFSec2(e.target.value); }}>
+              <option value="">{"— Non renseigné —"}</option>
+              {CCN_LIST.map(function (x) { return <option key={x.lib} value={x.lib}>{x.lib}</option>; })}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>PROCHAINE ACTION</label>
+            <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fNxt} onChange={function (e) { setFNxt(e.target.value); }} placeholder="Ex: Envoyer l'article sur la réforme des PSE" />
+          </div>
+
+          <div style={{ marginBottom: 16, padding: 14, background: "#F6F5F2", borderRadius: 8, border: "1px solid " + bd }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: ac, marginBottom: 8 }}>{"📌 RELANCE PLANIFIÉE (OPTIONNEL)"}</label>
+            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 10 }}>
+              <input type="date" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fFollowDate} onChange={function (e) { setFFollowDate(e.target.value); }} />
+              <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fFollowNote} onChange={function (e) { setFFollowNote(e.target.value); }} placeholder="Note : ex. Recontacter pour le dossier de réorganisation" />
+            </div>
+            <p style={{ margin: "8px 0 0", fontSize: 11, color: "#94A3B8" }}>{"Une alerte apparaîtra dans « À suivre » à l'approche de cette date."}</p>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TAGS (séparés par des virgules)</label>
+            <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fTagsStr} onChange={function (e) { setFTagsStr(e.target.value); }} placeholder="PSE, contentieux, audit social" />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATES CLÉS</label>
+            {fKds.map(function (k, idx) {
+              return (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, padding: "6px 10px", background: "#F6F5F2", borderRadius: 6 }}>
+                  <span style={{ flex: 1, fontSize: 13 }}>{k.label + " — " + fmtDate(k.date)}</span>
+                  <span onClick={function () { setFKds(fKds.filter(function (_, j) { return j !== idx; })); }} style={{ cursor: "pointer", color: "#BE3C1A", fontSize: 16 }}>{"×"}</span>
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <input style={{ flex: 2, minWidth: 140, padding: 8, borderRadius: 6, border: "1px solid " + bd, fontSize: 13, fontFamily: ff }} value={fKdLabel} onChange={function (e) { setFKdLabel(e.target.value); }} placeholder="Ex: Renouvellement CSE" />
+              <input style={{ flex: 1, minWidth: 130, padding: 8, borderRadius: 6, border: "1px solid " + bd, fontSize: 13, fontFamily: ff }} type="date" value={fKdDate} onChange={function (e) { setFKdDate(e.target.value); }} />
+              <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: ff }} onClick={function () { if (fKdLabel.trim() && fKdDate) { setFKds(fKds.concat([{ label: fKdLabel.trim(), date: fKdDate }])); setFKdLabel(""); setFKdDate(""); } }}>{"+"}</button>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATE D'ANNIVERSAIRE</label>
+            <input style={{ width: "100%", maxWidth: 220, padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} type="date" value={fBday} onChange={function (e) { setFBday(e.target.value); }} />
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94A3B8" }}>{"Optionnel — rappel 7 jours avant et le jour J"}</p>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>LIEU / CONTEXTE DE RENCONTRE</label>
+            <input style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fMet} onChange={function (e) { setFMet(e.target.value); }} placeholder="Ex: Conférence ANDRH juin 2025" />
+          </div>
+
+          <div style={{ marginBottom: 24 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>NOTES</label>
+            <textarea style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", resize: "vertical" }} rows={3} value={fNotes} onChange={function (e) { setFNotes(e.target.value); }} placeholder="Informations utiles…" />
+          </div>
+
+          <button style={{ width: "100%", background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "12px 20px", fontSize: 15, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { submitForm(existing ? existing.id : null); }}>{existing ? "Enregistrer" : "Créer le contact"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── DETAIL ───
+  function renderDetail() {
+    var c = null;
+    for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === selId) { c = contacts[i]; break; } }
+    if (!c) return <p>Introuvable.</p>;
+    var status = getStatus(c);
+    var snoozed = isSnoozed(c);
+    var lastRdv = lastRencontre(c);
+    var rdvMonths = monthsSince(lastRdv);
+    var cycC = cycleFor(c);
+    var rdvColor = !cycC ? "#6E6A64" : rdvMonths >= cycC.due ? "#BE3C1A" : rdvMonths >= cycC.warn ? "#B5790B" : "#2F6055";
+    var awaitDays = daysAwaiting(c);
+    var awaiting = awaitDays >= 0;
+    var awaitWarn = awaitDays >= FOLLOWUP_DAYS;
+    var retryDays = daysRetry(c);
+    var retrying = retryDays >= 0;
+    var retryWarn = retryDays >= FOLLOWUP_RETRY_DAYS;
+    var rawOverdue = !!cycC && rdvMonths >= cycC.warn;
+
+    return (
+      <div>
+        <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff, marginBottom: 20 }} onClick={function () { setView("dashboard"); setSelId(null); }}>{"← Dashboard"}</button>
+
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, marginBottom: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", gap: 14, alignItems: "flex-start", minWidth: 0 }}>
+              <Avatar c={c} size={52} />
+              <div style={{ minWidth: 0 }}>
+              <h2 style={{ margin: "0 0 4px", fontSize: 24, color: ac }}>{displayName(c)}</h2>
+              {c.inTransition ? (
+                <p style={{ margin: "0 0 8px" }}><span style={{ display: "inline-block", padding: "3px 10px", borderRadius: 20, background: "#EFE9EE", color: "#6B5468", fontSize: 12, fontWeight: 600, border: "1px solid #D7CAD4" }}>En transition</span></p>
+              ) : (c.jobTitle || c.company || c.workLocation) ? (
+                <p style={{ margin: "0 0 8px", fontSize: 14, color: "#475569" }}>
+                  {c.jobTitle ? c.jobTitle : ""}
+                  {c.jobTitle && c.company ? " — " : ""}
+                  {c.company ? c.company : ""}
+                  {(c.jobTitle || c.company) && c.workLocation ? " · " : ""}
+                  {c.workLocation ? c.workLocation : ""}
+                </p>
+              ) : null}
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                {renderCatBadge(c.category)}
+                {!isClient(c) ? renderPrioBadge(c.priority) : null}
+                {snoozed ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #CBD5E1", background: "#F1EFEB", color: "#64748B" }}>{"⏸ Reporté jusqu'au " + fmtDate(c.snoozedUntil)}</span> : renderStatusBadge(status)}
+                {awaitStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #F4D6CB", background: "#FBEAE5", color: "#9A3115" }}>{"⚠ Relance due — " + String(awaitDays) + "j"}</span> : null}
+                {retryStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #9FCAD3", background: "#EAF3F5", color: "#235C68" }}>{"⚠ À recontacter — " + String(retryDays) + "j"}</span> : null}
+                {c.sector ? <span style={{ fontSize: 11, color: "#64748B", background: "#F1EFEB", padding: "2px 8px", borderRadius: 4 }}>{c.sector}</span> : null}
+              </div>
+              {(c.tags || []).length > 0 ? (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }}>
+                  {c.tags.map(function (t) { return <span key={t} style={{ padding: "2px 8px", borderRadius: 4, background: "#EDE9FE", color: "#5B21B6", fontSize: 11, fontWeight: 600 }}>{t}</span>; })}
+                </div>
+              ) : null}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { initForm(c); setView("editContact"); }}>Modifier</button>
+              <button style={{ background: "transparent", color: "#6E6A64", border: "1.5px solid #DDD7CB", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { c.archived ? unarchiveContact(c.id) : archiveContact(c.id); }}>{c.archived ? "D\u00e9sarchiver" : "Archiver"}</button>
+              <button style={{ background: "transparent", color: "#BE3C1A", border: "1.5px solid #F4D6CB", borderRadius: 8, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { if (confirm("Supprimer ?")) delContact(c.id); }}>Supprimer</button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 20, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+            <div style={{ padding: 14, background: "#F4F2EE", borderRadius: 8 }}>
+              <p style={{ margin: 0, fontSize: 11, color: "#6E6A64", fontWeight: 600 }}>DERNIÈRE RENCONTRE</p>
+              <p style={{ margin: "4px 0 0", fontSize: 18, fontWeight: 700, color: rdvColor }}>{fmtAgo(lastRdv)}</p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: "#94A3B8" }}>{fmtDate(lastRdv)}</p>
+              {(function () { var cy = cycleFor(c); return <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#6E6A64" }}>{cy ? "Cycle : " + String(cy.due) + " mois · alerte à " + String(cy.warn) : "Hors cycle (priorité nulle)"}</p>; })()}
+            </div>
+            {c.metAt ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>LIEU DE RENCONTRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.metAt}</p></div> : null}
+            {c.sector ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>CCN DE BRANCHE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.sector}</p></div> : null}
+            {c.birthday ? <div style={{ padding: 14, background: "#FDF2F8", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#9D174D", fontWeight: 600 }}>ANNIVERSAIRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{fmtDate(c.birthday)}</p></div> : null}
+          </div>
+
+          {c.followUpDate ? (
+            <div style={{ marginTop: 14, padding: "12px 14px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #C7E0E6", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 11, color: "#235C68", fontWeight: 600 }}>{"📌 RELANCE PLANIFIÉE — " + fmtDate(c.followUpDate) + (daysUntil(c.followUpDate) <= 0 ? " (à faire)" : " (dans " + String(daysUntil(c.followUpDate)) + "j)")}</p>
+                {c.followUpNote ? <p style={{ margin: "4px 0 0", fontSize: 14, color: "#1B1B24" }}>{c.followUpNote}</p> : null}
+              </div>
+              <button style={{ background: "transparent", color: "#235C68", border: "1.5px solid #9FCAD3", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { updContact(c.id, { followUpDate: "", followUpNote: "" }); }}>{"Fait ✓"}</button>
+            </div>
+          ) : null}
+
+          {snoozed ? (
+            <div style={{ marginTop: 14, padding: "10px 14px", background: "#F1EFEB", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: "#64748B" }}>{"⏸ Alerte de rencontre reportée jusqu'au " + fmtDate(c.snoozedUntil)}</span>
+              <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { cancelSnooze(c.id); }}>{"Réactiver l'alerte"}</button>
+            </div>
+          ) : rawOverdue ? (
+            <div style={{ marginTop: 14, padding: "10px 14px", background: "#F4F2EE", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: "#6E6A64" }}>{"Profil non prioritaire ? Tu peux reporter l'alerte de rencontre."}</span>
+              <button style={{ background: "transparent", color: "#5C5852", border: "1.5px solid #D8D2C6", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { snoozeRencontre(c.id); }}>{"⏸ Reporter de " + String((cycleFor(c) || { due: 12 }).due) + " mois"}</button>
+            </div>
+          ) : null}
+
+          {(awaitStale(c) || retryStale(c)) ? (
+            <div style={{ marginTop: 14, padding: "10px 14px", background: "#EAF3F5", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: "#235C68" }}>{"Toujours sans réponse ? Tu peux patienter avant de relancer."}</span>
+              <button style={{ background: "transparent", color: "#235C68", border: "1.5px solid #9FCAD3", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { reAwait(c.id); }}>{"⏳ Encore en attente · +14 j"}</button>
+            </div>
+          ) : null}
+
+          {(c.email || c.phonePro || c.phonePerso || c.phone || c.linkedin) ? (
+            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {c.email ? (
+                <a href={"mailto:" + c.email} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #C7E0E6", color: abl, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                  {"✉ " + c.email}
+                </a>
+              ) : null}
+              {c.phonePro ? (
+                <a href={"tel:" + normalizePhone(c.phonePro).replace(/\s/g, "")} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#E5EFEB", borderRadius: 8, border: "1px solid #D2E5DD", color: "#2F6055", fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                  {"✆ Pro " + normalizePhone(c.phonePro)}
+                </a>
+              ) : null}
+              {c.phonePerso ? (
+                <a href={"tel:" + normalizePhone(c.phonePerso).replace(/\s/g, "")} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#FDF2F8", borderRadius: 8, border: "1px solid #FBCFE8", color: "#9D174D", fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                  {"✆ Perso " + normalizePhone(c.phonePerso)}
+                </a>
+              ) : null}
+              {(!c.phonePro && !c.phonePerso && c.phone) ? (
+                <a href={"tel:" + normalizePhone(c.phone).replace(/\s/g, "")} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#E5EFEB", borderRadius: 8, border: "1px solid #D2E5DD", color: "#2F6055", fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                  {"✆ " + normalizePhone(c.phone)}
+                </a>
+              ) : null}
+              {c.linkedin ? (
+                <a href={c.linkedin.indexOf("http") === 0 ? c.linkedin : "https://" + c.linkedin} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #9FCAD3", color: "#235C68", fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                  {"in LinkedIn"}
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+
+          {c.address ? (
+            <div style={{ marginTop: 14, padding: 14, background: "#F6F5F2", borderRadius: 8, borderLeft: "3px solid " + bd }}>
+              <p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>ADRESSE POSTALE</p>
+              <p style={{ margin: "4px 0 0", fontSize: 14, lineHeight: 1.5 }}>{c.address}</p>
+            </div>
+          ) : null}
+
+          {c.nextAction ? <div style={{ marginTop: 14, padding: 14, background: "#EAF3F5", borderRadius: 8, borderLeft: "3px solid " + abl }}><p style={{ margin: 0, fontSize: 11, color: abl, fontWeight: 600 }}>PROCHAINE ACTION</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.nextAction}</p></div> : null}
+
+          {(c.keyDates || []).length > 0 ? (
+            <div style={{ marginTop: 14, padding: 14, background: "#F4F2EE", borderRadius: 8, borderLeft: "3px solid #DDD7CB" }}>
+              <p style={{ margin: "0 0 8px", fontSize: 11, color: "#6E6A64", fontWeight: 600 }}>DATES CLÉS</p>
+              {c.keyDates.map(function (k, idx) { return <p key={idx} style={{ margin: "2px 0", fontSize: 13 }}>{k.label + " — " + fmtDate(k.date)}</p>; })}
+            </div>
+          ) : null}
+
+          {c.origin ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Origine : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{c.origin}</span></p> : null}
+          {c.notes ? <div style={{ marginTop: 14, padding: 14, background: "#FAF0D4", borderRadius: 8, borderLeft: "3px solid #B5790B" }}><p style={{ margin: 0, fontSize: 11, color: "#8A5E08", fontWeight: 600 }}>NOTES</p><p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{c.notes}</p></div> : null}
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>Enregistrer :</span>
+          <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Je l'ai contacté"}</button>
+        </div>
+
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 16, color: ac }}>Historique</h3>
+          {(!c.interactions || c.interactions.length === 0) ? (
+            <div style={{ textAlign: "center", padding: "24px 0" }}>
+              <div style={{ fontSize: 30, marginBottom: 6 }}>{"🗒️"}</div>
+              <p style={{ color: "#94A3B8", fontSize: 14, margin: 0 }}>Aucune interaction enregistrée.</p>
+            </div>
+          ) : (
+            <div style={{ position: "relative" }}>
+              {c.interactions.length > 1 ? <div style={{ position: "absolute", left: 15, top: 16, bottom: 16, width: 2, background: "#ECE9E3" }}></div> : null}
+              {c.interactions.map(function (x, idx) {
+                var typeInfo = null;
+                for (var ti = 0; ti < INTER_TYPES.length; ti++) { if (INTER_TYPES[ti].value === x.type) { typeInfo = INTER_TYPES[ti]; break; } }
+                var isRepas = RENCONTRE_TYPES.indexOf(x.type) >= 0;
+                var pillBg = isRepas ? "#FAF0D4" : "#EAF3F5";
+                var pillBorder = isRepas ? "#F1E3B4" : "#C7E0E6";
+                return (
+                  <div key={idx} style={{ display: "flex", gap: 14, padding: "8px 0", position: "relative" }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: pillBg, border: "2px solid " + pillBorder, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, zIndex: 1 }}>{typeInfo ? typeInfo.icon : "•"}</div>
+                    <div style={{ flex: 1, paddingTop: 1 }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#334155" }}>
+                        {typeInfo ? typeInfo.label : "Interaction"}
+                        <span style={{ fontWeight: 500, color: "#94A3B8" }}>{" · " + fmtDate(x.date)}</span>
+                        {x.awaitingResponse ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"⏳ en attente"}</span> : null}
+                        {x.retryPending ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"🔁 nouvel échange"}</span> : null}
+                      </p>
+                      {x.comment ? <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#475569" }}>{x.comment}</p> : null}
+                    </div>
+                    <button title="Supprimer cette interaction" className="kit-btn" onClick={function () { deleteInteraction(c.id, idx); }} style={{ alignSelf: "flex-start", background: "transparent", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff, flexShrink: 0 }}>{"✕"}</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── WEEK ───
+  function renderWeek() {
+    var allEmpty = followUpList.length === 0 && awaitingList.length === 0 && retryList.length === 0 && rencontreList.length === 0 && upcomingBdays.length === 0 && upcomingKDs.length === 0;
+    return (
+      <div>
+        {renderNav()}
+        <h2 style={{ margin: "0 0 6px", fontSize: 20, color: ac }}>{"À suivre"}</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748B" }}>Relances planifiées, relances en attente, rencontres à programmer, anniversaires et dates clés</p>
+
+        {followUpList.length > 0 ? (
+          <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#235C68" }}>{"📌 Relances planifiées"}</h3>
+            {followUpList.map(function (c, idx) {
+              var du = daysUntil(c.followUpDate);
+              var txt = du < 0 ? String(Math.abs(du)) + "j de retard" : du === 0 ? "Aujourd'hui" : "dans " + String(du) + "j";
+              var urgent = du <= 0;
+              return (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "8px 0", borderTop: idx > 0 ? "1px solid #C7E0E6" : "none" }}>
+                  <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>{displayName(c)}</span>
+                    <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{" — " + fmtDate(c.followUpDate) + " (" + txt + ")"}</span>
+                    {c.followUpNote ? <p style={{ margin: "2px 0 0", fontSize: 13, color: "#475569" }}>{c.followUpNote}</p> : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                    <button style={{ background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { updContact(c.id, { followUpDate: "", followUpNote: "" }); }}>{"Fait ✓"}</button>
+                    <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Contacté"}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {awaitingList.length > 0 ? (
+          <div style={{ background: "#FBEAE5", borderRadius: 12, border: "1px solid #F4D6CB", padding: 16, marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#9A3115" }}>{"⚠ Relances en attente (sans retour depuis " + String(FOLLOWUP_DAYS) + "j+)"}</h3>
+            {awaitingList.map(function (c, idx) {
+              return (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #F4D6CB" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
+                  <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, color: "#9A3115", fontWeight: 600 }}>{String(daysAwaiting(c)) + "j sans retour"}</span>
+                    <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {retryList.length > 0 ? (
+          <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#235C68" }}>{"🔁 À recontacter (message laissé depuis " + String(FOLLOWUP_RETRY_DAYS) + "j+)"}</h3>
+            {retryList.map(function (c, idx) {
+              return (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #C7E0E6" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
+                  <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{String(daysRetry(c)) + "j depuis le message"}</span>
+                    <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {rencontreList.length > 0 ? (
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, color: ac }}>{"Rencontres à programmer"}</h3>
+            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#94A3B8" }}>{"Rencontre due ou en approche — seuil selon le cycle de chaque fiche"}</p>
+            {rencontreList.map(function (c, idx) {
+              var m = monthsSince(lastRencontre(c));
+              var lr = lastRencontre(c);
+              var label = lr ? String(m) + " mois" : "Jamais";
+              var cyW = cycleFor(c);
+              var col = cyW && m >= cyW.due ? "#BE3C1A" : "#B5790B";
+              return (
+                <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid " + bd : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>{displayName(c)}</span>
+                    {c.company ? <span style={{ fontSize: 12, color: "#475569" }}>{" — " + c.company}</span> : null}
+                    {!isClient(c) ? <span style={{ marginLeft: 6 }}>{renderPrioBadge(c.priority)}</span> : null}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{label}</span>
+                    <button style={{ background: "transparent", color: "#9A3115", border: "1px solid #F4D6CB", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); snoozeRencontre(c.id); }} title={"Reporter de " + String((cycleFor(c) || { due: 12 }).due) + " mois"}>{"⏸"}</button>
+                    <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openLogModal(c.id); }}>{"Enregistrer"}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {upcomingBdays.length > 0 ? (
+          <div style={{ background: "#FDF2F8", borderRadius: 12, border: "1px solid #F9A8D4", padding: 16, marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, color: "#9D174D" }}>{"Anniversaires à venir (30j)"}</h3>
+            {upcomingBdays.map(function (b, idx) {
+              var text = b.daysLeft === 0 ? "Aujourd'hui !" : "dans " + String(b.daysLeft) + "j";
+              var isSoon = b.daysLeft <= 7;
+              return (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid #FBCFE8" : "none" }}>
+                  <span style={{ fontSize: 13 }}><strong>{b.contactName}</strong>{" — " + fmtDate(b.date)}</span>
+                  <span style={{ fontSize: 12, color: isSoon ? "#BE185D" : "#9D174D", fontWeight: 600, background: isSoon ? "#FCE7F3" : "none", padding: isSoon ? "2px 8px" : 0, borderRadius: 4 }}>{text}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {upcomingKDs.length > 0 ? (
+          <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 14, color: ac }}>{"Dates clés à venir (30j)"}</h3>
+            {upcomingKDs.map(function (k, idx) {
+              return (
+                <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid " + bd : "none" }}>
+                  <span style={{ fontSize: 13 }}><strong>{k.contactName}</strong>{" — " + k.label}</span>
+                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{"dans " + String(k.daysLeft) + "j"}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {allEmpty ? (
+          <div className="kit-card" style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "48px 24px", textAlign: "center", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>{"✅"}</div>
+            <p style={{ fontSize: 16, fontWeight: 700, color: "#2F6055", margin: "0 0 4px" }}>{"Rien à suivre pour le moment"}</p>
+            <p style={{ margin: 0, color: "#94A3B8", fontSize: 13.5 }}>{"Aucune relance, rencontre ou date clé en attente. Tu es à jour."}</p>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // ─── STATS ───
+  function renderCompanies() {
+    var groups = {};
+    activeContacts.forEach(function (c) {
+      var nm = (c.company || "").trim(); if (!nm) return;
+      var k = norm(nm);
+      if (!groups[k]) groups[k] = { name: nm, list: [] };
+      groups[k].list.push(c);
+    });
+    var rows = Object.keys(groups).map(function (k) { return groups[k]; });
+    rows.sort(function (a, b) { return b.list.length - a.list.length || a.name.localeCompare(b.name); });
+    var noComp = activeContacts.filter(function (c) { return !(c.company || "").trim(); }).length;
+    return (
+      <div>
+        {renderNav()}
+        <h2 style={{ margin: "0 0 6px", fontSize: 20, color: ac }}>Entreprises</h2>
+        <p style={{ margin: "0 0 20px", fontSize: 14, color: "#64748B" }}>{String(rows.length) + " entreprise(s) \u00b7 " + String(noComp) + " fiche(s) sans entreprise"}</p>
+        {rows.map(function (g) {
+          var counts = { overdue: 0, awaiting: 0, approaching: 0, ok: 0 };
+          g.list.forEach(function (c) { counts[getStatus(c)]++; });
+          return (
+            <div key={g.name} className="kit-card" style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "13px 16px", marginBottom: 9, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }} onClick={function () { setFComp(g.name); setView("dashboard"); }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: "#1B1B24", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</p>
+                <p style={{ margin: "3px 0 0", fontSize: 12, color: "#86837C" }}>{String(g.list.length) + " fiche(s)"}{(g.list.length === 1 && g.list.some(function (c) { return isClient(c); })) ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#9A3115", background: "#FBEAE5", padding: "1px 7px", borderRadius: 10, border: "1px solid #F4D6CB", fontWeight: 600 }}>{"compte mono-contact"}</span> : null}</p>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexShrink: 0, fontSize: 12, fontWeight: 600 }}>
+                {counts.overdue ? <span style={{ color: "#BE3C1A" }}>{"\u25cf " + String(counts.overdue)}</span> : null}
+                {counts.awaiting ? <span style={{ color: "#2F7C8C" }}>{"\u25cf " + String(counts.awaiting)}</span> : null}
+                {counts.approaching ? <span style={{ color: "#B5790B" }}>{"\u25cf " + String(counts.approaching)}</span> : null}
+                {counts.ok ? <span style={{ color: "#2F6055" }}>{"\u25cf " + String(counts.ok)}</span> : null}
+              </div>
+            </div>
+          );
+        })}
+        {rows.length === 0 ? <p style={{ fontSize: 14, color: "#64748B" }}>{"Aucune entreprise renseign\u00e9e pour l'instant."}</p> : null}
+      </div>
+    );
+  }
+
+  function renderStats() {
+    return (
+      <div>
+        {renderNav()}
+        <h2 style={{ margin: "0 0 20px", fontSize: 20, color: ac }}>Statistiques</h2>
+        {(function () {
+          var og = {};
+          activeContacts.forEach(function (c) { var nm = (c.origin || "").trim(); if (!nm) return; var k = norm(nm); if (!og[k]) og[k] = { name: nm, n: 0, cli: 0 }; og[k].n++; if (isClient(c)) og[k].cli++; });
+          var rows = Object.keys(og).map(function (k) { return og[k]; });
+          rows.sort(function (a, b) { return b.cli - a.cli || b.n - a.n || a.name.localeCompare(b.name); });
+          if (!rows.length) return null;
+          return (
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
+              <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: ac }}>{"Origines / apporteurs"}</p>
+              {rows.map(function (r) {
+                return (
+                  <div key={r.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
+                    <span style={{ fontWeight: 600, color: "#1B1B24", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span style={{ color: "#64748B", flexShrink: 0 }}>{String(r.n) + " fiche(s) · " + String(r.cli) + " client(s)"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(stTotal)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Contacts</p></div>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: coverage >= 70 ? "#2F6055" : coverage >= 40 ? "#B5790B" : "#BE3C1A" }}>{String(coverage) + "%"}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{"Couverture (fiches suivies)"}</p></div>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: "#BE3C1A" }}>{String(stOverdue)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>En retard</p></div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, marginBottom: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, color: ac }}>Interactions / mois</h3>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 130 }}>
+            {monthlyData.map(function (m) {
+              var h = Math.max(4, (m.count / maxMonthly) * 100);
+              return (
+                <div key={m.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: ac }}>{String(m.count)}</span>
+                  <div style={{ width: "100%", maxWidth: 48, height: h, background: "linear-gradient(180deg, " + abl + ", " + ac + ")", borderRadius: "4px 4px 0 0" }}></div>
+                  <span style={{ fontSize: 11, color: "#64748B" }}>{m.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, marginBottom: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 15, color: ac }}>Rencontres par trimestre</h3>
+          <p style={{ margin: "0 0 16px", fontSize: 12, color: "#94A3B8" }}>Repas, dîners, verres et petits-déjeuners</p>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 12, height: 130 }}>
+            {quarterData.map(function (q) {
+              var h = Math.max(4, (q.count / maxQuarter) * 100);
+              return (
+                <div key={q.label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#8A5E08" }}>{String(q.count)}</span>
+                  <div style={{ width: "100%", maxWidth: 60, height: h, background: "linear-gradient(180deg, #CFA23C, #B5790B)", borderRadius: "4px 4px 0 0" }}></div>
+                  <span style={{ fontSize: 11, color: "#64748B" }}>{q.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16 }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 15, color: ac }}>Par catégorie</h3>
+            {categories.map(function (catName) {
+              var cc = contacts.filter(function (c) { return c.category === catName; });
+              var od = cc.filter(function (c) { return getStatus(c) === "overdue"; }).length;
+              return (
+                <div key={catName} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  {renderCatBadge(catName)}
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{String(cc.length)}</span>
+                  <span style={{ fontSize: 12, color: "#94A3B8" }}>{"(" + String(od) + " en retard)"}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16 }}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 15, color: ac }}>Par priorité</h3>
+            {PRIORITIES.map(function (p) {
+              var cc = contacts.filter(function (c) { return (c.priority || "low") === p.value; });
+              var od = cc.filter(function (c) { return getStatus(c) === "overdue"; }).length;
+              return (
+                <div key={p.value} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                  {renderPrioBadge(p.value)}
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{String(cc.length)}</span>
+                  <span style={{ fontSize: 12, color: "#94A3B8" }}>{"(" + String(od) + " en retard)"}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── NAV ───
+  function renderNav() {
+    function navBtn(id, label) {
+      var active = view === id;
+      return (
+        <button key={id} onClick={function () { setView(id); }} style={{ padding: "10px 16px", fontSize: 13, fontWeight: 600, fontFamily: ff, cursor: "pointer", border: "none", borderBottom: active ? "2.5px solid " + abl : "2.5px solid transparent", background: "none", color: active ? abl : "#64748B", marginBottom: -2 }}>
+          {label}
+        </button>
+      );
+    }
+    return (
+      <div className="kit-topnav" style={{ display: "flex", gap: 2, marginBottom: 20, borderBottom: "2px solid " + bd, flexWrap: "wrap" }}>
+        {navBtn("dashboard", "Dashboard")}
+        {navBtn("week", "À suivre (" + String(followUpList.length + awaitingList.length + retryList.length + rencontreList.length) + ")")}
+        {navBtn("stats", "Stats")}
+        {navBtn("companies", "Entreprises")}
+      </div>
+    );
+  }
+
+  // ─── DASHBOARD ───
+  function renderDash() {
+    return (
+      <div>
+        {renderNav()}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 13 }}>
+            <KitLogo size={46} />
+            <div>
+              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 600, letterSpacing: 0.2 }}><span style={{ color: "#1B1B24" }}>Keep In </span><span style={{ color: "#6CA8B4" }}>Touch</span></h1>
+              <p style={{ margin: "2px 0 0", fontSize: 13, color: "#64748B" }}>Suivi relationnel professionnel</p>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", position: "relative" }}>
+            <button className="kit-btn" style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { initForm(null); setView("newContact"); }}>{"+ Contact"}</button>
+            <button className="kit-btn" aria-label="Plus d'actions" style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, width: 40, height: 40, fontSize: 20, lineHeight: 1, cursor: "pointer", fontFamily: ff, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={function () { setShowMenu(!showMenu); }}>{"⋯"}</button>
+            {showMenu ? (
+              <div onClick={function () { setShowMenu(false); }} style={{ position: "fixed", inset: 0, zIndex: 40 }}></div>
+            ) : null}
+            {showMenu ? (
+              <div style={{ position: "absolute", top: 48, right: 0, background: "#fff", borderRadius: 10, border: "1px solid " + bd, boxShadow: "0 8px 24px rgba(16,24,40,0.12)", padding: 6, zIndex: 50, minWidth: 170 }}>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowImp(!showImp); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⬇ Importer (Excel / CSV)"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); exportExcel(); }}>{"⬆ Exporter (Excel)"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowBackup(!showBackup); setShowImp(false); setShowChangePwd(false); setShowAbout(false); }}>{"💾 Sauvegarde / Restauration"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowAbout(!showAbout); setShowImp(false); setShowBackup(false); setShowChangePwd(false); }}>{"ℹ️ À propos"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowChangePwd(!showChangePwd); setShowImp(false); setShowBackup(false); setShowAbout(false); }}>{"⚙ Mot de passe"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={enableNotifs}>{"🔔 Activer les relances"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={testNotif}>{"🔔 Tester la notif"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#BE3C1A", cursor: "pointer", fontFamily: ff }} onClick={function () { sessionStorage.removeItem("kit-crm-auth"); window.location.reload(); }}>{"🔒 Verrouiller"}</button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {showImp ? (
+          <div style={{ background: "#E5EFEB", borderRadius: 12, border: "1px solid #D2E5DD", padding: 16, marginBottom: 12 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#234A41" }}>Import (Excel ou CSV)</p>
+            <p style={{ margin: "0 0 10px", fontSize: 12, color: "#234A41" }}>{"Colonne obligatoire : \"Nom\". Optionnelles : Fonction, Entreprise, Lieu d'exercice, Email, Téléphone, Catégorie, Priorité, CCN de branche, Dernière rencontre, Type de rencontre, Dernier contact, Type de contact, Anniversaire, Tags, Prochaine action, Lieu rencontre, Notes."}</p>
+            <input type="file" accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={handleImport} style={{ fontSize: 13, width: "100%" }} />
+          </div>
+        ) : null}
+
+        {showBackup ? (
+          <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
+            <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#235C68" }}>Sauvegarde et restauration</p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+              <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={backupJSON}>{"Sauvegarder tout (JSON)"}</button>
+              <p style={{ margin: "auto 0", fontSize: 12, color: "#235C68" }}>{"Exporte toutes vos données."}</p>
+            </div>
+            <div style={{ borderTop: "1px solid #9FCAD3", paddingTop: 12 }}>
+              <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>{"Importer / fusionner (JSON)"}</p>
+              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#2F7C8C" }}>{"Fusionne un fichier exporté depuis un autre appareil : rien n'est écrasé, un rapport est présenté avant application."}</p>
+              <input type="file" accept=".json" onChange={handleImportJSON} style={{ fontSize: 13 }} />
+              <p style={{ margin: "16px 0 6px", fontSize: 12.5, fontWeight: 600, color: "#9A3115" }}>{"Remplacer tout (avancé)"}</p>
+              <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9A3115" }}>{"⚠ Écrase toutes les données de cet appareil par le fichier."}</p>
+              <input type="file" accept=".json" onChange={handleRestoreJSON} style={{ fontSize: 12 }} />
+            </div>
+          </div>
+        ) : null}
+
+        {showAbout ? (
+          <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12, display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <KitLogo size={44} />
+            <div style={{ fontSize: 12.5, color: "#5C5852", lineHeight: 1.8 }}>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: ac }}>{"Keep In Touch v" + APP_VERSION}</p>
+              <p style={{ margin: 0 }}>{"Application conçue par Uriel S. · © 2026"}</p>
+              <p style={{ margin: 0 }}>{lastExport ? "Dernier export JSON : " + fmtDate(lastExport) : "Aucun export JSON effectué sur cet appareil."}</p>
+              <p style={{ margin: 0 }}>{"Stockage persistant : " + (persistOk === true ? "accordé ✓" : persistOk === false ? "non accordé" : "—")}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {showChangePwd ? (
+          <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
+            <p style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 600, color: ac }}>Modifier le mot de passe</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 320 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>MOT DE PASSE ACTUEL</label>
+                <input type="password" value={oldPwd} onChange={function (e) { setOldPwd(e.target.value); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>NOUVEAU MOT DE PASSE</label>
+                <input type="password" value={newPwd} onChange={function (e) { setNewPwd(e.target.value); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 4 }}>CONFIRMER</label>
+                <input type="password" value={newPwd2} onChange={function (e) { setNewPwd2(e.target.value); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
+              </div>
+              {pwdMsg ? <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: pwdMsg === "OK" ? "#2F6055" : "#BE3C1A" }}>{pwdMsg === "OK" ? "Mot de passe modifié." : pwdMsg}</p> : null}
+              <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff, alignSelf: "flex-start" }} onClick={handleChangePwd}>Modifier</button>
+            </div>
+          </div>
+        ) : null}
+
+        {(lastExportDays === null || lastExportDays > 14) ? (
+          <div style={{ background: "#FAF0D4", border: "1px solid #F1E3B4", borderRadius: 12, padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, color: "#8A5E08", fontWeight: 600 }}>{lastExport ? "Dernier export JSON il y a " + String(lastExportDays) + " j \u2014 pense \u00e0 sauvegarder." : "Aucune sauvegarde JSON effectu\u00e9e sur cet appareil."}</span>
+            <button className="kit-btn" style={{ background: "#B5790B", color: "#fff", border: "none", borderRadius: 8, padding: "7px 14px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={backupJSON}>Exporter maintenant</button>
+          </div>
+        ) : null}
+        <div className="kit-stats">
+          <div className="kit-btn" style={{ background: "#F1EFEB", borderRadius: 16, padding: "14px 10px", textAlign: "center", cursor: "pointer", border: "2px solid transparent" }} onClick={function () { setFSta("all"); }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#E6E3DD", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 7px", color: ac }}><StatIcon paths={STAT_ICONS.users} /></div>
+            <p style={{ margin: 0, fontSize: 26, fontWeight: 500, color: ac, lineHeight: 1 }}>{String(stTotal)}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, fontWeight: 500, color: ac, opacity: 0.7 }}>Total</p>
+          </div>
+          <div className="kit-btn" style={{ background: "#FBEAE5", borderRadius: 16, padding: "14px 10px", textAlign: "center", cursor: "pointer", border: "2px solid " + (fSta === "overdue" ? "#BE3C1A" : "transparent") }} onClick={function () { setFSta(fSta === "overdue" ? "all" : "overdue"); }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#F4D6CB", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 7px", color: "#BE3C1A" }}><StatIcon paths={STAT_ICONS.alert} /></div>
+            <p style={{ margin: 0, fontSize: 26, fontWeight: 500, color: "#BE3C1A", lineHeight: 1 }}>{String(stOverdue)}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, fontWeight: 500, color: "#BE3C1A", opacity: 0.8 }}>En retard</p>
+          </div>
+          <div className="kit-btn" style={{ background: "#EAF3F5", borderRadius: 16, padding: "14px 10px", textAlign: "center", cursor: "pointer", border: "2px solid " + (fSta === "awaiting" ? "#2F7C8C" : "transparent") }} onClick={function () { setFSta(fSta === "awaiting" ? "all" : "awaiting"); }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#D5E8EC", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 7px", color: "#2F7C8C" }}><StatIcon paths={STAT_ICONS.clock} /></div>
+            <p style={{ margin: 0, fontSize: 26, fontWeight: 500, color: "#2F7C8C", lineHeight: 1 }}>{String(stAwaiting)}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, fontWeight: 500, color: "#2F7C8C", opacity: 0.85 }}>{"En attente"}</p>
+          </div>
+          <div className="kit-btn" style={{ background: "#FAF0D4", borderRadius: 16, padding: "14px 10px", textAlign: "center", cursor: "pointer", border: "2px solid " + (fSta === "approaching" ? "#B5790B" : "transparent") }} onClick={function () { setFSta(fSta === "approaching" ? "all" : "approaching"); }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#F1E3B4", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 7px", color: "#B5790B" }}><StatIcon paths={STAT_ICONS.calendar} /></div>
+            <p style={{ margin: 0, fontSize: 26, fontWeight: 500, color: "#B5790B", lineHeight: 1 }}>{String(stApproaching)}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, fontWeight: 500, color: "#B5790B", opacity: 0.85 }}>Bientôt</p>
+          </div>
+          <div className="kit-btn" style={{ background: "#E5EFEB", borderRadius: 16, padding: "14px 10px", textAlign: "center", cursor: "pointer", border: "2px solid " + (fSta === "ok" ? "#2F6055" : "transparent") }} onClick={function () { setFSta(fSta === "ok" ? "all" : "ok"); }}>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#D2E5DD", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 7px", color: "#2F6055" }}><StatIcon paths={STAT_ICONS.check} /></div>
+            <p style={{ margin: 0, fontSize: 26, fontWeight: 500, color: "#2F6055", lineHeight: 1 }}>{String(stOk)}</p>
+            <p style={{ margin: "4px 0 0", fontSize: 12, fontWeight: 500, color: "#2F6055", opacity: 0.8 }}>{"À jour"}</p>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
+          <input style={{ flex: 1, minWidth: 150, padding: "8px 12px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 13, fontFamily: ff, boxSizing: "border-box" }} placeholder="Rechercher…" value={search} onChange={function (e) { setSearch(e.target.value); }} />
+            {fComp !== "all" ? <span style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "#EAF3F5", color: "#235C68", border: "1px solid #C7E0E6", borderRadius: 8, padding: "7px 10px", fontSize: 12, fontWeight: 600 }}>{"\ud83c\udfe2 " + fComp}<span style={{ cursor: "pointer", fontWeight: 700 }} onClick={function () { setFComp("all"); }}>{"\u2715"}</span></span> : null}
+          <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fCat} onChange={function (e) { setFCat(e.target.value); }}>
+            <option value="all">Catégorie</option>
+            {categories.map(function (c) { return <option key={c} value={c}>{c}</option>; })}
+          </select>
+          <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fSta} onChange={function (e) { setFSta(e.target.value); }}>
+            <option value="all">Statut</option>
+            <option value="overdue">En retard</option>
+            <option value="awaiting">{"En attente de retour"}</option><option value="archived">Archivés</option><option value="transition">En transition</option><option value="never">Jamais rencontré·e</option>
+            <option value="approaching">{"Bientôt"}</option>
+            <option value="ok">{"À jour"}</option>
+          </select>
+          <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fPri} onChange={function (e) { setFPri(e.target.value); }}>
+            <option value="all">{"Priorité"}</option>
+            {PRIORITIES.map(function (p) { return <option key={p.value} value={p.value}>{p.label}</option>; })}
+          </select>
+          {allTags.length > 0 ? (
+            <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fTag} onChange={function (e) { setFTag(e.target.value); }}>
+              <option value="all">Tag</option>
+              {allTags.map(function (t) { return <option key={t} value={t}>{t}</option>; })}
+            </select>
+          ) : null}
+          {allSectors.length > 0 ? (
+            <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fSec} onChange={function (e) { setFSec(e.target.value); }}>
+              <option value="all">CCN de branche</option>
+              {allSectors.map(function (s) { return <option key={s} value={s}>{s}</option>; })}
+            </select>
+          ) : null}
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="kit-card" style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "48px 24px", textAlign: "center", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>{contacts.length === 0 ? "👋" : "🔍"}</div>
+            <p style={{ fontSize: 16, fontWeight: 700, color: ac, margin: "0 0 4px" }}>{contacts.length === 0 ? "Bienvenue dans Keep In Touch" : "Aucun résultat"}</p>
+            <p style={{ margin: "0 0 16px", color: "#94A3B8", fontSize: 13.5 }}>{contacts.length === 0 ? "Commence par ajouter ton premier contact pour suivre tes relations." : "Aucun contact ne correspond à ces filtres."}</p>
+            {contacts.length === 0 ? <button className="kit-btn" style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { initForm(null); setView("newContact"); }}>{"+ Ajouter un contact"}</button> : null}
+          </div>
+        ) : (
+          filtered.map(function (c) {
+            var status = getStatus(c);
+            var lastRdv = lastRencontre(c);
+            var rdvText = lastRdv ? "Dernière rencontre : " + fmtAgo(lastRdv).toLowerCase() : "Aucune rencontre";
+            var awD = daysAwaiting(c);
+            var awaiting = awD >= 0;
+            var awaitWarn = awD >= FOLLOWUP_DAYS;
+            var rtD = daysRetry(c);
+            var retrying = rtD >= 0;
+            var retryWarn = rtD >= FOLLOWUP_RETRY_DAYS;
+            var fuDays = c.followUpDate ? daysUntil(c.followUpDate) : null;
+            var fuActive = fuDays !== null && fuDays <= 30;
+            var extra = "";
+            if (c.workLocation) extra += " · " + c.workLocation;
+            if (c.sector) extra += " · " + c.sector;
+            if ((c.tags || []).length > 0) extra += " · " + c.tags.join(", ");
+            return (
+              <div key={c.id} className="kit-card" style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", borderLeft: "4px solid " + (c.archived ? "#B9B4AA" : statusColor(status)), padding: "14px 16px", marginBottom: 10, cursor: "pointer", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                  <Avatar c={c} size={42} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+                      <span style={{ fontSize: 15, fontWeight: 700, color: ac }}>{displayName(c)}</span>
+                      {renderCatBadge(c.category)}
+                      {c.inTransition ? <span style={{ fontSize: 10.5, color: "#6B5468", background: "#EFE9EE", padding: "1px 7px", borderRadius: 10, border: "1px solid #D7CAD4", fontWeight: 600 }}>En transition</span> : null}
+                      {c.archived ? <span style={{ fontSize: 10.5, color: "#6E6A64", background: "#EEECE7", padding: "1px 7px", borderRadius: 10, border: "1px solid #DDD7CB", fontWeight: 600 }}>{"Archiv\u00e9"}</span> : null}
+                      {c.priority ? renderPrioBadge(c.priority) : null}
+                      {status === "awaiting" ? <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, border: "1px solid #9FCAD3", background: "#D5E8EC", color: "#235C68" }}>{"⏳ En attente"}</span> : null}
+                      {awaitStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, border: "1px solid #F4D6CB", background: "#FBEAE5", color: "#9A3115" }}>{"⚠ " + String(awD) + "j"}</span> : null}
+                      {retryStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, border: "1px solid #9FCAD3", background: "#EAF3F5", color: "#235C68" }}>{"🔁 " + String(rtD) + "j"}</span> : null}
+                      {fuActive ? <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 8px", borderRadius: 10, border: "1px solid #9FCAD3", background: "#EAF3F5", color: "#235C68" }}>{"📌 " + (fuDays <= 0 ? "à faire" : String(fuDays) + "j")}</span> : null}
+                    </div>
+                    {(c.jobTitle || c.company) && !c.inTransition ? <p style={{ margin: "0 0 3px", fontSize: 12.5, color: "#475569" }}>{(c.jobTitle || "") + (c.jobTitle && c.company ? " — " : "") + (c.company || "")}</p> : null}
+                    {c.nextAction ? <p style={{ margin: "2px 0 0", fontSize: 12, color: abl }}>{"→ " + c.nextAction}</p> : null}
+                    <p style={{ margin: "3px 0 0", fontSize: 11.5, color: "#94A3B8" }}>{rdvText + extra}</p>
+                  </div>
+                  <button className="kit-btn" style={{ background: "#F1EFEB", color: ac, border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, flexShrink: 0 }} onClick={function (e) { e.stopPropagation(); openLogModal(c.id); }}>{"Contacté"}</button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    );
+  }
+
+  /* ════ MAIN RENDER ════ */
+  var navItems = [
+    { id: "dashboard", label: "Contacts", icon: "👤" },
+    { id: "week", label: "À suivre", icon: "🔔", badge: followUpList.length + awaitingList.length + retryList.length + rencontreList.length },
+    { id: "stats", label: "Stats", icon: "📊" },
+    { id: "companies", label: "Entreprises", icon: "🏢" }
+  ];
+  var KIT_CSS = ".kit-card{transition:box-shadow .16s ease,transform .16s ease}.kit-card:hover{box-shadow:0 6px 18px rgba(16,24,40,.10);transform:translateY(-1px)}.kit-row:hover{background:#F6F5F2}.kit-btn{transition:opacity .15s ease,background .15s ease,border-color .15s ease}.kit-btn:hover{opacity:.88}.kit-fade{animation:kitfade .28s ease both}@keyframes kitfade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}.kit-bottomnav{display:none}@media(max-width:640px){.kit-topnav{display:none!important}.kit-bottomnav{display:flex!important}.kit-shell{padding-bottom:84px!important}}.kit-stats{display:grid;gap:10px;grid-template-columns:repeat(5,1fr);margin-bottom:18px}@media(max-width:640px){.kit-stats{grid-template-columns:repeat(6,1fr)}.kit-stats>div{grid-column:span 2}.kit-stats>div:nth-child(4){grid-column:2/span 2}.kit-stats>div:nth-child(5){grid-column:4/span 2}}";
+
+  function renderBottomNav() {
+    return (
+      <div className="kit-bottomnav" style={{ position: "fixed", left: 0, right: 0, bottom: 0, background: "rgba(255,255,255,0.96)", backdropFilter: "blur(8px)", borderTop: "1px solid " + bd, padding: "6px 8px calc(6px + env(safe-area-inset-bottom))", justifyContent: "space-around", alignItems: "stretch", zIndex: 900, boxShadow: "0 -2px 12px rgba(16,24,40,0.05)" }}>
+        {navItems.map(function (it) {
+          var active = view === it.id || (it.id === "dashboard" && (view === "contact" || view === "newContact" || view === "editContact"));
+          return (
+            <button key={it.id} className="kit-btn" onClick={function () { setView(it.id); setSelId(null); }} style={{ flex: 1, border: "none", background: "none", cursor: "pointer", fontFamily: ff, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "6px 4px", color: active ? abl : "#94A3B8", position: "relative" }}>
+              <span style={{ fontSize: 18, lineHeight: 1, filter: active ? "none" : "grayscale(0.4) opacity(0.8)" }}>{it.icon}</span>
+              <span style={{ fontSize: 11, fontWeight: active ? 700 : 600 }}>{it.label}</span>
+              {it.badge ? <span style={{ position: "absolute", top: 2, right: "calc(50% - 22px)", background: "#BE3C1A", color: "#fff", fontSize: 9, fontWeight: 700, borderRadius: 8, minWidth: 15, height: 15, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>{String(it.badge)}</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: "16px 16px 80px" }}>
+      <style>{KIT_CSS}</style>
+      {renderLogModal()}
+      {view === "dashboard" ? renderDash() : null}
+      {view === "week" ? renderWeek() : null}
+      {view === "stats" ? renderStats() : null}
+      {view === "contact" ? renderDetail() : null}
+      {view === "companies" ? renderCompanies() : null}
+      {view === "newContact" ? renderForm() : null}
+      {view === "editContact" ? renderForm() : null}
+      {updReady ? (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 70, display: "flex", justifyContent: "center", zIndex: 60, pointerEvents: "none" }}>
+          <div style={{ background: "#1B1B24", color: "#fff", borderRadius: 12, padding: "10px 16px", fontSize: 13, display: "flex", gap: 12, alignItems: "center", boxShadow: "0 6px 20px rgba(0,0,0,0.25)", pointerEvents: "auto" }}>
+            <span>Nouvelle version disponible</span>
+            <button style={{ background: "#fff", color: "#1B1B24", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { location.reload(); }}>Recharger</button>
+          </div>
+        </div>
+      ) : null}
+      {mergePrev ? (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={function () { setMergePrev(null); }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 22, maxWidth: 480, width: "100%", maxHeight: "84vh", overflowY: "auto", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); }}>
+            <h3 style={{ margin: "0 0 10px", fontSize: 17, color: ac }}>Rapport de fusion</h3>
+            <p style={{ margin: "0 0 14px", fontSize: 13.5, color: "#475569" }}>{String(mergePrev.res.report.added.length) + " fiche(s) ajout\u00e9e(s) \u00b7 " + String(mergePrev.res.report.updated.length) + " mise(s) \u00e0 jour \u00b7 " + String(mergePrev.res.report.interAdded) + " interaction(s) ajout\u00e9e(s)"}</p>
+            {mergePrev.res.report.added.length ? <div style={{ marginBottom: 10 }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#2F6055" }}>AJOUTS</p>{mergePrev.res.report.added.map(function (x) { return <p key={x.id} style={{ margin: 0, fontSize: 13 }}>{x.label}</p>; })}</div> : null}
+            {mergePrev.res.report.updated.length ? <div style={{ marginBottom: 10 }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#235C68" }}>{"MISES \u00c0 JOUR"}</p>{mergePrev.res.report.updated.map(function (x) { return <p key={x.id} style={{ margin: 0, fontSize: 13 }}>{x.label + (x.fields.length ? " \u2014 " + x.fields.join(", ") : "") + (x.inter ? " \u00b7 +" + String(x.inter) + " interaction(s)" : "")}</p>; })}</div> : null}
+            {mergePrev.res.report.conflicts.length ? <div style={{ marginBottom: 10, background: "#FAF0D4", borderRadius: 8, padding: "8px 10px" }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#8A5E08" }}>{"CONFLITS (valeur du fichier retenue)"}</p>{mergePrev.res.report.conflicts.map(function (x, i) { return <p key={String(i)} style={{ margin: 0, fontSize: 12.5 }}>{x.label + " \u2014 " + x.field}</p>; })}</div> : null}
+            {mergePrev.res.report.pending.length ? <div style={{ marginBottom: 12, background: "#FBEAE5", borderRadius: 8, padding: "10px 12px" }}>
+              <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#9A3115" }}>{"SUPPRESSIONS \u00c0 CONFIRMER"}</p>
+              <p style={{ margin: "0 0 8px", fontSize: 12, color: "#9A3115" }}>{"Coch\u00e9 = la suppression est maintenue. D\u00e9coche pour restaurer la fiche."}</p>
+              {mergePrev.res.report.pending.map(function (p) {
+                return <label key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "3px 0", cursor: "pointer" }}>
+                  <input type="checkbox" checked={mergePrev.checked[p.id] !== false} onChange={function (e) { var ck = Object.assign({}, mergePrev.checked); ck[p.id] = e.target.checked; setMergePrev({ res: mergePrev.res, checked: ck }); }} />
+                  <span>{p.label}</span>
+                  <span style={{ color: "#94A3B8", fontSize: 11.5 }}>{"supprim\u00e9e le " + fmtDate(p.deletedAt.slice(0, 10))}</span>
+                </label>;
+              })}
+            </div> : null}
+            {mergePrev.res.report.revived.length ? <p style={{ margin: "0 0 10px", fontSize: 12.5, color: "#64748B" }}>{"Conserv\u00e9e(s) car modifi\u00e9e(s) apr\u00e8s suppression : " + mergePrev.res.report.revived.map(function (x) { return x.label; }).join(", ")}</p> : null}
+            <p style={{ margin: "0 0 14px", fontSize: 11.5, color: "#94A3B8" }}>{"Une sauvegarde de l'\u00e9tat actuel sera t\u00e9l\u00e9charg\u00e9e automatiquement avant l'application."}</p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button style={{ background: "transparent", color: "#64748B", border: "1.5px solid " + bd, borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { setMergePrev(null); }}>Annuler</button>
+              <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={applyMerge}>Appliquer la fusion</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {renderBottomNav()}
+    </div>
+  );
+}
+
+var root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(ProtectedApp));
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("./sw.js").then(function (reg) {
+      function watch(w) {
+        if (!w) return;
+        w.addEventListener("statechange", function () {
+          if (w.state === "activated" && navigator.serviceWorker.controller) {
+            window.dispatchEvent(new Event("kit-sw-updated"));
+          }
+        });
+      }
+      watch(reg.installing);
+      reg.addEventListener("updatefound", function () { watch(reg.installing); });
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") { reg.update().catch(function () {}); }
+      });
+    }).catch(function () {});
+  });
+}
+</script>
+</body>
+</html>

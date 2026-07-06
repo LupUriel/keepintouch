@@ -1,0 +1,61 @@
+# Keep In Touch — Guide de déploiement
+
+## Étape 1 : Créer un compte Netlify (gratuit)
+
+1. Ouvre https://app.netlify.com/signup dans ton navigateur
+2. Clique "Sign up with email"
+3. Entre ton email et un mot de passe
+4. Confirme ton email via le lien reçu par mail
+
+## Étape 2 : Déployer l'application
+
+1. Ouvre https://app.netlify.com/drop dans ton navigateur
+2. Décompresse le fichier ZIP "keep_in_touch_pwa.zip" sur ton bureau
+3. Fais glisser le DOSSIER "pwa" (pas le ZIP) vers la zone de dépôt sur la page Netlify
+4. Attends quelques secondes — Netlify affiche une URL du type : https://xxxxx.netlify.app
+5. Clique sur cette URL : ton app est en ligne !
+
+## Étape 3 : Personnaliser l'URL (optionnel)
+
+1. Dans Netlify, clique "Site settings" > "Change site name"
+2. Choisis un nom, par exemple : keepintouch-uriel
+3. Ton app sera accessible à : https://keepintouch-uriel.netlify.app
+
+## Étape 4 : Installer sur Android (Samsung)
+
+1. Ouvre Chrome sur ton Samsung
+2. Va à l'adresse de ton app (ex : https://keepintouch-uriel.netlify.app)
+3. Attends que la page charge complètement
+4. Appuie sur les 3 points en haut à droite de Chrome
+5. Appuie sur "Ajouter à l'écran d'accueil" (ou "Installer l'application")
+6. Confirme — l'icône "KIT" apparaît sur ton écran d'accueil
+7. L'app s'ouvre désormais comme une vraie application, sans barre Chrome
+
+## Étape 5 : Installer sur PC
+
+1. Ouvre Chrome sur ton PC
+2. Va à l'adresse de ton app
+3. Dans la barre d'adresse, un petit icône "installer" apparaît à droite (ou clique les 3 points > "Installer Keep In Touch")
+4. L'app s'installe et s'ouvre dans sa propre fenêtre
+
+## Important
+
+- Les données sont stockées LOCALEMENT dans chaque navigateur
+- Les données du PC et du mobile sont INDÉPENDANTES
+- Fais régulièrement un export (bouton "Export" dans le dashboard) pour sauvegarder
+- Pour synchroniser : exporte d'un côté, importe de l'autre via un fichier CSV
+
+## Mot de passe
+
+- À la première ouverture, l'app vous demande de créer un mot de passe
+- Ce mot de passe est demandé à chaque lancement de l'app
+- Le bouton 🔒 dans le dashboard verrouille l'app immédiatement
+- Le mot de passe est stocké localement (hashé, non lisible) dans chaque navigateur
+- Si vous perdez votre mot de passe : effacez les données du site dans les paramètres de Chrome, mais attention, cela efface aussi vos contacts (faites un export avant)
+
+## Mettre à jour l'application
+
+Si on modifie l'app ensemble dans Claude :
+1. Retélécharge le nouveau ZIP
+2. Dans Netlify : "Deploys" > "Drag and drop" > dépose le nouveau dossier
+3. L'app se met à jour automatiquement sur tous tes appareils au prochain chargement
