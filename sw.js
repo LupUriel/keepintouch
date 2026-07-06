@@ -1,4 +1,9 @@
-var CACHE_NAME = "kit-crm-v30";
+var CACHE_NAME = "kit-crm-v31";
+self.addEventListener("message", function (e) {
+  if (e.data === "kit-get-version" && e.source) {
+    try { e.source.postMessage({ type: "kit-version", v: CACHE_NAME }); } catch (err) {}
+  }
+});
 
 self.addEventListener("install", function (event) {
   self.skipWaiting();

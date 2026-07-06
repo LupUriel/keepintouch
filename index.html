@@ -123,7 +123,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.0";
+var APP_VERSION = "1.2";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -708,6 +708,7 @@ function App() {
   var [persistOk, setPersistOk] = useState(null);
   var [lastExport, setLastExport] = useState(function () { try { return localStorage.getItem(LAST_EXPORT_KEY) || ""; } catch (e) { return ""; } });
   var [updReady, setUpdReady] = useState(false);
+  var [swBuild, setSwBuild] = useState("");
   var [mergePrev, setMergePrev] = useState(null);
   var [logCmt, setLogCmt] = useState("");
   var [logDate, setLogDate] = useState("");
@@ -782,6 +783,26 @@ function App() {
     function hUpd() { setUpdReady(true); }
     window.addEventListener("kit-sw-updated", hUpd);
     return function () { window.removeEventListener("kit-sw-updated", hUpd); };
+  }, []);
+
+  useEffect(function () {
+    if (!("serviceWorker" in navigator)) return;
+    function onMsg(e) {
+      if (e.data && e.data.type === "kit-version") {
+        setSwBuild(String(e.data.v || "").replace("kit-crm-v", "build "));
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    try {
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage("kit-get-version");
+      } else {
+        navigator.serviceWorker.ready.then(function (reg) {
+          if (reg && reg.active) reg.active.postMessage("kit-get-version");
+        }).catch(function () {});
+      }
+    } catch (err) {}
+    return function () { navigator.serviceWorker.removeEventListener("message", onMsg); };
   }, []);
 
   var save = useCallback(function (partial) {
@@ -2519,7 +2540,7 @@ function App() {
           <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12, display: "flex", gap: 14, alignItems: "flex-start" }}>
             <KitLogo size={44} />
             <div style={{ fontSize: 12.5, color: "#5C5852", lineHeight: 1.8 }}>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: ac }}>{"Keep In Touch v" + APP_VERSION}</p>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: ac }}>{"Keep In Touch v" + APP_VERSION + (swBuild ? " \u00b7 " + swBuild : "")}</p>
               <p style={{ margin: 0 }}>{"Application conçue par Uriel S. · © 2026"}</p>
               <p style={{ margin: 0 }}>{lastExport ? "Dernier export JSON : " + fmtDate(lastExport) : "Aucun export JSON effectué sur cet appareil."}</p>
               <p style={{ margin: 0 }}>{"Stockage persistant : " + (persistOk === true ? "accordé ✓" : persistOk === false ? "non accordé" : "—")}</p>
