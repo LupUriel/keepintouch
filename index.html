@@ -127,9 +127,20 @@ var APP_VERSION = "1.3";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "register"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
+function defaultSettings() {
+  return { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 28, plafond: 10 }, exclusions: { aoutPlein: true, fetesFinAnnee: true }, idfParDefaut: true, updatedAt: TS_BASE };
+}
+function defaultTemplates() {
+  return [
+    { id: "mail-tu", nom: "Mail — tutoiement", canal: "mail", registre: "tu", objet: "Déjeuner ?", corps: "Salut {prenom},\n\nJ'espère que tu vas bien ?\n\n{accroche}Que dirais-tu de nous organiser un {type} prochainement ?\n\nJ'ai quelques disponibilités à venir :\n\n{dates}\n\nLe cas échéant, est-ce qu'une de ces dates pourrait te convenir ?\n\nA très bientôt,", nbDates: 3, updatedAt: TS_BASE },
+    { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: "Invitation à déjeuner", corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
+    { id: "texte-tu", nom: "WhatsApp/SMS — tutoiement", canal: "texte", registre: "tu", corps: "Salut {prenom} ! Tu vas bien ? {accroche}Serais-tu disponible pour un {type} la semaine prochaine ? A très bientôt !", nbDates: 0, updatedAt: TS_BASE },
+    { id: "texte-vous", nom: "WhatsApp/SMS — vouvoiement", canal: "texte", registre: "vous", corps: "Bonjour {prenom}, j'espère que vous allez bien. {accroche}Seriez-vous disponible pour un {type} la semaine prochaine ? Bien à vous,", nbDates: 0, updatedAt: TS_BASE }
+  ];
+}
 function downloadJSON(obj, filename) {
   var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
   var url = URL.createObjectURL(blob);
@@ -142,6 +153,8 @@ function migrateData(d) {
   if (!Array.isArray(d.contacts)) { d.contacts = []; changed = true; }
   if (!Array.isArray(d.deletedContacts)) { d.deletedContacts = []; changed = true; }
   if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
+  if (!d.settings) { d.settings = defaultSettings(); changed = true; }
+  if (!Array.isArray(d.templates)) { d.templates = defaultTemplates(); changed = true; }
   d.contacts.forEach(function (c) {
     if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
     if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
@@ -157,6 +170,8 @@ function migrateData(d) {
   return { d: d, changed: changed };
 }
 function mergeData(localData, importedData) {
+  var importHasSettings = Object.prototype.hasOwnProperty.call(importedData || {}, "settings");
+  var importHasTemplates = Object.prototype.hasOwnProperty.call(importedData || {}, "templates");
   var L = migrateData(JSON.parse(JSON.stringify(localData || {}))).d;
   var I = migrateData(JSON.parse(JSON.stringify(importedData || {}))).d;
   var delInterAll = (L.deletedInteractions || []).concat(I.deletedInteractions || []);
@@ -172,7 +187,7 @@ function mergeData(localData, importedData) {
   Object.keys(tombL).forEach(function (k) { ids[k] = ids[k] || 1; });
   Object.keys(tombI).forEach(function (k) { ids[k] = ids[k] || 1; });
   var out = [];
-  var report = { added: [], updated: [], pending: [], revived: [], conflicts: [], interAdded: 0 };
+  var report = { added: [], updated: [], pending: [], revived: [], conflicts: [], interAdded: 0, configuration: [] };
   var keepTomb = {};
   Object.keys(ids).forEach(function (id) {
     var a = mapL[id], b = mapI[id];
@@ -220,7 +235,18 @@ function mergeData(localData, importedData) {
   (importedData.categories || []).forEach(function (x) { if (cats.indexOf(x) === -1) cats.push(x); });
   var seenDI = {}, dInter = [];
   delInterAll.forEach(function (x) { var k = x.cid + "|" + x.iid; if (!seenDI[k]) { seenDI[k] = 1; dInter.push(x); } });
-  return { contacts: out, categories: cats, keepTomb: keepTomb, deletedInteractions: dInter, report: report };
+  var settings = L.settings;
+  if (importHasSettings && (I.settings.updatedAt || TS_BASE) > (L.settings.updatedAt || TS_BASE)) { settings = I.settings; report.configuration.push("Réglages remplacés par ceux du fichier"); }
+  var templates = L.templates.slice();
+  if (importHasTemplates) {
+    var templateMap = {}; templates.forEach(function (t, i) { templateMap[t.id] = i; });
+    I.templates.forEach(function (t) {
+      var pos = templateMap[t.id];
+      if (pos === undefined) { templateMap[t.id] = templates.length; templates.push(t); report.configuration.push("Modèle ajouté : " + t.nom); }
+      else if ((t.updatedAt || TS_BASE) > (templates[pos].updatedAt || TS_BASE)) { templates[pos] = t; report.configuration.push("Modèle remplacé : " + t.nom); }
+    });
+  }
+  return { contacts: out, categories: cats, keepTomb: keepTomb, deletedInteractions: dInter, settings: settings, templates: templates, report: report };
 }
 /* ── KIT_SYNC_HELPERS_END ── */
 
@@ -722,6 +748,7 @@ function App() {
   var [showBackup, setShowBackup] = useState(false);
   var [showChangePwd, setShowChangePwd] = useState(false);
   var [showAbout, setShowAbout] = useState(false);
+  var [showMeetingSettings, setShowMeetingSettings] = useState(false);
   var [oldPwd, setOldPwd] = useState("");
   var [newPwd, setNewPwd] = useState("");
   var [newPwd2, setNewPwd2] = useState("");
@@ -903,6 +930,7 @@ function App() {
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
+      register: "",
       interactions: [], createdAt: todayStr(), updatedAt: nowTS(), fieldsUpdatedAt: {}, archived: false
     };
     save({ contacts: contacts.concat([nc]), categories: categories });
@@ -1204,8 +1232,13 @@ function App() {
         if (!restored.contacts || !Array.isArray(restored.contacts)) { alert("Fichier invalide."); return; }
         if (!confirm("Remplacer vos " + String(contacts.length) + " contacts par " + String(restored.contacts.length) + " contacts du fichier ?")) return;
         if (!confirm("Derni\u00e8re confirmation : cette op\u00e9ration \u00e9crase TOUT sur cet appareil (fiches, historiques, suppressions m\u00e9moris\u00e9es). Pour une synchronisation sans perte, utilise plut\u00f4t \u00ab Importer / fusionner \u00bb.")) return;
+        var restoreHasSettings = Object.prototype.hasOwnProperty.call(restored, "settings");
+        var restoreHasTemplates = Object.prototype.hasOwnProperty.call(restored, "templates");
         var mig = migrateData(restored);
-        save({ contacts: mig.d.contacts, categories: mig.d.categories || DEFAULT_CATS.slice(), deletedContacts: mig.d.deletedContacts, deletedInteractions: mig.d.deletedInteractions });
+        var restorePartial = { contacts: mig.d.contacts, categories: mig.d.categories || DEFAULT_CATS.slice(), deletedContacts: mig.d.deletedContacts, deletedInteractions: mig.d.deletedInteractions };
+        if (restoreHasSettings) restorePartial.settings = mig.d.settings;
+        if (restoreHasTemplates) restorePartial.templates = mig.d.templates;
+        save(restorePartial);
         alert(String(mig.d.contacts.length) + " contact(s) restaur\u00e9(s).");
         setShowBackup(false);
       } catch (err) { alert("Erreur: " + err.message); }
@@ -1241,7 +1274,7 @@ function App() {
       if (checked[p.id] !== false) { tombs.push(p.tomb); }
       else { var cAlive = JSON.parse(JSON.stringify(p.alive)); cAlive.updatedAt = nowTS(); finalContacts.push(cAlive); }
     });
-    save({ contacts: finalContacts, categories: res.categories, deletedContacts: tombs, deletedInteractions: res.deletedInteractions });
+    save({ contacts: finalContacts, categories: res.categories, deletedContacts: tombs, deletedInteractions: res.deletedInteractions, settings: res.settings, templates: res.templates });
     var r = res.report;
     alert("Fusion appliqu\u00e9e : " + r.added.length + " ajout\u00e9e(s), " + r.updated.length + " mise(s) \u00e0 jour, " + r.interAdded + " interaction(s) ajout\u00e9e(s).");
     setMergePrev(null); setShowBackup(false);
@@ -2477,6 +2510,24 @@ function App() {
   }
 
   // ─── DASHBOARD ───
+  function updateMeetingSettings(mutator) {
+    var next = JSON.parse(JSON.stringify(data.settings || defaultSettings()));
+    mutator(next); next.updatedAt = nowTS(); save({ settings: next });
+  }
+  function updateTemplate(id, field, value) {
+    var next = (data.templates || defaultTemplates()).map(function (t) {
+      if (t.id !== id) return t;
+      var copy = Object.assign({}, t); copy[field] = value; copy.updatedAt = nowTS(); return copy;
+    });
+    save({ templates: next });
+  }
+  function resetTemplate(id) {
+    var original = defaultTemplates().find(function (t) { return t.id === id; });
+    var next = (data.templates || defaultTemplates()).map(function (t) {
+      return t.id === id ? Object.assign({}, original, { updatedAt: nowTS() }) : t;
+    });
+    save({ templates: next });
+  }
   function renderDash() {
     return (
       <div>
@@ -2497,11 +2548,12 @@ function App() {
             ) : null}
             {showMenu ? (
               <div style={{ position: "absolute", top: 48, right: 0, background: "#fff", borderRadius: 10, border: "1px solid " + bd, boxShadow: "0 8px 24px rgba(16,24,40,0.12)", padding: 6, zIndex: 50, minWidth: 170 }}>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowImp(!showImp); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⬇ Importer (Excel / CSV)"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowMeetingSettings(!showMeetingSettings); setShowImp(false); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⚙ Rencontres & agenda"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowImp(!showImp); setShowMeetingSettings(false); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⬇ Importer (Excel / CSV)"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); exportExcel(); }}>{"⬆ Exporter (Excel)"}</button>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowBackup(!showBackup); setShowImp(false); setShowChangePwd(false); setShowAbout(false); }}>{"💾 Sauvegarde / Restauration"}</button>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowAbout(!showAbout); setShowImp(false); setShowBackup(false); setShowChangePwd(false); }}>{"ℹ️ À propos"}</button>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowChangePwd(!showChangePwd); setShowImp(false); setShowBackup(false); setShowAbout(false); }}>{"⚙ Mot de passe"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowBackup(!showBackup); setShowMeetingSettings(false); setShowImp(false); setShowChangePwd(false); setShowAbout(false); }}>{"💾 Sauvegarde / Restauration"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowAbout(!showAbout); setShowMeetingSettings(false); setShowImp(false); setShowBackup(false); setShowChangePwd(false); }}>{"ℹ️ À propos"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowChangePwd(!showChangePwd); setShowMeetingSettings(false); setShowImp(false); setShowBackup(false); setShowAbout(false); }}>{"⚙ Mot de passe"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={enableNotifs}>{"🔔 Activer les relances"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={testNotif}>{"🔔 Tester la notif"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#BE3C1A", cursor: "pointer", fontFamily: ff }} onClick={function () { sessionStorage.removeItem("kit-crm-auth"); window.location.reload(); }}>{"🔒 Verrouiller"}</button>
@@ -2509,6 +2561,33 @@ function App() {
             ) : null}
           </div>
         </div>
+
+        {showMeetingSettings ? (
+          <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
+            <p style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: ac }}>{"Rencontres & agenda"}</p>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>COLLABORATEURS (TRIGRAMMES SÉPARÉS PAR DES VIRGULES)</label>
+            <input defaultValue={(data.settings.trigrammes || []).join(", ")} onBlur={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.trigrammes = v.split(",").map(function (x) { return x.trim(); }).filter(Boolean); }); }} style={{ width: "100%", padding: 9, margin: "4px 0 14px", borderRadius: 8, border: "1.5px solid " + bd, boxSizing: "border-box" }} />
+            <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#64748B" }}>FENÊTRES PAR TYPE</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 8, marginBottom: 14 }}>
+              {Object.keys(data.settings.fenetres).map(function (key) { var labels = { petitdej: "Petit-déjeuner", dejeuner: "Déjeuner", diner: "Dîner", verre: "Verre" }; return <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 12, minWidth: 88 }}>{labels[key]}</span><input type="time" value={data.settings.fenetres[key].debut} onChange={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.fenetres[key].debut = v; }); }} /><span>→</span><input type="time" value={data.settings.fenetres[key].fin} onChange={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.fenetres[key].fin = v; }); }} /></div>; })}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              {[["minJours", "Début J+"], ["maxJours", "Fin J+"], ["plafond", "Plafond"]].map(function (x) { return <label key={x[0]} style={{ fontSize: 12 }}>{x[1]} <input type="number" min="0" value={data.settings.horizon[x[0]]} onChange={function (e) { var v = Number(e.target.value); updateMeetingSettings(function (s) { s.horizon[x[0]] = v; }); }} style={{ width: 60, padding: 6, marginLeft: 4 }} /></label>; })}
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 18, fontSize: 13 }}>
+              <label><input type="checkbox" checked={data.settings.exclusions.aoutPlein} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.exclusions.aoutPlein = v; }); }} /> Exclure les semaines entièrement en août</label>
+              <label><input type="checkbox" checked={data.settings.exclusions.fetesFinAnnee} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.exclusions.fetesFinAnnee = v; }); }} /> Exclure du 24/12 au 02/01</label>
+              <label><input type="checkbox" checked={data.settings.idfParDefaut} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.idfParDefaut = v; }); }} /> Île-de-France par défaut</label>
+            </div>
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: ac }}>MODÈLES DE MESSAGE</p>
+            {(data.templates || []).map(function (t) { return <div key={t.id} style={{ borderTop: "1px solid " + bd, padding: "12px 0" }}>
+              <input value={t.nom} onChange={function (e) { updateTemplate(t.id, "nom", e.target.value); }} style={{ width: "100%", padding: 7, fontWeight: 600, boxSizing: "border-box", marginBottom: 6 }} />
+              {t.canal === "mail" ? <input value={t.objet || ""} placeholder="Objet" onChange={function (e) { updateTemplate(t.id, "objet", e.target.value); }} style={{ width: "100%", padding: 7, boxSizing: "border-box", marginBottom: 6 }} /> : null}
+              <textarea value={t.corps} rows={6} onChange={function (e) { updateTemplate(t.id, "corps", e.target.value); }} style={{ width: "100%", padding: 8, boxSizing: "border-box", fontFamily: ff, resize: "vertical" }} />
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}><label style={{ fontSize: 12 }}>Nombre de dates <input type="number" min="0" value={t.nbDates} onChange={function (e) { updateTemplate(t.id, "nbDates", Number(e.target.value)); }} style={{ width: 55, padding: 5 }} /></label><button onClick={function () { resetTemplate(t.id); }} style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", cursor: "pointer" }}>Réinitialiser ce modèle</button></div>
+            </div>; })}
+          </div>
+        ) : null}
 
         {showImp ? (
           <div style={{ background: "#E5EFEB", borderRadius: 12, border: "1px solid #D2E5DD", padding: 16, marginBottom: 12 }}>
@@ -2743,6 +2822,7 @@ function App() {
             {mergePrev.res.report.added.length ? <div style={{ marginBottom: 10 }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#2F6055" }}>AJOUTS</p>{mergePrev.res.report.added.map(function (x) { return <p key={x.id} style={{ margin: 0, fontSize: 13 }}>{x.label}</p>; })}</div> : null}
             {mergePrev.res.report.updated.length ? <div style={{ marginBottom: 10 }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#235C68" }}>{"MISES \u00c0 JOUR"}</p>{mergePrev.res.report.updated.map(function (x) { return <p key={x.id} style={{ margin: 0, fontSize: 13 }}>{x.label + (x.fields.length ? " \u2014 " + x.fields.join(", ") : "") + (x.inter ? " \u00b7 +" + String(x.inter) + " interaction(s)" : "")}</p>; })}</div> : null}
             {mergePrev.res.report.conflicts.length ? <div style={{ marginBottom: 10, background: "#FAF0D4", borderRadius: 8, padding: "8px 10px" }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#8A5E08" }}>{"CONFLITS (valeur du fichier retenue)"}</p>{mergePrev.res.report.conflicts.map(function (x, i) { return <p key={String(i)} style={{ margin: 0, fontSize: 12.5 }}>{x.label + " \u2014 " + x.field}</p>; })}</div> : null}
+            {mergePrev.res.report.configuration.length ? <div style={{ marginBottom: 10, background: "#EAF3F5", borderRadius: 8, padding: "8px 10px" }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#235C68" }}>CONFIGURATION</p>{mergePrev.res.report.configuration.map(function (x, i) { return <p key={String(i)} style={{ margin: 0, fontSize: 12.5 }}>{x}</p>; })}</div> : null}
             {mergePrev.res.report.pending.length ? <div style={{ marginBottom: 12, background: "#FBEAE5", borderRadius: 8, padding: "10px 12px" }}>
               <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#9A3115" }}>{"SUPPRESSIONS \u00c0 CONFIRMER"}</p>
               <p style={{ margin: "0 0 8px", fontSize: 12, color: "#9A3115" }}>{"Coch\u00e9 = la suppression est maintenue. D\u00e9coche pour restaurer la fiche."}</p>
