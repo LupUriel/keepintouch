@@ -69,7 +69,10 @@ var KIT_PURE = (function () {
   function buildWa(numNational, texte) { return "https://wa.me/" + toIntlDigits(numNational) + "?text=" + encodeURIComponent(texte || ""); }
   function buildSms(numNational, corps, isIOS) { return "sms:" + toE164(numNational) + (isIOS ? "&body=" : "?body=") + encodeURIComponent(corps || ""); }
   function isMobileFr(num) { var n = cleanPhone(num).replace(/^\+33/, "0"); return /^0[67]\d{8}$/.test(n); }
-  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr };
+  function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
+  function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
+  function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
+  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -91,6 +94,9 @@ KIT_TESTS.add("encodage mail intact", function () { var u = KIT_PURE.buildMailto
 KIT_TESTS.add("garde-fou mailto détectable", function () { kitAssert(KIT_PURE.buildMailto("a@b.fr", "x", new Array(1901).join("a")).length > 1800); });
 KIT_TESTS.add("format date français", function () { kitAssert(KIT_PURE.formatDateFr("2026-06-17") === "Mercredi 17 juin 2026"); });
 KIT_TESTS.add("détection mobile français", function () { kitAssert(KIT_PURE.isMobileFr("06 12 34 56 78") && KIT_PURE.isMobileFr("07 12 34 56 78") && !KIT_PURE.isMobileFr("01 12 34 56 78") && !KIT_PURE.isMobileFr("09 12 34 56 78")); });
+KIT_TESTS.add("canaux invitation vers types non-rencontre", function () { var types = ["mail", "whatsapp", "sms"].map(KIT_PURE.canalToInteractionType); kitAssert(types[0] === "email" && types[1] === "sms" && types[2] === "sms"); kitAssert(types.every(function (x) { return ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"].indexOf(x) < 0; })); });
+KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
+KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
   </script>
   <script type="text/babel" data-type="module">
 
@@ -832,6 +838,9 @@ function App() {
   var [inviteObjet, setInviteObjet] = useState("");
   var [inviteCorps, setInviteCorps] = useState("");
   var [inviteCoord, setInviteCoord] = useState("");
+  var [confirmInviteVisible, setConfirmInviteVisible] = useState(false);
+  var [replayInvite, setReplayInvite] = useState(null);
+  var [doubleInviteId, setDoubleInviteId] = useState(null);
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -889,6 +898,18 @@ function App() {
     function hUpd() { setUpdReady(true); }
     window.addEventListener("kit-sw-updated", hUpd);
     return function () { window.removeEventListener("kit-sw-updated", hUpd); };
+  }, []);
+
+  useEffect(function () {
+    if (!loading && data && KIT_PURE.nextPendingInvite(data.pendingInvites)) setConfirmInviteVisible(true);
+  }, [loading]);
+
+  useEffect(function () {
+    function showPendingOnReturn() {
+      if (document.visibilityState === "visible") setConfirmInviteVisible(true);
+    }
+    document.addEventListener("visibilitychange", showPendingOnReturn);
+    return function () { document.removeEventListener("visibilitychange", showPendingOnReturn); };
   }, []);
 
   useEffect(function () {
@@ -1017,7 +1038,7 @@ function App() {
     setSelId(id);
   }
 
-  function updContact(id, updates) {
+  function updContact(id, updates, rootUpdates) {
     var newContacts = contacts.map(function (c) {
       if (c.id !== id) return c;
       var copy = {};
@@ -1031,7 +1052,7 @@ function App() {
       if (touched) { copy.updatedAt = now; copy.fieldsUpdatedAt = fu; }
       return copy;
     });
-    save({ contacts: newContacts, categories: categories });
+    save(Object.assign({ contacts: newContacts, categories: categories }, rootUpdates || {}));
   }
 
   function delContact(id) {
@@ -1042,20 +1063,20 @@ function App() {
     setSelId(null);
   }
 
-  function logInteraction(id, comment, date, type, awaiting, retry) {
+  function logInteraction(id, comment, date, type, awaiting, retry, meta, contactUpdates, rootUpdates) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
     var logDay = date || todayStr();
-    var entry = { iid: makeId(), date: logDay, comment: comment || "", type: type || "autre", awaitingResponse: !!awaiting, retryPending: !!retry };
+    var entry = Object.assign({ iid: makeId(), date: logDay, comment: comment || "", type: type || "autre", awaitingResponse: !!awaiting, retryPending: !!retry }, meta || {});
     var newInts = [entry].concat(c.interactions || []);
     newInts.sort(function (a, b) { return b.date.localeCompare(a.date); });
-    var patch = { interactions: newInts };
+    var patch = Object.assign({ interactions: newInts }, contactUpdates || {});
     // Une rencontre conviviale réinitialise le cycle : on lève tout report en cours
     if (RENCONTRE_TYPES.indexOf(type) >= 0) patch.snoozedUntil = "";
     // Contacter la personne accomplit la relance planifiée éventuelle
     if (c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
-    if (c.awaitingUntil) patch.awaitingUntil = "";
-    updContact(id, patch);
+    if (c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
+    updContact(id, patch, rootUpdates);
   }
 
   function deleteInteraction(id, idx) {
@@ -1097,12 +1118,26 @@ function App() {
   function resetInvite() {
     setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
   }
-  function openInviteModal(id) {
+  function invitationAwaiting(c) {
+    var li = latestInteraction(c);
+    return li && li.invitation === true && li.awaitingResponse && awaitingActive(c) ? li : null;
+  }
+  function openInviteModalNow(id) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
     setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.register === "vous" ? "vous" : "tu");
     setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
     setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCoord(""); setShowInvite(true);
+  }
+  function openInviteModal(id) {
+    var c = contacts.find(function (x) { return x.id === id; });
+    if (c && invitationAwaiting(c)) { setDoubleInviteId(id); return; }
+    openInviteModalNow(id);
+  }
+  function restoreInvite(payload) {
+    setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
+    setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
+    setInviteStep("preview"); setInviteCoord(""); setShowInvite(true); setReplayInvite(null);
   }
   function selectedTemplate(canal, registre) {
     var wanted = canal === "mail" ? "mail" : "texte";
@@ -1136,10 +1171,20 @@ function App() {
     var mobile = inviteMobile(c);
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    var pending = { id: makeId(), contactId: payload.contactId, statut: "lien-ouvert", meal: payload.type, canal: payload.canal, registre: payload.registre, templateId: payload.templateId, dates: (payload.dates || []).slice(), objet: payload.objet || "", corps: payload.corps || "", createdAt: nowTS() };
+    var nextData = Object.assign({}, data, { pendingInvites: (data.pendingInvites || []).concat([pending]) });
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+      var verified = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+      if (!(verified.pendingInvites || []).some(function (x) { return x.id === pending.id && x.statut === "lien-ouvert"; })) throw new Error("relecture invalide");
+    } catch (err) {
+      alert("Impossible d'enregistrer l'invitation — envoi annulé");
+      return;
+    }
     if (payload.canal === "mail") {
       var mailto = KIT_PURE.buildMailto(c.email, payload.objet, payload.corps);
-      if (mailto.length > 1800) { navigator.clipboard.writeText(payload.corps); return; }
-      location.href = mailto;
+      if (mailto.length > 1800) navigator.clipboard.writeText(payload.corps);
+      else location.href = mailto;
     } else if (payload.canal === "whatsapp") {
       window.open(KIT_PURE.buildWa(mobile, payload.corps), "_blank", "noopener");
     } else if (isPC) {
@@ -1147,6 +1192,63 @@ function App() {
     } else {
       location.href = KIT_PURE.buildSms(mobile, payload.corps, isIOS);
     }
+    setData(nextData);
+    idbSet("data", nextData);
+    setConfirmInviteVisible(true);
+    resetInvite();
+  }
+
+  function removePendingInvite(pending) {
+    var nextData = Object.assign({}, data, { pendingInvites: (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; }) });
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData)); } catch (e) { alert("Impossible d'enregistrer la réponse."); return false; }
+    setData(nextData); idbSet("data", nextData);
+    setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(nextData.pendingInvites));
+    return true;
+  }
+  function answerPendingInvite(pending, sent) {
+    if (!sent) {
+      if (removePendingInvite(pending)) setReplayInvite(pending);
+      return;
+    }
+    var c = contacts.find(function (x) { return x.id === pending.contactId; });
+    if (!c) { removePendingInvite(pending); return; }
+    var remaining = (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; });
+    logInteraction(pending.contactId, "Invitation " + pending.meal + " — " + pending.canal, todayStr(), KIT_PURE.canalToInteractionType(pending.canal), true, false, { invitation: true, meal: pending.meal, datesProposees: (pending.dates || []).slice(), canal: pending.canal }, { register: pending.registre }, { pendingInvites: remaining });
+    setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(remaining));
+  }
+
+  function renderPendingInviteModal() {
+    var pending = KIT_PURE.nextPendingInvite(data.pendingInvites);
+    if (!confirmInviteVisible || !pending) return null;
+    var c = contacts.find(function (x) { return x.id === pending.contactId; });
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1020, padding: 16 }} onClick={function () { setConfirmInviteVisible(false); }}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: 26, maxWidth: 440, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 18, color: ac }}>{"Invitation envoyée à " + (c ? (c.firstName || displayName(c)) : "ce contact") + " ?"}</h3>
+          <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 13 }}>{"La fermeture de cette fenêtre ne vaut pas réponse."}</p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "9px 16px", fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { answerPendingInvite(pending, false); }}>Non</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { answerPendingInvite(pending, true); }}>Oui</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDoubleInviteModal() {
+    if (!doubleInviteId) return null;
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.42)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1010, padding: 16 }} onClick={function () { setDoubleInviteId(null); }}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: 24, maxWidth: 430, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 18, color: ac }}>Une invitation est déjà en attente</h3>
+          <p style={{ margin: "0 0 18px", color: "#64748B", fontSize: 13 }}>Souhaites-tu tout de même préparer une nouvelle invitation ?</p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "9px 16px", fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { setDoubleInviteId(null); }}>Annuler</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { var id = doubleInviteId; setDoubleInviteId(null); openInviteModalNow(id); }}>Continuer</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   function addCategory(nm) {
@@ -2263,6 +2365,7 @@ function App() {
                 {!isClient(c) ? renderPrioBadge(c.priority) : null}
                 {snoozed ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #CBD5E1", background: "#F1EFEB", color: "#64748B" }}>{"⏸ Reporté jusqu'au " + fmtDate(c.snoozedUntil)}</span> : renderStatusBadge(status)}
                 {awaitStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #F4D6CB", background: "#FBEAE5", color: "#9A3115" }}>{"⚠ Relance due — " + String(awaitDays) + "j"}</span> : null}
+                {invitationAwaiting(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: "#EAF3F5", color: "#235C68" }}>{"invitation envoyée le " + fmtDate(invitationAwaiting(c).date)}</span> : null}
                 {retryStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #9FCAD3", background: "#EAF3F5", color: "#235C68" }}>{"⚠ À recontacter — " + String(retryDays) + "j"}</span> : null}
                 {c.sector ? <span style={{ fontSize: 11, color: "#64748B", background: "#F1EFEB", padding: "2px 8px", borderRadius: 4 }}>{c.sector}</span> : null}
               </div>
@@ -2501,6 +2604,7 @@ function App() {
                     <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>{displayName(c)}</span>
                     {c.company ? <span style={{ fontSize: 12, color: "#475569" }}>{" — " + c.company}</span> : null}
                     {!isClient(c) ? <span style={{ marginLeft: 6 }}>{renderPrioBadge(c.priority)}</span> : null}
+                    {invitationAwaiting(c) ? <span style={{ display: "block", marginTop: 3, fontSize: 11.5, color: "#235C68", fontWeight: 600 }}>{"invitation envoyée le " + fmtDate(invitationAwaiting(c).date)}</span> : null}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{label}</span>
@@ -3002,6 +3106,9 @@ function App() {
       <style>{KIT_CSS}</style>
       {renderLogModal()}
       {renderInviteModal()}
+      {renderDoubleInviteModal()}
+      {renderPendingInviteModal()}
+      {replayInvite ? <div style={{ position: "fixed", left: 16, right: 16, bottom: 76, zIndex: 950, display: "flex", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: ac, color: "#fff", borderRadius: 10, padding: "9px 12px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 5px 18px rgba(0,0,0,0.22)", pointerEvents: "auto", fontSize: 13 }}><span>Invitation non envoyée</span><button style={{ background: "#fff", color: ac, border: "none", borderRadius: 7, padding: "6px 10px", fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { restoreInvite(replayInvite); }}>Rejouer</button><button aria-label="Fermer" style={{ background: "transparent", color: "#fff", border: "none", cursor: "pointer", fontSize: 17 }} onClick={function () { setReplayInvite(null); }}>×</button></div></div> : null}
       {view === "dashboard" ? renderDash() : null}
       {view === "week" ? renderWeek() : null}
       {view === "stats" ? renderStats() : null}
