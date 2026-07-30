@@ -971,14 +971,28 @@ function App() {
     return function () { navigator.serviceWorker.removeEventListener("message", onMsg); };
   }, []);
 
-  var save = useCallback(function (partial) {
+  var save = useCallback(function (partial, opts) {
+    var verify = opts && opts.verify;
+    if (verify) {
+      var nd = Object.assign({}, data || {}, partial);
+      try {
+        var serialized = JSON.stringify(nd);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        var back = localStorage.getItem(STORAGE_KEY) || "";
+        var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
+        if (!ok) return false;
+      } catch (e) { return false; }
+      setData(nd); idbSet("data", nd);
+      return true;
+    }
     setData(function (prev) {
       var nd = Object.assign({}, prev || {}, partial);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nd)); } catch (e) { /* silent */ }
       idbSet("data", nd);
       return nd;
     });
-  }, []);
+    return true;
+  }, [data]);
 
   async function enableNotifs() {
     setShowMenu(false);
@@ -1238,37 +1252,37 @@ function App() {
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
     var pending = { id: makeId(), contactId: payload.contactId, statut: "lien-ouvert", meal: payload.type, canal: payload.canal, registre: payload.registre, templateId: payload.templateId, dates: (payload.dates || []).slice(), objet: payload.objet || "", corps: payload.corps || "", createdAt: nowTS() };
-    var nextData = Object.assign({}, data, { pendingInvites: (data.pendingInvites || []).concat([pending]) });
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
-      var verified = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-      if (!(verified.pendingInvites || []).some(function (x) { return x.id === pending.id && x.statut === "lien-ouvert"; })) throw new Error("relecture invalide");
-    } catch (err) {
+    var saved = save({ pendingInvites: (data.pendingInvites || []).concat([pending]) }, {
+      verify: function (d) { return (d.pendingInvites || []).some(function (x) { return x.id === pending.id && x.statut === "lien-ouvert"; }); }
+    });
+    if (!saved) {
       alert("Impossible d'enregistrer l'invitation — envoi annulé");
       return;
     }
+    function copyCorps() {
+      navigator.clipboard.writeText(payload.corps).catch(function () {
+        alert("Impossible de copier le message — copiez-le depuis l'aperçu. L'invitation reste en attente de confirmation.");
+      });
+    }
     if (payload.canal === "mail") {
       var mailto = KIT_PURE.buildMailto(c.email, payload.objet, payload.corps);
-      if (mailto.length > 1800) navigator.clipboard.writeText(payload.corps);
+      if (mailto.length > 1800) copyCorps();
       else location.href = mailto;
     } else if (payload.canal === "whatsapp") {
       window.open(KIT_PURE.buildWa(mobile, payload.corps), "_blank", "noopener");
     } else if (isPC) {
-      navigator.clipboard.writeText(payload.corps);
+      copyCorps();
     } else {
       location.href = KIT_PURE.buildSms(mobile, payload.corps, isIOS);
     }
-    setData(nextData);
-    idbSet("data", nextData);
     setConfirmInviteVisible(true);
     resetInvite();
   }
 
   function removePendingInvite(pending) {
-    var nextData = Object.assign({}, data, { pendingInvites: (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; }) });
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData)); } catch (e) { alert("Impossible d'enregistrer la réponse."); return false; }
-    setData(nextData); idbSet("data", nextData);
-    setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(nextData.pendingInvites));
+    var filtered = (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; });
+    if (!save({ pendingInvites: filtered }, { verify: true })) { alert("Impossible d'enregistrer la réponse."); return false; }
+    setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(filtered));
     return true;
   }
   function answerPendingInvite(pending, sent) {
@@ -2530,7 +2544,7 @@ function App() {
           {(c.email || c.phonePro || c.phonePerso || c.phone || c.linkedin) ? (
             <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
               {c.email ? (
-                <a href={"mailto:" + c.email} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #C7E0E6", color: abl, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                <a href={"mailto:" + encodeURIComponent(c.email)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #C7E0E6", color: abl, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
                   {"✉ " + c.email}
                 </a>
               ) : null}
