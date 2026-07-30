@@ -1,4 +1,16 @@
-var CACHE_NAME = "kit-crm-v32";
+var CACHE_NAME = "kit-crm-v33";
+var PRECACHE_URLS = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./lib/react.production.min.js",
+  "./lib/react-dom.production.min.js",
+  "./lib/babel.min.js",
+  "./lib/xlsx.full.min.js",
+  "./lib/exceljs.min.js",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png"
+];
 self.addEventListener("message", function (e) {
   if (e.data === "kit-get-version" && e.source) {
     try { e.source.postMessage({ type: "kit-version", v: CACHE_NAME }); } catch (err) {}
@@ -6,7 +18,13 @@ self.addEventListener("message", function (e) {
 });
 
 self.addEventListener("install", function (event) {
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(function (cache) {
+      return cache.addAll(PRECACHE_URLS);
+    }).then(function () {
+      return self.skipWaiting();
+    })
+  );
 });
 
 self.addEventListener("activate", function (event) {
@@ -26,6 +44,7 @@ self.addEventListener("fetch", function (event) {
   event.respondWith(
     caches.match(event.request).then(function (response) {
       return response || fetch(event.request).then(function (fetchResponse) {
+        if (!fetchResponse || !fetchResponse.ok) return fetchResponse;
         return caches.open(CACHE_NAME).then(function (cache) {
           cache.put(event.request, fetchResponse.clone());
           return fetchResponse;

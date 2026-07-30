@@ -54,9 +54,11 @@ var KIT_PURE = (function () {
     if (!chosen || !chosen.date) return "";
     var d = dateParts(chosen.date);
     if (!d) return "";
-    return convivial ? "depuis notre " + (TYPE_NAMES[chosen.type] || chosen.type) + " de " + MONTHS[d.getMonth()] + ", " : "depuis notre échange de " + MONTHS[d.getMonth()] + ", ";
+    var mois = MONTHS[d.getMonth()];
+    var deMois = (/^[aeiouy]/.test(mois) ? "d'" : "de ") + mois;
+    return convivial ? "depuis notre " + (TYPE_NAMES[chosen.type] || chosen.type) + " " + deMois + ", " : "depuis notre échange " + deMois + ", ";
   }
-  function cleanPhone(num) { return String(num || "").trim().replace(/[^\d+]/g, "").replace(/(?!^)\+/g, ""); }
+  function cleanPhone(num) { var n = String(num || "").trim().replace(/[^\d+]/g, "").replace(/(?!^)\+/g, ""); return n.indexOf("00") === 0 ? "+" + n.slice(2) : n; }
   function toE164(num) {
     var n = cleanPhone(num);
     if (!n) return "";
@@ -108,7 +110,7 @@ function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("accroche depuis déjeuner", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "dejeuner", date: "2026-03-12" }], ["dejeuner"]) === "depuis notre déjeuner de mars, "); });
-KIT_TESTS.add("accroche ignore invitation précédente", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "email", date: "2026-05-01", metadata: { invitation: true } }, { type: "appel_echange", date: "2026-04-01" }], ["dejeuner"]) === "depuis notre échange de avril, "); });
+KIT_TESTS.add("accroche ignore invitation précédente", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "email", date: "2026-05-01", metadata: { invitation: true } }, { type: "appel_echange", date: "2026-04-01" }], ["dejeuner"]) === "depuis notre échange d'avril, "); });
 KIT_TESTS.add("AE7 numéro français", function () { kitAssert(KIT_PURE.buildWa("06 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
 KIT_TESTS.add("numéro suisse", function () { kitAssert(KIT_PURE.toIntlDigits("+41 79 123 45 67") === "41791234567"); kitAssert(KIT_PURE.toE164("+41 79 123 45 67") === "+41791234567"); });
 KIT_TESTS.add("encodage mail intact", function () { var u = KIT_PURE.buildMailto("anne&cie@example.fr", "Anne & Cie", "ligne 1\nligne 2"); var q = u.slice(u.indexOf("?") + 1).split("&"); kitAssert(decodeURIComponent(u.slice(7, u.indexOf("?"))) === "anne&cie@example.fr"); kitAssert(q.length === 2 && decodeURIComponent(q[0].slice(8)) === "Anne & Cie" && decodeURIComponent(q[1].slice(5)) === "ligne 1\nligne 2"); });
@@ -123,6 +125,9 @@ KIT_TESTS.add("adresse lyonnaise prérègle Province", function () { var c = { a
 KIT_TESTS.add("adresse vide utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "", workLocation: "" }, { idfParDefaut: false }) === false); });
 KIT_TESTS.add("ville sans code utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "Lyon" }, { idfParDefaut: true }) === true); });
 KIT_TESTS.add("fusion dates cochées et manuelles ordonnée sans doublon", function () { kitAssert(JSON.stringify(KIT_PURE.mergeDates(["2026-09-12", "2026-09-10"], ["2026-09-11", "2026-09-10"])) === JSON.stringify(["2026-09-10", "2026-09-11", "2026-09-12"])); });
+KIT_TESTS.add("préfixe international 0033", function () { kitAssert(KIT_PURE.isMobileFr("0033 6 12 34 56 78")); kitAssert(KIT_PURE.buildWa("0033 6 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("0033 6 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
+KIT_TESTS.add("liste de dates inline selon le nombre", function () { kitAssert(KIT_PURE.formatDatesList([], "inline") === ""); kitAssert(KIT_PURE.formatDatesList(["2026-06-17"], "inline") === "Mercredi 17 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18"], "inline") === "Mercredi 17 juin 2026 ou Jeudi 18 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "inline") === "Mercredi 17 juin 2026, Jeudi 18 juin 2026 ou Vendredi 19 juin 2026"); });
+KIT_TESTS.add("sms iOS avec esperluette", function () { kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", true) === "sms:+33612345678&body=x"); });
   </script>
   <script type="text/babel" data-type="module">
 
@@ -227,11 +232,11 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.3";
+var APP_VERSION = "1.3.1";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "register"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 function defaultSettings() {
@@ -918,10 +923,10 @@ function App() {
           if (mig.changed) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mig.d)); } catch (e2) { /* silent */ } }
           idbSet("data", mig.d);
         } else {
-          setData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] });
+          setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
         }
       } catch (e) {
-        setData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] });
+        setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
       }
       setLoading(false);
     }
@@ -935,16 +940,16 @@ function App() {
   }, []);
 
   useEffect(function () {
-    if (!loading && data && KIT_PURE.nextPendingInvite(data.pendingInvites)) setConfirmInviteVisible(true);
+    if (!loading && data && !showInvite && !doubleInviteId && KIT_PURE.nextPendingInvite(data.pendingInvites)) setConfirmInviteVisible(true);
   }, [loading]);
 
   useEffect(function () {
     function showPendingOnReturn() {
-      if (document.visibilityState === "visible") setConfirmInviteVisible(true);
+      if (document.visibilityState === "visible" && !showInvite && !doubleInviteId) setConfirmInviteVisible(true);
     }
     document.addEventListener("visibilitychange", showPendingOnReturn);
     return function () { document.removeEventListener("visibilitychange", showPendingOnReturn); };
-  }, []);
+  }, [showInvite, doubleInviteId]);
 
   useEffect(function () {
     if (!("serviceWorker" in navigator)) return;
@@ -1064,7 +1069,7 @@ function App() {
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
-      register: "",
+      registre: "",
       interactions: [], createdAt: todayStr(), updatedAt: nowTS(), fieldsUpdatedAt: {}, archived: false
     };
     save({ contacts: contacts.concat([nc]), categories: categories });
@@ -1160,18 +1165,20 @@ function App() {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
     var defaultIdf = KIT_PURE.idfDefaultFor(c, data.settings || {});
-    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.register === "vous" ? "vous" : "tu");
+    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.registre === "vous" ? "vous" : "tu");
     setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
     setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteIdf(defaultIdf); setInviteCoord(""); setShowInvite(true);
   }
   function openInviteModal(id) {
     var c = contacts.find(function (x) { return x.id === id; });
-    if (c && invitationAwaiting(c)) { setDoubleInviteId(id); return; }
+    var pendingSame = (data.pendingInvites || []).some(function (x) { return x.contactId === id && x.statut === "lien-ouvert"; });
+    if (c && (invitationAwaiting(c) || pendingSame)) { setDoubleInviteId(id); return; }
     openInviteModalNow(id);
   }
   function restoreInvite(payload) {
     setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
     setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
+    setInviteCandidateDates([]); setInviteManualDates((payload.dates || []).slice()); setInviteCandidateResult({ etat: "non-connecte", candidates: [] });
     setInviteStep("preview"); setInviteCoord(""); setShowInvite(true); setReplayInvite(null);
   }
   function updateComposedDates(candidates, manual) {
@@ -1272,7 +1279,7 @@ function App() {
     var c = contacts.find(function (x) { return x.id === pending.contactId; });
     if (!c) { removePendingInvite(pending); return; }
     var remaining = (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; });
-    logInteraction(pending.contactId, "Invitation " + pending.meal + " — " + pending.canal, todayStr(), KIT_PURE.canalToInteractionType(pending.canal), true, false, { invitation: true, meal: pending.meal, datesProposees: (pending.dates || []).slice(), canal: pending.canal }, { register: pending.registre }, { pendingInvites: remaining });
+    logInteraction(pending.contactId, "Invitation " + pending.meal + " — " + pending.canal, (pending.createdAt || nowTS()).slice(0, 10), KIT_PURE.canalToInteractionType(pending.canal), true, false, { invitation: true, meal: pending.meal, datesProposees: (pending.dates || []).slice(), canal: pending.canal }, { registre: pending.registre }, { pendingInvites: remaining });
     setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(remaining));
   }
 
