@@ -19,17 +19,126 @@
 </head>
 <body>
   <div id="root"></div>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js" crossorigin></script>
+  <script src="./lib/react.production.min.js"></script>
+  <script src="./lib/react-dom.production.min.js"></script>
+  <script src="./lib/babel.min.js"></script>
+  <script src="./lib/xlsx.full.min.js"></script>
+  <script src="./lib/exceljs.min.js"></script>
+  <script>
+var KIT_PURE = (function () {
+  var DAYS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+  var MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  var TYPE_NAMES = { petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre", formation_repas: "formation avec repas", conference_repas: "conférence avec repas" };
+  function renderTemplate(corps, valeurs) {
+    return String(corps || "").replace(/\{(prenom|accroche|dates|type)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+  }
+  function dateParts(isoDate) {
+    var p = String(isoDate || "").split("-");
+    return p.length === 3 ? new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])) : null;
+  }
+  function formatDateFr(isoDate) {
+    var d = dateParts(isoDate);
+    return d && !isNaN(d.getTime()) ? DAYS[d.getDay()] + " " + String(d.getDate()) + " " + MONTHS[d.getMonth()] + " " + String(d.getFullYear()) : "";
+  }
+  function formatDatesList(dates, style) {
+    var vals = (dates || []).map(formatDateFr).filter(function (x) { return x; });
+    if (style === "puces") return vals.map(function (x, i) { return "- " + x + (i === vals.length - 1 ? "." : " ;"); }).join("\n");
+    if (vals.length < 2) return vals[0] || "";
+    return vals.slice(0, -1).join(", ") + " ou " + vals[vals.length - 1];
+  }
+  function accrocheFor(interactions, invitTypes) {
+    var types = invitTypes || [];
+    var sorted = (interactions || []).slice().sort(function (a, b) { return String(b.date || "").localeCompare(String(a.date || "")); });
+    var convivial = sorted.find(function (x) { return types.indexOf(x.type) >= 0; });
+    var chosen = convivial || sorted.find(function (x) { return !x.invitation && !(x.metadata && x.metadata.invitation); });
+    if (!chosen || !chosen.date) return "";
+    var d = dateParts(chosen.date);
+    if (!d) return "";
+    var mois = MONTHS[d.getMonth()];
+    var deMois = (/^[aeiouy]/.test(mois) ? "d'" : "de ") + mois;
+    return convivial ? "depuis notre " + (TYPE_NAMES[chosen.type] || chosen.type) + " " + deMois + ", " : "depuis notre échange " + deMois + ", ";
+  }
+  function cleanPhone(num) { var n = String(num || "").trim().replace(/[^\d+]/g, "").replace(/(?!^)\+/g, ""); return n.indexOf("00") === 0 ? "+" + n.slice(2) : n; }
+  function toE164(num) {
+    var n = cleanPhone(num);
+    if (!n) return "";
+    if (n.charAt(0) === "+") return "+" + n.slice(1).replace(/\D/g, "");
+    var digits = n.replace(/\D/g, "");
+    return digits.charAt(0) === "0" ? "+33" + digits.slice(1) : "+" + digits;
+  }
+  function toIntlDigits(num) { return toE164(num).replace(/^\+/, ""); }
+  function buildMailto(email, objet, corps) { return "mailto:" + encodeURIComponent(email || "") + "?subject=" + encodeURIComponent(objet || "") + "&body=" + encodeURIComponent(corps || ""); }
+  function buildWa(numNational, texte) { return "https://wa.me/" + toIntlDigits(numNational) + "?text=" + encodeURIComponent(texte || ""); }
+  function buildSms(numNational, corps, isIOS) { return "sms:" + toE164(numNational) + (isIOS ? "&body=" : "?body=") + encodeURIComponent(corps || ""); }
+  function isMobileFr(num) { var n = cleanPhone(num).replace(/^\+33/, "0"); return /^0[67]\d{8}$/.test(n); }
+  function extractPostal(texteLibre) {
+    var match = String(texteLibre || "").match(/(?:^|[^\d])((?:0[1-9]|[1-8]\d|9[0-8])\d{3})(?=$|[^\d])/);
+    return match ? match[1] : null;
+  }
+  function isIdfPostal(cp) {
+    return /^(75|77|78|91|92|93|94|95)\d{3}$/.test(String(cp || ""));
+  }
+  function idfDefaultFor(contact, settings) {
+    var c = contact || {};
+    var cp = extractPostal(c.address) || extractPostal(c.workLocation);
+    return cp ? isIdfPostal(cp) : !!(settings && settings.idfParDefaut);
+  }
+  function mergeDates(candidateDates, manualDates) {
+    var seen = {};
+    return (candidateDates || []).concat(manualDates || []).filter(function (date) {
+      var valid = /^\d{4}-\d{2}-\d{2}$/.test(String(date || ""));
+      if (!valid || seen[date]) return false;
+      seen[date] = true;
+      return true;
+    }).sort();
+  }
+  function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
+  function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
+  function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
+  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
+}());
+var KIT_TESTS = {
+  cases: [],
+  add: function (nom, fn) { this.cases.push({ nom: nom, fn: fn }); },
+  run: function () {
+    var failures = 0;
+    this.cases.forEach(function (t) { try { t.fn(); console.log("OK " + t.nom); } catch (e) { failures += 1; console.log("ECHEC " + t.nom + " — " + e.message); } });
+    return failures;
+  }
+};
+function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
+KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
+KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
+KIT_TESTS.add("accroche depuis déjeuner", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "dejeuner", date: "2026-03-12" }], ["dejeuner"]) === "depuis notre déjeuner de mars, "); });
+KIT_TESTS.add("accroche ignore invitation précédente", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "email", date: "2026-05-01", metadata: { invitation: true } }, { type: "appel_echange", date: "2026-04-01" }], ["dejeuner"]) === "depuis notre échange d'avril, "); });
+KIT_TESTS.add("AE7 numéro français", function () { kitAssert(KIT_PURE.buildWa("06 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
+KIT_TESTS.add("numéro suisse", function () { kitAssert(KIT_PURE.toIntlDigits("+41 79 123 45 67") === "41791234567"); kitAssert(KIT_PURE.toE164("+41 79 123 45 67") === "+41791234567"); });
+KIT_TESTS.add("encodage mail intact", function () { var u = KIT_PURE.buildMailto("anne&cie@example.fr", "Anne & Cie", "ligne 1\nligne 2"); var q = u.slice(u.indexOf("?") + 1).split("&"); kitAssert(decodeURIComponent(u.slice(7, u.indexOf("?"))) === "anne&cie@example.fr"); kitAssert(q.length === 2 && decodeURIComponent(q[0].slice(8)) === "Anne & Cie" && decodeURIComponent(q[1].slice(5)) === "ligne 1\nligne 2"); });
+KIT_TESTS.add("garde-fou mailto détectable", function () { kitAssert(KIT_PURE.buildMailto("a@b.fr", "x", new Array(1901).join("a")).length > 1800); });
+KIT_TESTS.add("format date français", function () { kitAssert(KIT_PURE.formatDateFr("2026-06-17") === "Mercredi 17 juin 2026"); });
+KIT_TESTS.add("détection mobile français", function () { kitAssert(KIT_PURE.isMobileFr("06 12 34 56 78") && KIT_PURE.isMobileFr("07 12 34 56 78") && !KIT_PURE.isMobileFr("01 12 34 56 78") && !KIT_PURE.isMobileFr("09 12 34 56 78")); });
+KIT_TESTS.add("canaux invitation vers types non-rencontre", function () { var types = ["mail", "whatsapp", "sms"].map(KIT_PURE.canalToInteractionType); kitAssert(types[0] === "email" && types[1] === "sms" && types[2] === "sms"); kitAssert(types.every(function (x) { return ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"].indexOf(x) < 0; })); });
+KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
+KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
+KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
+KIT_TESTS.add("adresse lyonnaise prérègle Province", function () { var c = { address: "69003 Lyon" }; kitAssert(KIT_PURE.extractPostal(c.address) === "69003" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: true }) === false); });
+KIT_TESTS.add("adresse vide utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "", workLocation: "" }, { idfParDefaut: false }) === false); });
+KIT_TESTS.add("ville sans code utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "Lyon" }, { idfParDefaut: true }) === true); });
+KIT_TESTS.add("fusion dates cochées et manuelles ordonnée sans doublon", function () { kitAssert(JSON.stringify(KIT_PURE.mergeDates(["2026-09-12", "2026-09-10"], ["2026-09-11", "2026-09-10"])) === JSON.stringify(["2026-09-10", "2026-09-11", "2026-09-12"])); });
+KIT_TESTS.add("préfixe international 0033", function () { kitAssert(KIT_PURE.isMobileFr("0033 6 12 34 56 78")); kitAssert(KIT_PURE.buildWa("0033 6 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("0033 6 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
+KIT_TESTS.add("liste de dates inline selon le nombre", function () { kitAssert(KIT_PURE.formatDatesList([], "inline") === ""); kitAssert(KIT_PURE.formatDatesList(["2026-06-17"], "inline") === "Mercredi 17 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18"], "inline") === "Mercredi 17 juin 2026 ou Jeudi 18 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "inline") === "Mercredi 17 juin 2026, Jeudi 18 juin 2026 ou Vendredi 19 juin 2026"); });
+KIT_TESTS.add("sms iOS avec esperluette", function () { kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", true) === "sms:+33612345678&body=x"); });
+  </script>
   <script type="text/babel" data-type="module">
 
 /* ═══════ PASSWORD AUTH ═══════ */
 var PWD_KEY = "kit-crm-pwd";
 var LAST_EXPORT_KEY = "kit-crm-last-export";
 var AUTH_KEY = "kit-crm-auth";
+
+function fetchCandidateDates(ctx, done) {
+  done({ etat: "non-connecte", candidates: [] });
+}
 
 async function hashPassword(pwd) {
   var encoder = new TextEncoder();
@@ -123,13 +232,24 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.2";
+var APP_VERSION = "1.3.1";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
+function defaultSettings() {
+  return { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 28, plafond: 10 }, exclusions: { aoutPlein: true, fetesFinAnnee: true }, idfParDefaut: true, updatedAt: TS_BASE };
+}
+function defaultTemplates() {
+  return [
+    { id: "mail-tu", nom: "Mail — tutoiement", canal: "mail", registre: "tu", objet: "Déjeuner ?", corps: "Salut {prenom},\n\nJ'espère que tu vas bien ?\n\n{accroche}Que dirais-tu de nous organiser un {type} prochainement ?\n\nJ'ai quelques disponibilités à venir :\n\n{dates}\n\nLe cas échéant, est-ce qu'une de ces dates pourrait te convenir ?\n\nA très bientôt,", nbDates: 3, updatedAt: TS_BASE },
+    { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: "Invitation à déjeuner", corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
+    { id: "texte-tu", nom: "WhatsApp/SMS — tutoiement", canal: "texte", registre: "tu", corps: "Salut {prenom} ! Tu vas bien ? {accroche}Serais-tu disponible pour un {type} la semaine prochaine ? A très bientôt !", nbDates: 0, updatedAt: TS_BASE },
+    { id: "texte-vous", nom: "WhatsApp/SMS — vouvoiement", canal: "texte", registre: "vous", corps: "Bonjour {prenom}, j'espère que vous allez bien. {accroche}Seriez-vous disponible pour un {type} la semaine prochaine ? Bien à vous,", nbDates: 0, updatedAt: TS_BASE }
+  ];
+}
 function downloadJSON(obj, filename) {
   var blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
   var url = URL.createObjectURL(blob);
@@ -142,6 +262,8 @@ function migrateData(d) {
   if (!Array.isArray(d.contacts)) { d.contacts = []; changed = true; }
   if (!Array.isArray(d.deletedContacts)) { d.deletedContacts = []; changed = true; }
   if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
+  if (!d.settings) { d.settings = defaultSettings(); changed = true; }
+  if (!Array.isArray(d.templates)) { d.templates = defaultTemplates(); changed = true; }
   d.contacts.forEach(function (c) {
     if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
     if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
@@ -157,6 +279,8 @@ function migrateData(d) {
   return { d: d, changed: changed };
 }
 function mergeData(localData, importedData) {
+  var importHasSettings = Object.prototype.hasOwnProperty.call(importedData || {}, "settings");
+  var importHasTemplates = Object.prototype.hasOwnProperty.call(importedData || {}, "templates");
   var L = migrateData(JSON.parse(JSON.stringify(localData || {}))).d;
   var I = migrateData(JSON.parse(JSON.stringify(importedData || {}))).d;
   var delInterAll = (L.deletedInteractions || []).concat(I.deletedInteractions || []);
@@ -172,7 +296,7 @@ function mergeData(localData, importedData) {
   Object.keys(tombL).forEach(function (k) { ids[k] = ids[k] || 1; });
   Object.keys(tombI).forEach(function (k) { ids[k] = ids[k] || 1; });
   var out = [];
-  var report = { added: [], updated: [], pending: [], revived: [], conflicts: [], interAdded: 0 };
+  var report = { added: [], updated: [], pending: [], revived: [], conflicts: [], interAdded: 0, configuration: [] };
   var keepTomb = {};
   Object.keys(ids).forEach(function (id) {
     var a = mapL[id], b = mapI[id];
@@ -220,7 +344,18 @@ function mergeData(localData, importedData) {
   (importedData.categories || []).forEach(function (x) { if (cats.indexOf(x) === -1) cats.push(x); });
   var seenDI = {}, dInter = [];
   delInterAll.forEach(function (x) { var k = x.cid + "|" + x.iid; if (!seenDI[k]) { seenDI[k] = 1; dInter.push(x); } });
-  return { contacts: out, categories: cats, keepTomb: keepTomb, deletedInteractions: dInter, report: report };
+  var settings = L.settings;
+  if (importHasSettings && (I.settings.updatedAt || TS_BASE) > (L.settings.updatedAt || TS_BASE)) { settings = I.settings; report.configuration.push("Réglages remplacés par ceux du fichier"); }
+  var templates = L.templates.slice();
+  if (importHasTemplates) {
+    var templateMap = {}; templates.forEach(function (t, i) { templateMap[t.id] = i; });
+    I.templates.forEach(function (t) {
+      var pos = templateMap[t.id];
+      if (pos === undefined) { templateMap[t.id] = templates.length; templates.push(t); report.configuration.push("Modèle ajouté : " + t.nom); }
+      else if ((t.updatedAt || TS_BASE) > (templates[pos].updatedAt || TS_BASE)) { templates[pos] = t; report.configuration.push("Modèle remplacé : " + t.nom); }
+    });
+  }
+  return { contacts: out, categories: cats, keepTomb: keepTomb, deletedInteractions: dInter, settings: settings, templates: templates, report: report };
 }
 /* ── KIT_SYNC_HELPERS_END ── */
 
@@ -722,10 +857,29 @@ function App() {
   var [showBackup, setShowBackup] = useState(false);
   var [showChangePwd, setShowChangePwd] = useState(false);
   var [showAbout, setShowAbout] = useState(false);
+  var [showMeetingSettings, setShowMeetingSettings] = useState(false);
   var [oldPwd, setOldPwd] = useState("");
   var [newPwd, setNewPwd] = useState("");
   var [newPwd2, setNewPwd2] = useState("");
   var [pwdMsg, setPwdMsg] = useState("");
+  var [showInvite, setShowInvite] = useState(false);
+  var [inviteId, setInviteId] = useState(null);
+  var [inviteStep, setInviteStep] = useState("options");
+  var [inviteType, setInviteType] = useState("dejeuner");
+  var [inviteCanal, setInviteCanal] = useState("mail");
+  var [inviteRegister, setInviteRegister] = useState("tu");
+  var [inviteDates, setInviteDates] = useState([]);
+  var [inviteDate, setInviteDate] = useState("");
+  var [inviteCandidateResult, setInviteCandidateResult] = useState({ etat: "non-connecte", candidates: [] });
+  var [inviteCandidateDates, setInviteCandidateDates] = useState([]);
+  var [inviteManualDates, setInviteManualDates] = useState([]);
+  var [inviteIdf, setInviteIdf] = useState(true);
+  var [inviteObjet, setInviteObjet] = useState("");
+  var [inviteCorps, setInviteCorps] = useState("");
+  var [inviteCoord, setInviteCoord] = useState("");
+  var [confirmInviteVisible, setConfirmInviteVisible] = useState(false);
+  var [replayInvite, setReplayInvite] = useState(null);
+  var [doubleInviteId, setDoubleInviteId] = useState(null);
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -769,10 +923,10 @@ function App() {
           if (mig.changed) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mig.d)); } catch (e2) { /* silent */ } }
           idbSet("data", mig.d);
         } else {
-          setData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] });
+          setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
         }
       } catch (e) {
-        setData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] });
+        setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
       }
       setLoading(false);
     }
@@ -784,6 +938,18 @@ function App() {
     window.addEventListener("kit-sw-updated", hUpd);
     return function () { window.removeEventListener("kit-sw-updated", hUpd); };
   }, []);
+
+  useEffect(function () {
+    if (!loading && data && !showInvite && !doubleInviteId && KIT_PURE.nextPendingInvite(data.pendingInvites)) setConfirmInviteVisible(true);
+  }, [loading]);
+
+  useEffect(function () {
+    function showPendingOnReturn() {
+      if (document.visibilityState === "visible" && !showInvite && !doubleInviteId) setConfirmInviteVisible(true);
+    }
+    document.addEventListener("visibilitychange", showPendingOnReturn);
+    return function () { document.removeEventListener("visibilitychange", showPendingOnReturn); };
+  }, [showInvite, doubleInviteId]);
 
   useEffect(function () {
     if (!("serviceWorker" in navigator)) return;
@@ -805,14 +971,28 @@ function App() {
     return function () { navigator.serviceWorker.removeEventListener("message", onMsg); };
   }, []);
 
-  var save = useCallback(function (partial) {
+  var save = useCallback(function (partial, opts) {
+    var verify = opts && opts.verify;
+    if (verify) {
+      var nd = Object.assign({}, data || {}, partial);
+      try {
+        var serialized = JSON.stringify(nd);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        var back = localStorage.getItem(STORAGE_KEY) || "";
+        var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
+        if (!ok) return false;
+      } catch (e) { return false; }
+      setData(nd); idbSet("data", nd);
+      return true;
+    }
     setData(function (prev) {
       var nd = Object.assign({}, prev || {}, partial);
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nd)); } catch (e) { /* silent */ }
       idbSet("data", nd);
       return nd;
     });
-  }, []);
+    return true;
+  }, [data]);
 
   async function enableNotifs() {
     setShowMenu(false);
@@ -903,6 +1083,7 @@ function App() {
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
+      registre: "",
       interactions: [], createdAt: todayStr(), updatedAt: nowTS(), fieldsUpdatedAt: {}, archived: false
     };
     save({ contacts: contacts.concat([nc]), categories: categories });
@@ -910,7 +1091,7 @@ function App() {
     setSelId(id);
   }
 
-  function updContact(id, updates) {
+  function updContact(id, updates, rootUpdates) {
     var newContacts = contacts.map(function (c) {
       if (c.id !== id) return c;
       var copy = {};
@@ -924,7 +1105,7 @@ function App() {
       if (touched) { copy.updatedAt = now; copy.fieldsUpdatedAt = fu; }
       return copy;
     });
-    save({ contacts: newContacts, categories: categories });
+    save(Object.assign({ contacts: newContacts, categories: categories }, rootUpdates || {}));
   }
 
   function delContact(id) {
@@ -935,20 +1116,20 @@ function App() {
     setSelId(null);
   }
 
-  function logInteraction(id, comment, date, type, awaiting, retry) {
+  function logInteraction(id, comment, date, type, awaiting, retry, meta, contactUpdates, rootUpdates) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
     var logDay = date || todayStr();
-    var entry = { iid: makeId(), date: logDay, comment: comment || "", type: type || "autre", awaitingResponse: !!awaiting, retryPending: !!retry };
+    var entry = Object.assign({ iid: makeId(), date: logDay, comment: comment || "", type: type || "autre", awaitingResponse: !!awaiting, retryPending: !!retry }, meta || {});
     var newInts = [entry].concat(c.interactions || []);
     newInts.sort(function (a, b) { return b.date.localeCompare(a.date); });
-    var patch = { interactions: newInts };
+    var patch = Object.assign({ interactions: newInts }, contactUpdates || {});
     // Une rencontre conviviale réinitialise le cycle : on lève tout report en cours
     if (RENCONTRE_TYPES.indexOf(type) >= 0) patch.snoozedUntil = "";
     // Contacter la personne accomplit la relance planifiée éventuelle
     if (c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
-    if (c.awaitingUntil) patch.awaitingUntil = "";
-    updContact(id, patch);
+    if (c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
+    updContact(id, patch, rootUpdates);
   }
 
   function deleteInteraction(id, idx) {
@@ -981,6 +1162,174 @@ function App() {
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
   function openLogModal(id) { setLogId(id); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+
+  function inviteMobile(c) {
+    var nums = [c.phonePerso, c.phonePro, c.phone];
+    for (var i = 0; i < nums.length; i++) { if (KIT_PURE.isMobileFr(nums[i])) return nums[i]; }
+    return "";
+  }
+  function resetInvite() {
+    setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
+  }
+  function invitationAwaiting(c) {
+    var li = latestInteraction(c);
+    return li && li.invitation === true && li.awaitingResponse && awaitingActive(c) ? li : null;
+  }
+  function openInviteModalNow(id) {
+    var c = contacts.find(function (x) { return x.id === id; });
+    if (!c) return;
+    var defaultIdf = KIT_PURE.idfDefaultFor(c, data.settings || {});
+    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.registre === "vous" ? "vous" : "tu");
+    setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
+    setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteIdf(defaultIdf); setInviteCoord(""); setShowInvite(true);
+  }
+  function openInviteModal(id) {
+    var c = contacts.find(function (x) { return x.id === id; });
+    var pendingSame = (data.pendingInvites || []).some(function (x) { return x.contactId === id && x.statut === "lien-ouvert"; });
+    if (c && (invitationAwaiting(c) || pendingSame)) { setDoubleInviteId(id); return; }
+    openInviteModalNow(id);
+  }
+  function restoreInvite(payload) {
+    setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
+    setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
+    setInviteCandidateDates([]); setInviteManualDates((payload.dates || []).slice()); setInviteCandidateResult({ etat: "non-connecte", candidates: [] });
+    setInviteStep("preview"); setInviteCoord(""); setShowInvite(true); setReplayInvite(null);
+  }
+  function updateComposedDates(candidates, manual) {
+    setInviteDates(KIT_PURE.mergeDates(candidates, manual));
+  }
+  function requestCandidateDates(meal, idf) {
+    var c = contacts.find(function (x) { return x.id === inviteId; });
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    if (!c || !t) return;
+    setInviteCandidateResult({ etat: "chargement", candidates: [] });
+    setInviteCandidateDates([]);
+    setInviteManualDates([]);
+    setInviteDates([]);
+    fetchCandidateDates({ meal: meal, idf: idf, settings: data.settings || {}, contact: c }, function (result) {
+      var normalized = result || { etat: "erreur", candidates: [] };
+      var candidates = KIT_PURE.mergeDates(normalized.candidates || [], []);
+      var checked = normalized.etat === "ok" ? candidates.slice(0, Number(t.nbDates || 0)) : [];
+      setInviteCandidateResult({ etat: normalized.etat, candidates: candidates });
+      setInviteCandidateDates(checked);
+      updateComposedDates(checked, []);
+    });
+  }
+  function changeInviteType(meal) {
+    setInviteType(meal);
+    requestCandidateDates(meal, inviteIdf);
+  }
+  function selectedTemplate(canal, registre) {
+    var wanted = canal === "mail" ? "mail" : "texte";
+    return (data.templates || defaultTemplates()).find(function (t) { return t.canal === wanted && t.registre === registre; }) || null;
+  }
+  function prepareInvitePreview() {
+    var c = contacts.find(function (x) { return x.id === inviteId; });
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    if (!c || !t) return;
+    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType] };
+    setInviteObjet(KIT_PURE.renderTemplate(t.objet || "", vals));
+    setInviteCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
+    setInviteStep("preview");
+  }
+  function advanceInvite() {
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    if (!t) return;
+    if (t.nbDates > 0 && inviteStep === "options") { setInviteStep("dates"); requestCandidateDates(inviteType, inviteIdf); return; }
+    prepareInvitePreview();
+  }
+  function saveInviteCoordinate() {
+    var value = inviteCoord.trim();
+    if (!value) return;
+    if (inviteCanal === "mail") updContact(inviteId, { email: value });
+    else updContact(inviteId, { phonePerso: normalizePhone(value) });
+    setInviteCoord("");
+  }
+  function launchInvite(payload) {
+    var c = contacts.find(function (x) { return x.id === payload.contactId; });
+    if (!c) return;
+    var mobile = inviteMobile(c);
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    var pending = { id: makeId(), contactId: payload.contactId, statut: "lien-ouvert", meal: payload.type, canal: payload.canal, registre: payload.registre, templateId: payload.templateId, dates: (payload.dates || []).slice(), objet: payload.objet || "", corps: payload.corps || "", createdAt: nowTS() };
+    var saved = save({ pendingInvites: (data.pendingInvites || []).concat([pending]) }, {
+      verify: function (d) { return (d.pendingInvites || []).some(function (x) { return x.id === pending.id && x.statut === "lien-ouvert"; }); }
+    });
+    if (!saved) {
+      alert("Impossible d'enregistrer l'invitation — envoi annulé");
+      return;
+    }
+    function copyCorps() {
+      navigator.clipboard.writeText(payload.corps).catch(function () {
+        alert("Impossible de copier le message — copiez-le depuis l'aperçu. L'invitation reste en attente de confirmation.");
+      });
+    }
+    if (payload.canal === "mail") {
+      var mailto = KIT_PURE.buildMailto(c.email, payload.objet, payload.corps);
+      if (mailto.length > 1800) copyCorps();
+      else location.href = mailto;
+    } else if (payload.canal === "whatsapp") {
+      window.open(KIT_PURE.buildWa(mobile, payload.corps), "_blank", "noopener");
+    } else if (isPC) {
+      copyCorps();
+    } else {
+      location.href = KIT_PURE.buildSms(mobile, payload.corps, isIOS);
+    }
+    setConfirmInviteVisible(true);
+    resetInvite();
+  }
+
+  function removePendingInvite(pending) {
+    var filtered = (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; });
+    if (!save({ pendingInvites: filtered }, { verify: true })) { alert("Impossible d'enregistrer la réponse."); return false; }
+    setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(filtered));
+    return true;
+  }
+  function answerPendingInvite(pending, sent) {
+    if (!sent) {
+      if (removePendingInvite(pending)) setReplayInvite(pending);
+      return;
+    }
+    var c = contacts.find(function (x) { return x.id === pending.contactId; });
+    if (!c) { removePendingInvite(pending); return; }
+    var remaining = (data.pendingInvites || []).filter(function (x) { return x.id !== pending.id; });
+    logInteraction(pending.contactId, "Invitation " + pending.meal + " — " + pending.canal, (pending.createdAt || nowTS()).slice(0, 10), KIT_PURE.canalToInteractionType(pending.canal), true, false, { invitation: true, meal: pending.meal, datesProposees: (pending.dates || []).slice(), canal: pending.canal }, { registre: pending.registre }, { pendingInvites: remaining });
+    setConfirmInviteVisible(!!KIT_PURE.nextPendingInvite(remaining));
+  }
+
+  function renderPendingInviteModal() {
+    var pending = KIT_PURE.nextPendingInvite(data.pendingInvites);
+    if (!confirmInviteVisible || !pending) return null;
+    var c = contacts.find(function (x) { return x.id === pending.contactId; });
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1020, padding: 16 }} onClick={function () { setConfirmInviteVisible(false); }}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: 26, maxWidth: 440, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 18, color: ac }}>{"Invitation envoyée à " + (c ? (c.firstName || displayName(c)) : "ce contact") + " ?"}</h3>
+          <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 13 }}>{"La fermeture de cette fenêtre ne vaut pas réponse."}</p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "9px 16px", fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { answerPendingInvite(pending, false); }}>Non</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { answerPendingInvite(pending, true); }}>Oui</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDoubleInviteModal() {
+    if (!doubleInviteId) return null;
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.42)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1010, padding: 16 }} onClick={function () { setDoubleInviteId(null); }}>
+        <div style={{ background: "#fff", borderRadius: 14, padding: 24, maxWidth: 430, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 8px", fontSize: 18, color: ac }}>Une invitation est déjà en attente</h3>
+          <p style={{ margin: "0 0 18px", color: "#64748B", fontSize: 13 }}>Souhaites-tu tout de même préparer une nouvelle invitation ?</p>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "9px 16px", fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { setDoubleInviteId(null); }}>Annuler</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { var id = doubleInviteId; setDoubleInviteId(null); openInviteModalNow(id); }}>Continuer</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function addCategory(nm) {
     if (nm && categories.indexOf(nm) === -1) {
@@ -1204,8 +1553,13 @@ function App() {
         if (!restored.contacts || !Array.isArray(restored.contacts)) { alert("Fichier invalide."); return; }
         if (!confirm("Remplacer vos " + String(contacts.length) + " contacts par " + String(restored.contacts.length) + " contacts du fichier ?")) return;
         if (!confirm("Derni\u00e8re confirmation : cette op\u00e9ration \u00e9crase TOUT sur cet appareil (fiches, historiques, suppressions m\u00e9moris\u00e9es). Pour une synchronisation sans perte, utilise plut\u00f4t \u00ab Importer / fusionner \u00bb.")) return;
+        var restoreHasSettings = Object.prototype.hasOwnProperty.call(restored, "settings");
+        var restoreHasTemplates = Object.prototype.hasOwnProperty.call(restored, "templates");
         var mig = migrateData(restored);
-        save({ contacts: mig.d.contacts, categories: mig.d.categories || DEFAULT_CATS.slice(), deletedContacts: mig.d.deletedContacts, deletedInteractions: mig.d.deletedInteractions });
+        var restorePartial = { contacts: mig.d.contacts, categories: mig.d.categories || DEFAULT_CATS.slice(), deletedContacts: mig.d.deletedContacts, deletedInteractions: mig.d.deletedInteractions };
+        if (restoreHasSettings) restorePartial.settings = mig.d.settings;
+        if (restoreHasTemplates) restorePartial.templates = mig.d.templates;
+        save(restorePartial);
         alert(String(mig.d.contacts.length) + " contact(s) restaur\u00e9(s).");
         setShowBackup(false);
       } catch (err) { alert("Erreur: " + err.message); }
@@ -1241,7 +1595,7 @@ function App() {
       if (checked[p.id] !== false) { tombs.push(p.tomb); }
       else { var cAlive = JSON.parse(JSON.stringify(p.alive)); cAlive.updatedAt = nowTS(); finalContacts.push(cAlive); }
     });
-    save({ contacts: finalContacts, categories: res.categories, deletedContacts: tombs, deletedInteractions: res.deletedInteractions });
+    save({ contacts: finalContacts, categories: res.categories, deletedContacts: tombs, deletedInteractions: res.deletedInteractions, settings: res.settings, templates: res.templates });
     var r = res.report;
     alert("Fusion appliqu\u00e9e : " + r.added.length + " ajout\u00e9e(s), " + r.updated.length + " mise(s) \u00e0 jour, " + r.interAdded + " interaction(s) ajout\u00e9e(s).");
     setMergePrev(null); setShowBackup(false);
@@ -1788,6 +2142,99 @@ function App() {
     );
   }
 
+  function renderInviteModal() {
+    if (!showInvite) return null;
+    var c = contacts.find(function (x) { return x.id === inviteId; });
+    if (!c) return null;
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    var mobile = inviteMobile(c);
+    var hasCoord = inviteCanal === "mail" ? !!c.email : !!mobile;
+    var needDates = t ? Number(t.nbDates || 0) : 0;
+    var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    var mailTooLong = inviteCanal === "mail" && KIT_PURE.buildMailto(c.email, inviteObjet, inviteCorps).length > 1800;
+    var chip = function (active, available) { return { padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: available ? ac : "#94A3B8", opacity: available ? 1 : 0.65 }; };
+    var mainLabel = mailTooLong || (inviteCanal === "sms" && isPC) ? "Copier le message" : "Ouvrir dans " + (inviteCanal === "mail" ? "Outlook" : inviteCanal === "whatsapp" ? "WhatsApp" : "SMS");
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={resetInvite}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 560, width: "100%", maxHeight: "84vh", overflowY: "auto" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>{"Proposer une rencontre"}</h3>
+          <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
+          {inviteStep === "options" ? <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>TYPE</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {[["petitdej", "☕ Petit-déjeuner"], ["dejeuner", "🍽 Déjeuner"], ["diner", "🍷 Dîner"], ["verre", "🥂 Verre"]].map(function (x) { return <button key={x[0]} style={chip(inviteType === x[0], true)} onClick={function () { changeInviteType(x[0]); }}>{x[1]}</button>; })}
+            </div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>CANAL</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {[["mail", "✉ Mail", !!c.email], ["whatsapp", "WhatsApp", !!mobile], ["sms", "SMS", !!mobile]].map(function (x) { return <button key={x[0]} style={chip(inviteCanal === x[0], x[2])} onClick={function () { setInviteCanal(x[0]); setInviteCoord(""); }}>{x[1]}</button>; })}
+            </div>
+            {!hasCoord ? <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <input value={inviteCoord} onChange={function (e) { setInviteCoord(e.target.value); }} placeholder={inviteCanal === "mail" ? "Ajouter l'adresse email" : "Ajouter le mobile"} style={{ flex: 1, minWidth: 0, padding: 9, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 13, fontFamily: ff }} />
+              <button onClick={saveInviteCoordinate} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "8px 12px", fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Enregistrer</button>
+            </div> : null}
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>REGISTRE</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[["tu", "Tutoiement"], ["vous", "Vouvoiement"]].map(function (x) { return <button key={x[0]} style={chip(inviteRegister === x[0], true)} onClick={function () { setInviteRegister(x[0]); }}>{x[1]}</button>; })}
+            </div>
+          </div> : null}
+          {inviteStep === "dates" ? <div>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#475569" }}>{"Choisissez " + String(needDates) + " date" + (needDates > 1 ? "s" : "") + "."}</p>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>LOCALISATION</label>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              <button style={chip(inviteIdf, true)} onClick={function () { setInviteIdf(true); requestCandidateDates(inviteType, true); }}>Île-de-France</button>
+              <button style={chip(!inviteIdf, true)} onClick={function () { setInviteIdf(false); requestCandidateDates(inviteType, false); }}>Province</button>
+            </div>
+            {inviteCandidateResult.etat === "chargement" ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#F6F5F2", color: ac, fontSize: 13 }}>{"Recherche des disponibilités…"}</div> : null}
+            {inviteCandidateResult.etat === "non-connecte" ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#FFF7E6", color: "#7A5208", fontSize: 13 }}>{"Agenda non connecté — saisissez vos dates"}</div> : null}
+            {inviteCandidateResult.etat === "erreur" ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#FFF1ED", color: "#9A3412", fontSize: 13 }}>{"Agenda indisponible — saisissez vos dates"}</div> : null}
+            {inviteCandidateResult.etat === "ok" && inviteCandidateResult.candidates.length === 0 ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#FFF7E6", color: "#7A5208", fontSize: 13 }}>{"Aucune date disponible sur l'horizon — ajoutez des dates manuellement"}</div> : null}
+            {inviteCandidateResult.etat === "ok" && inviteCandidateResult.candidates.length > 0 ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {inviteCandidateResult.candidates.map(function (d) {
+                var active = inviteCandidateDates.indexOf(d) >= 0;
+                return <button key={d} style={chip(active, true)} onClick={function () {
+                  var next = active ? inviteCandidateDates.filter(function (x) { return x !== d; }) : inviteCandidateDates.concat([d]);
+                  setInviteCandidateDates(next);
+                  updateComposedDates(next, inviteManualDates);
+                }}>{KIT_PURE.formatDateFr(d)}</button>;
+              })}
+            </div> : null}
+            {inviteCandidateResult.etat !== "chargement" ? <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>AJOUT MANUEL</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input type="date" value={inviteDate} onChange={function (e) { setInviteDate(e.target.value); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff }} />
+                <button disabled={!inviteDate || inviteDates.length >= needDates || inviteDates.indexOf(inviteDate) >= 0} onClick={function () {
+                  var nextManual = KIT_PURE.mergeDates(inviteManualDates, [inviteDate]);
+                  setInviteManualDates(nextManual);
+                  updateComposedDates(inviteCandidateDates, nextManual);
+                  setInviteDate("");
+                }} style={{ background: abl, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 600, cursor: "pointer", opacity: !inviteDate || inviteDates.length >= needDates || inviteDates.indexOf(inviteDate) >= 0 ? 0.5 : 1 }}>Ajouter</button>
+              </div>
+            </div> : null}
+            {inviteDates.length > 0 ? <div>
+              <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600, color: "#64748B" }}>DATES CHOISIES — APPUYEZ POUR RETIRER</p>
+              {inviteDates.map(function (d) { return <button key={d} onClick={function () {
+                var nextCandidates = inviteCandidateDates.filter(function (x) { return x !== d; });
+                var nextManual = inviteManualDates.filter(function (x) { return x !== d; });
+                setInviteCandidateDates(nextCandidates); setInviteManualDates(nextManual); updateComposedDates(nextCandidates, nextManual);
+              }} style={{ display: "flex", width: "100%", justifyContent: "space-between", padding: "8px 0", border: "none", borderTop: "1px solid " + bd, background: "transparent", color: ac, fontSize: 13, cursor: "pointer", fontFamily: ff }}><span>{KIT_PURE.formatDateFr(d)}</span><span style={{ color: "#BE3C1A" }}>Retirer</span></button>; })}
+            </div> : null}
+          </div> : null}
+          {inviteStep === "preview" ? <div>
+            {inviteCanal === "mail" ? <div><label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>OBJET</label><input value={inviteObjet} onChange={function (e) { setInviteObjet(e.target.value); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, marginBottom: 12 }} /></div> : null}
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>APERÇU MODIFIABLE</label>
+            <textarea value={inviteCorps} onChange={function (e) { setInviteCorps(e.target.value); }} rows={12} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, lineHeight: 1.5, fontFamily: ff, resize: "vertical" }} />
+            {mailTooLong ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#B5790B" }}>{"Message trop long pour un lien mail fiable : il sera copié."}</p> : null}
+          </div> : null}
+          <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={inviteStep === "options" ? resetInvite : function () { setInviteStep(inviteStep === "preview" && needDates > 0 ? "dates" : "options"); }}>{"Retour"}</button>
+            {inviteStep !== "preview" ? <button disabled={!hasCoord || (inviteStep === "dates" && (inviteDates.length !== needDates || inviteCandidateResult.etat === "chargement"))} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: !hasCoord || (inviteStep === "dates" && (inviteDates.length !== needDates || inviteCandidateResult.etat === "chargement")) ? 0.5 : 1 }} onClick={advanceInvite}>Continuer</button> :
+              <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { launchInvite({ contactId: inviteId, type: inviteType, canal: inviteCanal, registre: inviteRegister, templateId: t.id, dates: inviteDates.slice(), objet: inviteObjet, corps: inviteCorps }); }}>{mainLabel}</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── FORM ───
   function pickCompany(name) {
     var up = (name || "").toUpperCase();
@@ -2032,6 +2479,7 @@ function App() {
                 {!isClient(c) ? renderPrioBadge(c.priority) : null}
                 {snoozed ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #CBD5E1", background: "#F1EFEB", color: "#64748B" }}>{"⏸ Reporté jusqu'au " + fmtDate(c.snoozedUntil)}</span> : renderStatusBadge(status)}
                 {awaitStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #F4D6CB", background: "#FBEAE5", color: "#9A3115" }}>{"⚠ Relance due — " + String(awaitDays) + "j"}</span> : null}
+                {invitationAwaiting(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, background: "#EAF3F5", color: "#235C68" }}>{"invitation envoyée le " + fmtDate(invitationAwaiting(c).date)}</span> : null}
                 {retryStale(c) ? <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10, border: "1px solid #9FCAD3", background: "#EAF3F5", color: "#235C68" }}>{"⚠ À recontacter — " + String(retryDays) + "j"}</span> : null}
                 {c.sector ? <span style={{ fontSize: 11, color: "#64748B", background: "#F1EFEB", padding: "2px 8px", borderRadius: 4 }}>{c.sector}</span> : null}
               </div>
@@ -2090,10 +2538,13 @@ function App() {
             </div>
           ) : null}
 
+          <div style={{ marginTop: 14 }}>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
+          </div>
           {(c.email || c.phonePro || c.phonePerso || c.phone || c.linkedin) ? (
             <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
               {c.email ? (
-                <a href={"mailto:" + c.email} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #C7E0E6", color: abl, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
+                <a href={"mailto:" + encodeURIComponent(c.email)} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#EAF3F5", borderRadius: 8, border: "1px solid #C7E0E6", color: abl, fontSize: 13, fontWeight: 600, textDecoration: "none", cursor: "pointer" }}>
                   {"✉ " + c.email}
                 </a>
               ) : null}
@@ -2267,10 +2718,12 @@ function App() {
                     <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>{displayName(c)}</span>
                     {c.company ? <span style={{ fontSize: 12, color: "#475569" }}>{" — " + c.company}</span> : null}
                     {!isClient(c) ? <span style={{ marginLeft: 6 }}>{renderPrioBadge(c.priority)}</span> : null}
+                    {invitationAwaiting(c) ? <span style={{ display: "block", marginTop: 3, fontSize: 11.5, color: "#235C68", fontWeight: 600 }}>{"invitation envoyée le " + fmtDate(invitationAwaiting(c).date)}</span> : null}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{label}</span>
                     <button style={{ background: "transparent", color: "#9A3115", border: "1px solid #F4D6CB", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); snoozeRencontre(c.id); }} title={"Reporter de " + String((cycleFor(c) || { due: 12 }).due) + " mois"}>{"⏸"}</button>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openLogModal(c.id); }}>{"Enregistrer"}</button>
                   </div>
                 </div>
@@ -2477,6 +2930,24 @@ function App() {
   }
 
   // ─── DASHBOARD ───
+  function updateMeetingSettings(mutator) {
+    var next = JSON.parse(JSON.stringify(data.settings || defaultSettings()));
+    mutator(next); next.updatedAt = nowTS(); save({ settings: next });
+  }
+  function updateTemplate(id, field, value) {
+    var next = (data.templates || defaultTemplates()).map(function (t) {
+      if (t.id !== id) return t;
+      var copy = Object.assign({}, t); copy[field] = value; copy.updatedAt = nowTS(); return copy;
+    });
+    save({ templates: next });
+  }
+  function resetTemplate(id) {
+    var original = defaultTemplates().find(function (t) { return t.id === id; });
+    var next = (data.templates || defaultTemplates()).map(function (t) {
+      return t.id === id ? Object.assign({}, original, { updatedAt: nowTS() }) : t;
+    });
+    save({ templates: next });
+  }
   function renderDash() {
     return (
       <div>
@@ -2497,11 +2968,12 @@ function App() {
             ) : null}
             {showMenu ? (
               <div style={{ position: "absolute", top: 48, right: 0, background: "#fff", borderRadius: 10, border: "1px solid " + bd, boxShadow: "0 8px 24px rgba(16,24,40,0.12)", padding: 6, zIndex: 50, minWidth: 170 }}>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowImp(!showImp); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⬇ Importer (Excel / CSV)"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowMeetingSettings(!showMeetingSettings); setShowImp(false); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⚙ Rencontres & agenda"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowImp(!showImp); setShowMeetingSettings(false); setShowBackup(false); setShowChangePwd(false); setShowAbout(false); }}>{"⬇ Importer (Excel / CSV)"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); exportExcel(); }}>{"⬆ Exporter (Excel)"}</button>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowBackup(!showBackup); setShowImp(false); setShowChangePwd(false); setShowAbout(false); }}>{"💾 Sauvegarde / Restauration"}</button>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowAbout(!showAbout); setShowImp(false); setShowBackup(false); setShowChangePwd(false); }}>{"ℹ️ À propos"}</button>
-                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowChangePwd(!showChangePwd); setShowImp(false); setShowBackup(false); setShowAbout(false); }}>{"⚙ Mot de passe"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowBackup(!showBackup); setShowMeetingSettings(false); setShowImp(false); setShowChangePwd(false); setShowAbout(false); }}>{"💾 Sauvegarde / Restauration"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowAbout(!showAbout); setShowMeetingSettings(false); setShowImp(false); setShowBackup(false); setShowChangePwd(false); }}>{"ℹ️ À propos"}</button>
+                <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={function () { setShowMenu(false); setShowChangePwd(!showChangePwd); setShowMeetingSettings(false); setShowImp(false); setShowBackup(false); setShowAbout(false); }}>{"⚙ Mot de passe"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={enableNotifs}>{"🔔 Activer les relances"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#1E293B", cursor: "pointer", fontFamily: ff }} onClick={testNotif}>{"🔔 Tester la notif"}</button>
                 <button className="kit-btn" style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", borderRadius: 6, padding: "10px 12px", fontSize: 14, color: "#BE3C1A", cursor: "pointer", fontFamily: ff }} onClick={function () { sessionStorage.removeItem("kit-crm-auth"); window.location.reload(); }}>{"🔒 Verrouiller"}</button>
@@ -2509,6 +2981,33 @@ function App() {
             ) : null}
           </div>
         </div>
+
+        {showMeetingSettings ? (
+          <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
+            <p style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: ac }}>{"Rencontres & agenda"}</p>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>COLLABORATEURS (TRIGRAMMES SÉPARÉS PAR DES VIRGULES)</label>
+            <input defaultValue={(data.settings.trigrammes || []).join(", ")} onBlur={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.trigrammes = v.split(",").map(function (x) { return x.trim(); }).filter(Boolean); }); }} style={{ width: "100%", padding: 9, margin: "4px 0 14px", borderRadius: 8, border: "1.5px solid " + bd, boxSizing: "border-box" }} />
+            <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#64748B" }}>FENÊTRES PAR TYPE</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(210px,1fr))", gap: 8, marginBottom: 14 }}>
+              {Object.keys(data.settings.fenetres).map(function (key) { var labels = { petitdej: "Petit-déjeuner", dejeuner: "Déjeuner", diner: "Dîner", verre: "Verre" }; return <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 12, minWidth: 88 }}>{labels[key]}</span><input type="time" value={data.settings.fenetres[key].debut} onChange={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.fenetres[key].debut = v; }); }} /><span>→</span><input type="time" value={data.settings.fenetres[key].fin} onChange={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.fenetres[key].fin = v; }); }} /></div>; })}
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              {[["minJours", "Début J+"], ["maxJours", "Fin J+"], ["plafond", "Plafond"]].map(function (x) { return <label key={x[0]} style={{ fontSize: 12 }}>{x[1]} <input type="number" min="0" value={data.settings.horizon[x[0]]} onChange={function (e) { var v = Number(e.target.value); updateMeetingSettings(function (s) { s.horizon[x[0]] = v; }); }} style={{ width: 60, padding: 6, marginLeft: 4 }} /></label>; })}
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 18, fontSize: 13 }}>
+              <label><input type="checkbox" checked={data.settings.exclusions.aoutPlein} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.exclusions.aoutPlein = v; }); }} /> Exclure les semaines entièrement en août</label>
+              <label><input type="checkbox" checked={data.settings.exclusions.fetesFinAnnee} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.exclusions.fetesFinAnnee = v; }); }} /> Exclure du 24/12 au 02/01</label>
+              <label><input type="checkbox" checked={data.settings.idfParDefaut} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.idfParDefaut = v; }); }} /> Île-de-France par défaut</label>
+            </div>
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: ac }}>MODÈLES DE MESSAGE</p>
+            {(data.templates || []).map(function (t) { return <div key={t.id} style={{ borderTop: "1px solid " + bd, padding: "12px 0" }}>
+              <input value={t.nom} onChange={function (e) { updateTemplate(t.id, "nom", e.target.value); }} style={{ width: "100%", padding: 7, fontWeight: 600, boxSizing: "border-box", marginBottom: 6 }} />
+              {t.canal === "mail" ? <input value={t.objet || ""} placeholder="Objet" onChange={function (e) { updateTemplate(t.id, "objet", e.target.value); }} style={{ width: "100%", padding: 7, boxSizing: "border-box", marginBottom: 6 }} /> : null}
+              <textarea value={t.corps} rows={6} onChange={function (e) { updateTemplate(t.id, "corps", e.target.value); }} style={{ width: "100%", padding: 8, boxSizing: "border-box", fontFamily: ff, resize: "vertical" }} />
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}><label style={{ fontSize: 12 }}>Nombre de dates <input type="number" min="0" value={t.nbDates} onChange={function (e) { updateTemplate(t.id, "nbDates", Number(e.target.value)); }} style={{ width: 55, padding: 5 }} /></label><button onClick={function () { resetTemplate(t.id); }} style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", cursor: "pointer" }}>Réinitialiser ce modèle</button></div>
+            </div>; })}
+          </div>
+        ) : null}
 
         {showImp ? (
           <div style={{ background: "#E5EFEB", borderRadius: 12, border: "1px solid #D2E5DD", padding: 16, marginBottom: 12 }}>
@@ -2720,6 +3219,10 @@ function App() {
     <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: "16px 16px 80px" }}>
       <style>{KIT_CSS}</style>
       {renderLogModal()}
+      {renderInviteModal()}
+      {renderDoubleInviteModal()}
+      {renderPendingInviteModal()}
+      {replayInvite ? <div style={{ position: "fixed", left: 16, right: 16, bottom: 76, zIndex: 950, display: "flex", justifyContent: "center", pointerEvents: "none" }}><div style={{ background: ac, color: "#fff", borderRadius: 10, padding: "9px 12px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 5px 18px rgba(0,0,0,0.22)", pointerEvents: "auto", fontSize: 13 }}><span>Invitation non envoyée</span><button style={{ background: "#fff", color: ac, border: "none", borderRadius: 7, padding: "6px 10px", fontWeight: 700, cursor: "pointer", fontFamily: ff }} onClick={function () { restoreInvite(replayInvite); }}>Rejouer</button><button aria-label="Fermer" style={{ background: "transparent", color: "#fff", border: "none", cursor: "pointer", fontSize: 17 }} onClick={function () { setReplayInvite(null); }}>×</button></div></div> : null}
       {view === "dashboard" ? renderDash() : null}
       {view === "week" ? renderWeek() : null}
       {view === "stats" ? renderStats() : null}
@@ -2743,6 +3246,7 @@ function App() {
             {mergePrev.res.report.added.length ? <div style={{ marginBottom: 10 }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#2F6055" }}>AJOUTS</p>{mergePrev.res.report.added.map(function (x) { return <p key={x.id} style={{ margin: 0, fontSize: 13 }}>{x.label}</p>; })}</div> : null}
             {mergePrev.res.report.updated.length ? <div style={{ marginBottom: 10 }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#235C68" }}>{"MISES \u00c0 JOUR"}</p>{mergePrev.res.report.updated.map(function (x) { return <p key={x.id} style={{ margin: 0, fontSize: 13 }}>{x.label + (x.fields.length ? " \u2014 " + x.fields.join(", ") : "") + (x.inter ? " \u00b7 +" + String(x.inter) + " interaction(s)" : "")}</p>; })}</div> : null}
             {mergePrev.res.report.conflicts.length ? <div style={{ marginBottom: 10, background: "#FAF0D4", borderRadius: 8, padding: "8px 10px" }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#8A5E08" }}>{"CONFLITS (valeur du fichier retenue)"}</p>{mergePrev.res.report.conflicts.map(function (x, i) { return <p key={String(i)} style={{ margin: 0, fontSize: 12.5 }}>{x.label + " \u2014 " + x.field}</p>; })}</div> : null}
+            {mergePrev.res.report.configuration.length ? <div style={{ marginBottom: 10, background: "#EAF3F5", borderRadius: 8, padding: "8px 10px" }}><p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#235C68" }}>CONFIGURATION</p>{mergePrev.res.report.configuration.map(function (x, i) { return <p key={String(i)} style={{ margin: 0, fontSize: 12.5 }}>{x}</p>; })}</div> : null}
             {mergePrev.res.report.pending.length ? <div style={{ marginBottom: 12, background: "#FBEAE5", borderRadius: 8, padding: "10px 12px" }}>
               <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 700, color: "#9A3115" }}>{"SUPPRESSIONS \u00c0 CONFIRMER"}</p>
               <p style={{ margin: "0 0 8px", fontSize: 12, color: "#9A3115" }}>{"Coch\u00e9 = la suppression est maintenue. D\u00e9coche pour restaurer la fiche."}</p>
