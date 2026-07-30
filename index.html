@@ -30,7 +30,10 @@ var KIT_PURE = (function () {
   var MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
   var TYPE_NAMES = { petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre", formation_repas: "formation avec repas", conference_repas: "conférence avec repas" };
   function renderTemplate(corps, valeurs) {
-    return String(corps || "").replace(/\{(prenom|accroche|dates|type)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+    return String(corps || "").replace(/\{(prenom|accroche|dates|type|entreprise)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+  }
+  function cleanSubject(objet) {
+    return String(objet || "").replace(/\s+/g, " ").replace(/^[\s\-–—]+/, "").replace(/[\s\-–—]+$/, "").trim();
   }
   function dateParts(isoDate) {
     var p = String(isoDate || "").split("-");
@@ -95,7 +98,7 @@ var KIT_PURE = (function () {
   function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
   function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
   function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
-  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -109,6 +112,8 @@ var KIT_TESTS = {
 function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
+KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
+KIT_TESTS.add("objet sans entreprise sans tiret orphelin", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "", type: "dîner" })); kitAssert(s === "Proposition de dîner", s); });
 KIT_TESTS.add("accroche depuis déjeuner", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "dejeuner", date: "2026-03-12" }], ["dejeuner"]) === "depuis notre déjeuner de mars, "); });
 KIT_TESTS.add("accroche ignore invitation précédente", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "email", date: "2026-05-01", metadata: { invitation: true } }, { type: "appel_echange", date: "2026-04-01" }], ["dejeuner"]) === "depuis notre échange d'avril, "); });
 KIT_TESTS.add("AE7 numéro français", function () { kitAssert(KIT_PURE.buildWa("06 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
@@ -232,20 +237,22 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.3.1";
+var APP_VERSION = "1.3.2";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
 var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
+var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
+var LEGACY_MAIL_SUBJECTS = ["Déjeuner ?", "Invitation à déjeuner"];
 function defaultSettings() {
   return { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 28, plafond: 10 }, exclusions: { aoutPlein: true, fetesFinAnnee: true }, idfParDefaut: true, updatedAt: TS_BASE };
 }
 function defaultTemplates() {
   return [
-    { id: "mail-tu", nom: "Mail — tutoiement", canal: "mail", registre: "tu", objet: "Déjeuner ?", corps: "Salut {prenom},\n\nJ'espère que tu vas bien ?\n\n{accroche}Que dirais-tu de nous organiser un {type} prochainement ?\n\nJ'ai quelques disponibilités à venir :\n\n{dates}\n\nLe cas échéant, est-ce qu'une de ces dates pourrait te convenir ?\n\nA très bientôt,", nbDates: 3, updatedAt: TS_BASE },
-    { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: "Invitation à déjeuner", corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
+    { id: "mail-tu", nom: "Mail — tutoiement", canal: "mail", registre: "tu", objet: MAIL_SUBJECT, corps: "Salut {prenom},\n\nJ'espère que tu vas bien ?\n\n{accroche}Que dirais-tu de nous organiser un {type} prochainement ?\n\nJ'ai quelques disponibilités à venir :\n\n{dates}\n\nLe cas échéant, est-ce qu'une de ces dates pourrait te convenir ?\n\nA très bientôt,", nbDates: 3, updatedAt: TS_BASE },
+    { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: MAIL_SUBJECT, corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
     { id: "texte-tu", nom: "WhatsApp/SMS — tutoiement", canal: "texte", registre: "tu", corps: "Salut {prenom} ! Tu vas bien ? {accroche}Serais-tu disponible pour un {type} la semaine prochaine ? A très bientôt !", nbDates: 0, updatedAt: TS_BASE },
     { id: "texte-vous", nom: "WhatsApp/SMS — vouvoiement", canal: "texte", registre: "vous", corps: "Bonjour {prenom}, j'espère que vous allez bien. {accroche}Seriez-vous disponible pour un {type} la semaine prochaine ? Bien à vous,", nbDates: 0, updatedAt: TS_BASE }
   ];
@@ -264,6 +271,11 @@ function migrateData(d) {
   if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
   if (!d.settings) { d.settings = defaultSettings(); changed = true; }
   if (!Array.isArray(d.templates)) { d.templates = defaultTemplates(); changed = true; }
+  /* Objets de mail historiques remplacés par le libellé « Entreprise - Proposition de … ».
+     Un objet personnalisé par l'utilisateur n'est jamais écrasé. */
+  d.templates.forEach(function (t) {
+    if (t.canal === "mail" && LEGACY_MAIL_SUBJECTS.indexOf(t.objet) >= 0) { t.objet = MAIL_SUBJECT; changed = true; }
+  });
   d.contacts.forEach(function (c) {
     if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
     if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
@@ -1227,8 +1239,8 @@ function App() {
     var c = contacts.find(function (x) { return x.id === inviteId; });
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!c || !t) return;
-    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType] };
-    setInviteObjet(KIT_PURE.renderTemplate(t.objet || "", vals));
+    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType], entreprise: (c.company || "").trim() };
+    setInviteObjet(KIT_PURE.cleanSubject(KIT_PURE.renderTemplate(t.objet || "", vals)));
     setInviteCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
     setInviteStep("preview");
   }
