@@ -24,6 +24,74 @@
   <script src="./lib/babel.min.js"></script>
   <script src="./lib/xlsx.full.min.js"></script>
   <script src="./lib/exceljs.min.js"></script>
+  <script>
+var KIT_PURE = (function () {
+  var DAYS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
+  var MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  var TYPE_NAMES = { petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre", formation_repas: "formation avec repas", conference_repas: "conférence avec repas" };
+  function renderTemplate(corps, valeurs) {
+    return String(corps || "").replace(/\{(prenom|accroche|dates|type)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+  }
+  function dateParts(isoDate) {
+    var p = String(isoDate || "").split("-");
+    return p.length === 3 ? new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])) : null;
+  }
+  function formatDateFr(isoDate) {
+    var d = dateParts(isoDate);
+    return d && !isNaN(d.getTime()) ? DAYS[d.getDay()] + " " + String(d.getDate()) + " " + MONTHS[d.getMonth()] + " " + String(d.getFullYear()) : "";
+  }
+  function formatDatesList(dates, style) {
+    var vals = (dates || []).map(formatDateFr).filter(function (x) { return x; });
+    if (style === "puces") return vals.map(function (x, i) { return "- " + x + (i === vals.length - 1 ? "." : " ;"); }).join("\n");
+    if (vals.length < 2) return vals[0] || "";
+    return vals.slice(0, -1).join(", ") + " ou " + vals[vals.length - 1];
+  }
+  function accrocheFor(interactions, invitTypes) {
+    var types = invitTypes || [];
+    var sorted = (interactions || []).slice().sort(function (a, b) { return String(b.date || "").localeCompare(String(a.date || "")); });
+    var convivial = sorted.find(function (x) { return types.indexOf(x.type) >= 0; });
+    var chosen = convivial || sorted.find(function (x) { return !x.invitation && !(x.metadata && x.metadata.invitation); });
+    if (!chosen || !chosen.date) return "";
+    var d = dateParts(chosen.date);
+    if (!d) return "";
+    return convivial ? "depuis notre " + (TYPE_NAMES[chosen.type] || chosen.type) + " de " + MONTHS[d.getMonth()] + ", " : "depuis notre échange de " + MONTHS[d.getMonth()] + ", ";
+  }
+  function cleanPhone(num) { return String(num || "").trim().replace(/[^\d+]/g, "").replace(/(?!^)\+/g, ""); }
+  function toE164(num) {
+    var n = cleanPhone(num);
+    if (!n) return "";
+    if (n.charAt(0) === "+") return "+" + n.slice(1).replace(/\D/g, "");
+    var digits = n.replace(/\D/g, "");
+    return digits.charAt(0) === "0" ? "+33" + digits.slice(1) : "+" + digits;
+  }
+  function toIntlDigits(num) { return toE164(num).replace(/^\+/, ""); }
+  function buildMailto(email, objet, corps) { return "mailto:" + encodeURIComponent(email || "") + "?subject=" + encodeURIComponent(objet || "") + "&body=" + encodeURIComponent(corps || ""); }
+  function buildWa(numNational, texte) { return "https://wa.me/" + toIntlDigits(numNational) + "?text=" + encodeURIComponent(texte || ""); }
+  function buildSms(numNational, corps, isIOS) { return "sms:" + toE164(numNational) + (isIOS ? "&body=" : "?body=") + encodeURIComponent(corps || ""); }
+  function isMobileFr(num) { var n = cleanPhone(num).replace(/^\+33/, "0"); return /^0[67]\d{8}$/.test(n); }
+  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr };
+}());
+var KIT_TESTS = {
+  cases: [],
+  add: function (nom, fn) { this.cases.push({ nom: nom, fn: fn }); },
+  run: function () {
+    var failures = 0;
+    this.cases.forEach(function (t) { try { t.fn(); console.log("OK " + t.nom); } catch (e) { failures += 1; console.log("ECHEC " + t.nom + " — " + e.message); } });
+    return failures;
+  }
+};
+function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
+KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
+KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
+KIT_TESTS.add("accroche depuis déjeuner", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "dejeuner", date: "2026-03-12" }], ["dejeuner"]) === "depuis notre déjeuner de mars, "); });
+KIT_TESTS.add("accroche ignore invitation précédente", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "email", date: "2026-05-01", metadata: { invitation: true } }, { type: "appel_echange", date: "2026-04-01" }], ["dejeuner"]) === "depuis notre échange de avril, "); });
+KIT_TESTS.add("AE7 numéro français", function () { kitAssert(KIT_PURE.buildWa("06 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
+KIT_TESTS.add("numéro suisse", function () { kitAssert(KIT_PURE.toIntlDigits("+41 79 123 45 67") === "41791234567"); kitAssert(KIT_PURE.toE164("+41 79 123 45 67") === "+41791234567"); });
+KIT_TESTS.add("encodage mail intact", function () { var u = KIT_PURE.buildMailto("anne&cie@example.fr", "Anne & Cie", "ligne 1\nligne 2"); var q = u.slice(u.indexOf("?") + 1).split("&"); kitAssert(decodeURIComponent(u.slice(7, u.indexOf("?"))) === "anne&cie@example.fr"); kitAssert(q.length === 2 && decodeURIComponent(q[0].slice(8)) === "Anne & Cie" && decodeURIComponent(q[1].slice(5)) === "ligne 1\nligne 2"); });
+KIT_TESTS.add("garde-fou mailto détectable", function () { kitAssert(KIT_PURE.buildMailto("a@b.fr", "x", new Array(1901).join("a")).length > 1800); });
+KIT_TESTS.add("format date français", function () { kitAssert(KIT_PURE.formatDateFr("2026-06-17") === "Mercredi 17 juin 2026"); });
+KIT_TESTS.add("détection mobile français", function () { kitAssert(KIT_PURE.isMobileFr("06 12 34 56 78") && KIT_PURE.isMobileFr("07 12 34 56 78") && !KIT_PURE.isMobileFr("01 12 34 56 78") && !KIT_PURE.isMobileFr("09 12 34 56 78")); });
+  </script>
   <script type="text/babel" data-type="module">
 
 /* ═══════ PASSWORD AUTH ═══════ */
@@ -753,6 +821,17 @@ function App() {
   var [newPwd, setNewPwd] = useState("");
   var [newPwd2, setNewPwd2] = useState("");
   var [pwdMsg, setPwdMsg] = useState("");
+  var [showInvite, setShowInvite] = useState(false);
+  var [inviteId, setInviteId] = useState(null);
+  var [inviteStep, setInviteStep] = useState("options");
+  var [inviteType, setInviteType] = useState("dejeuner");
+  var [inviteCanal, setInviteCanal] = useState("mail");
+  var [inviteRegister, setInviteRegister] = useState("tu");
+  var [inviteDates, setInviteDates] = useState([]);
+  var [inviteDate, setInviteDate] = useState("");
+  var [inviteObjet, setInviteObjet] = useState("");
+  var [inviteCorps, setInviteCorps] = useState("");
+  var [inviteCoord, setInviteCoord] = useState("");
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -1009,6 +1088,66 @@ function App() {
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
   function openLogModal(id) { setLogId(id); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+
+  function inviteMobile(c) {
+    var nums = [c.phonePerso, c.phonePro, c.phone];
+    for (var i = 0; i < nums.length; i++) { if (KIT_PURE.isMobileFr(nums[i])) return nums[i]; }
+    return "";
+  }
+  function resetInvite() {
+    setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
+  }
+  function openInviteModal(id) {
+    var c = contacts.find(function (x) { return x.id === id; });
+    if (!c) return;
+    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.register === "vous" ? "vous" : "tu");
+    setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
+    setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCoord(""); setShowInvite(true);
+  }
+  function selectedTemplate(canal, registre) {
+    var wanted = canal === "mail" ? "mail" : "texte";
+    return (data.templates || defaultTemplates()).find(function (t) { return t.canal === wanted && t.registre === registre; }) || null;
+  }
+  function prepareInvitePreview() {
+    var c = contacts.find(function (x) { return x.id === inviteId; });
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    if (!c || !t) return;
+    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType] };
+    setInviteObjet(KIT_PURE.renderTemplate(t.objet || "", vals));
+    setInviteCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
+    setInviteStep("preview");
+  }
+  function advanceInvite() {
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    if (!t) return;
+    if (t.nbDates > 0 && inviteStep === "options") { setInviteStep("dates"); return; }
+    prepareInvitePreview();
+  }
+  function saveInviteCoordinate() {
+    var value = inviteCoord.trim();
+    if (!value) return;
+    if (inviteCanal === "mail") updContact(inviteId, { email: value });
+    else updContact(inviteId, { phonePerso: normalizePhone(value) });
+    setInviteCoord("");
+  }
+  function launchInvite(payload) {
+    var c = contacts.find(function (x) { return x.id === payload.contactId; });
+    if (!c) return;
+    var mobile = inviteMobile(c);
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (payload.canal === "mail") {
+      var mailto = KIT_PURE.buildMailto(c.email, payload.objet, payload.corps);
+      if (mailto.length > 1800) { navigator.clipboard.writeText(payload.corps); return; }
+      location.href = mailto;
+    } else if (payload.canal === "whatsapp") {
+      window.open(KIT_PURE.buildWa(mobile, payload.corps), "_blank", "noopener");
+    } else if (isPC) {
+      navigator.clipboard.writeText(payload.corps);
+    } else {
+      location.href = KIT_PURE.buildSms(mobile, payload.corps, isIOS);
+    }
+  }
 
   function addCategory(nm) {
     if (nm && categories.indexOf(nm) === -1) {
@@ -1821,6 +1960,65 @@ function App() {
     );
   }
 
+  function renderInviteModal() {
+    if (!showInvite) return null;
+    var c = contacts.find(function (x) { return x.id === inviteId; });
+    if (!c) return null;
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    var mobile = inviteMobile(c);
+    var hasCoord = inviteCanal === "mail" ? !!c.email : !!mobile;
+    var needDates = t ? Number(t.nbDates || 0) : 0;
+    var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    var mailTooLong = inviteCanal === "mail" && KIT_PURE.buildMailto(c.email, inviteObjet, inviteCorps).length > 1800;
+    var chip = function (active, available) { return { padding: "8px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: available ? ac : "#94A3B8", opacity: available ? 1 : 0.65 }; };
+    var mainLabel = mailTooLong || (inviteCanal === "sms" && isPC) ? "Copier le message" : "Ouvrir dans " + (inviteCanal === "mail" ? "Outlook" : inviteCanal === "whatsapp" ? "WhatsApp" : "SMS");
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={resetInvite}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 560, width: "100%", maxHeight: "84vh", overflowY: "auto" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>{"Proposer une rencontre"}</h3>
+          <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
+          {inviteStep === "options" ? <div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>TYPE</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {[["petitdej", "☕ Petit-déjeuner"], ["dejeuner", "🍽 Déjeuner"], ["diner", "🍷 Dîner"], ["verre", "🥂 Verre"]].map(function (x) { return <button key={x[0]} style={chip(inviteType === x[0], true)} onClick={function () { setInviteType(x[0]); }}>{x[1]}</button>; })}
+            </div>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>CANAL</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {[["mail", "✉ Mail", !!c.email], ["whatsapp", "WhatsApp", !!mobile], ["sms", "SMS", !!mobile]].map(function (x) { return <button key={x[0]} style={chip(inviteCanal === x[0], x[2])} onClick={function () { setInviteCanal(x[0]); setInviteCoord(""); }}>{x[1]}</button>; })}
+            </div>
+            {!hasCoord ? <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              <input value={inviteCoord} onChange={function (e) { setInviteCoord(e.target.value); }} placeholder={inviteCanal === "mail" ? "Ajouter l'adresse email" : "Ajouter le mobile"} style={{ flex: 1, minWidth: 0, padding: 9, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 13, fontFamily: ff }} />
+              <button onClick={saveInviteCoordinate} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "8px 12px", fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Enregistrer</button>
+            </div> : null}
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>REGISTRE</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[["tu", "Tutoiement"], ["vous", "Vouvoiement"]].map(function (x) { return <button key={x[0]} style={chip(inviteRegister === x[0], true)} onClick={function () { setInviteRegister(x[0]); }}>{x[1]}</button>; })}
+            </div>
+          </div> : null}
+          {inviteStep === "dates" ? <div>
+            <p style={{ margin: "0 0 12px", fontSize: 13, color: "#475569" }}>{"Choisissez " + String(needDates) + " date" + (needDates > 1 ? "s" : "") + "."}</p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input type="date" value={inviteDate} onChange={function (e) { setInviteDate(e.target.value); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff }} />
+              <button disabled={!inviteDate || inviteDates.length >= needDates || inviteDates.indexOf(inviteDate) >= 0} onClick={function () { setInviteDates(inviteDates.concat([inviteDate]).sort()); setInviteDate(""); }} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 600, cursor: "pointer", opacity: !inviteDate || inviteDates.length >= needDates ? 0.5 : 1 }}>Ajouter</button>
+            </div>
+            {inviteDates.map(function (d) { return <div key={d} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid " + bd, fontSize: 13 }}><span>{KIT_PURE.formatDateFr(d)}</span><button onClick={function () { setInviteDates(inviteDates.filter(function (x) { return x !== d; })); }} style={{ border: "none", background: "transparent", color: "#BE3C1A", cursor: "pointer" }}>Retirer</button></div>; })}
+          </div> : null}
+          {inviteStep === "preview" ? <div>
+            {inviteCanal === "mail" ? <div><label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>OBJET</label><input value={inviteObjet} onChange={function (e) { setInviteObjet(e.target.value); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, marginBottom: 12 }} /></div> : null}
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>APERÇU MODIFIABLE</label>
+            <textarea value={inviteCorps} onChange={function (e) { setInviteCorps(e.target.value); }} rows={12} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, lineHeight: 1.5, fontFamily: ff, resize: "vertical" }} />
+            {mailTooLong ? <p style={{ margin: "8px 0 0", fontSize: 12, color: "#B5790B" }}>{"Message trop long pour un lien mail fiable : il sera copié."}</p> : null}
+          </div> : null}
+          <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={inviteStep === "options" ? resetInvite : function () { setInviteStep(inviteStep === "preview" && needDates > 0 ? "dates" : "options"); }}>{"Retour"}</button>
+            {inviteStep !== "preview" ? <button disabled={!hasCoord || (inviteStep === "dates" && inviteDates.length !== needDates)} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: !hasCoord || (inviteStep === "dates" && inviteDates.length !== needDates) ? 0.5 : 1 }} onClick={advanceInvite}>Continuer</button> :
+              <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { launchInvite({ contactId: inviteId, type: inviteType, canal: inviteCanal, registre: inviteRegister, templateId: t.id, dates: inviteDates.slice(), objet: inviteObjet, corps: inviteCorps }); }}>{mainLabel}</button>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ─── FORM ───
   function pickCompany(name) {
     var up = (name || "").toUpperCase();
@@ -2123,6 +2321,9 @@ function App() {
             </div>
           ) : null}
 
+          <div style={{ marginTop: 14 }}>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
+          </div>
           {(c.email || c.phonePro || c.phonePerso || c.phone || c.linkedin) ? (
             <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
               {c.email ? (
@@ -2304,6 +2505,7 @@ function App() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{label}</span>
                     <button style={{ background: "transparent", color: "#9A3115", border: "1px solid #F4D6CB", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); snoozeRencontre(c.id); }} title={"Reporter de " + String((cycleFor(c) || { due: 12 }).due) + " mois"}>{"⏸"}</button>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openLogModal(c.id); }}>{"Enregistrer"}</button>
                   </div>
                 </div>
@@ -2799,6 +3001,7 @@ function App() {
     <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: "16px 16px 80px" }}>
       <style>{KIT_CSS}</style>
       {renderLogModal()}
+      {renderInviteModal()}
       {view === "dashboard" ? renderDash() : null}
       {view === "week" ? renderWeek() : null}
       {view === "stats" ? renderStats() : null}
