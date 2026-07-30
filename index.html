@@ -69,10 +69,31 @@ var KIT_PURE = (function () {
   function buildWa(numNational, texte) { return "https://wa.me/" + toIntlDigits(numNational) + "?text=" + encodeURIComponent(texte || ""); }
   function buildSms(numNational, corps, isIOS) { return "sms:" + toE164(numNational) + (isIOS ? "&body=" : "?body=") + encodeURIComponent(corps || ""); }
   function isMobileFr(num) { var n = cleanPhone(num).replace(/^\+33/, "0"); return /^0[67]\d{8}$/.test(n); }
+  function extractPostal(texteLibre) {
+    var match = String(texteLibre || "").match(/(?:^|[^\d])((?:0[1-9]|[1-8]\d|9[0-8])\d{3})(?=$|[^\d])/);
+    return match ? match[1] : null;
+  }
+  function isIdfPostal(cp) {
+    return /^(75|77|78|91|92|93|94|95)\d{3}$/.test(String(cp || ""));
+  }
+  function idfDefaultFor(contact, settings) {
+    var c = contact || {};
+    var cp = extractPostal(c.address) || extractPostal(c.workLocation);
+    return cp ? isIdfPostal(cp) : !!(settings && settings.idfParDefaut);
+  }
+  function mergeDates(candidateDates, manualDates) {
+    var seen = {};
+    return (candidateDates || []).concat(manualDates || []).filter(function (date) {
+      var valid = /^\d{4}-\d{2}-\d{2}$/.test(String(date || ""));
+      if (!valid || seen[date]) return false;
+      seen[date] = true;
+      return true;
+    }).sort();
+  }
   function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
   function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
   function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
-  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
+  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -97,6 +118,11 @@ KIT_TESTS.add("détection mobile français", function () { kitAssert(KIT_PURE.is
 KIT_TESTS.add("canaux invitation vers types non-rencontre", function () { var types = ["mail", "whatsapp", "sms"].map(KIT_PURE.canalToInteractionType); kitAssert(types[0] === "email" && types[1] === "sms" && types[2] === "sms"); kitAssert(types.every(function (x) { return ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"].indexOf(x) < 0; })); });
 KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
 KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
+KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
+KIT_TESTS.add("adresse lyonnaise prérègle Province", function () { var c = { address: "69003 Lyon" }; kitAssert(KIT_PURE.extractPostal(c.address) === "69003" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: true }) === false); });
+KIT_TESTS.add("adresse vide utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "", workLocation: "" }, { idfParDefaut: false }) === false); });
+KIT_TESTS.add("ville sans code utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "Lyon" }, { idfParDefaut: true }) === true); });
+KIT_TESTS.add("fusion dates cochées et manuelles ordonnée sans doublon", function () { kitAssert(JSON.stringify(KIT_PURE.mergeDates(["2026-09-12", "2026-09-10"], ["2026-09-11", "2026-09-10"])) === JSON.stringify(["2026-09-10", "2026-09-11", "2026-09-12"])); });
   </script>
   <script type="text/babel" data-type="module">
 
@@ -104,6 +130,10 @@ KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p =
 var PWD_KEY = "kit-crm-pwd";
 var LAST_EXPORT_KEY = "kit-crm-last-export";
 var AUTH_KEY = "kit-crm-auth";
+
+function fetchCandidateDates(ctx, done) {
+  done({ etat: "non-connecte", candidates: [] });
+}
 
 async function hashPassword(pwd) {
   var encoder = new TextEncoder();
@@ -835,6 +865,10 @@ function App() {
   var [inviteRegister, setInviteRegister] = useState("tu");
   var [inviteDates, setInviteDates] = useState([]);
   var [inviteDate, setInviteDate] = useState("");
+  var [inviteCandidateResult, setInviteCandidateResult] = useState({ etat: "non-connecte", candidates: [] });
+  var [inviteCandidateDates, setInviteCandidateDates] = useState([]);
+  var [inviteManualDates, setInviteManualDates] = useState([]);
+  var [inviteIdf, setInviteIdf] = useState(true);
   var [inviteObjet, setInviteObjet] = useState("");
   var [inviteCorps, setInviteCorps] = useState("");
   var [inviteCoord, setInviteCoord] = useState("");
@@ -1116,7 +1150,7 @@ function App() {
     return "";
   }
   function resetInvite() {
-    setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
+    setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
   }
   function invitationAwaiting(c) {
     var li = latestInteraction(c);
@@ -1125,9 +1159,10 @@ function App() {
   function openInviteModalNow(id) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
+    var defaultIdf = KIT_PURE.idfDefaultFor(c, data.settings || {});
     setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.register === "vous" ? "vous" : "tu");
     setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
-    setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCoord(""); setShowInvite(true);
+    setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteIdf(defaultIdf); setInviteCoord(""); setShowInvite(true);
   }
   function openInviteModal(id) {
     var c = contacts.find(function (x) { return x.id === id; });
@@ -1138,6 +1173,30 @@ function App() {
     setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
     setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
     setInviteStep("preview"); setInviteCoord(""); setShowInvite(true); setReplayInvite(null);
+  }
+  function updateComposedDates(candidates, manual) {
+    setInviteDates(KIT_PURE.mergeDates(candidates, manual));
+  }
+  function requestCandidateDates(meal, idf) {
+    var c = contacts.find(function (x) { return x.id === inviteId; });
+    var t = selectedTemplate(inviteCanal, inviteRegister);
+    if (!c || !t) return;
+    setInviteCandidateResult({ etat: "chargement", candidates: [] });
+    setInviteCandidateDates([]);
+    setInviteManualDates([]);
+    setInviteDates([]);
+    fetchCandidateDates({ meal: meal, idf: idf, settings: data.settings || {}, contact: c }, function (result) {
+      var normalized = result || { etat: "erreur", candidates: [] };
+      var candidates = KIT_PURE.mergeDates(normalized.candidates || [], []);
+      var checked = normalized.etat === "ok" ? candidates.slice(0, Number(t.nbDates || 0)) : [];
+      setInviteCandidateResult({ etat: normalized.etat, candidates: candidates });
+      setInviteCandidateDates(checked);
+      updateComposedDates(checked, []);
+    });
+  }
+  function changeInviteType(meal) {
+    setInviteType(meal);
+    requestCandidateDates(meal, inviteIdf);
   }
   function selectedTemplate(canal, registre) {
     var wanted = canal === "mail" ? "mail" : "texte";
@@ -1155,7 +1214,7 @@ function App() {
   function advanceInvite() {
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!t) return;
-    if (t.nbDates > 0 && inviteStep === "options") { setInviteStep("dates"); return; }
+    if (t.nbDates > 0 && inviteStep === "options") { setInviteStep("dates"); requestCandidateDates(inviteType, inviteIdf); return; }
     prepareInvitePreview();
   }
   function saveInviteCoordinate() {
@@ -2082,7 +2141,7 @@ function App() {
           {inviteStep === "options" ? <div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>TYPE</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-              {[["petitdej", "☕ Petit-déjeuner"], ["dejeuner", "🍽 Déjeuner"], ["diner", "🍷 Dîner"], ["verre", "🥂 Verre"]].map(function (x) { return <button key={x[0]} style={chip(inviteType === x[0], true)} onClick={function () { setInviteType(x[0]); }}>{x[1]}</button>; })}
+              {[["petitdej", "☕ Petit-déjeuner"], ["dejeuner", "🍽 Déjeuner"], ["diner", "🍷 Dîner"], ["verre", "🥂 Verre"]].map(function (x) { return <button key={x[0]} style={chip(inviteType === x[0], true)} onClick={function () { changeInviteType(x[0]); }}>{x[1]}</button>; })}
             </div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>CANAL</label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
@@ -2099,11 +2158,45 @@ function App() {
           </div> : null}
           {inviteStep === "dates" ? <div>
             <p style={{ margin: "0 0 12px", fontSize: 13, color: "#475569" }}>{"Choisissez " + String(needDates) + " date" + (needDates > 1 ? "s" : "") + "."}</p>
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <input type="date" value={inviteDate} onChange={function (e) { setInviteDate(e.target.value); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff }} />
-              <button disabled={!inviteDate || inviteDates.length >= needDates || inviteDates.indexOf(inviteDate) >= 0} onClick={function () { setInviteDates(inviteDates.concat([inviteDate]).sort()); setInviteDate(""); }} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 600, cursor: "pointer", opacity: !inviteDate || inviteDates.length >= needDates ? 0.5 : 1 }}>Ajouter</button>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>LOCALISATION</label>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              <button style={chip(inviteIdf, true)} onClick={function () { setInviteIdf(true); requestCandidateDates(inviteType, true); }}>Île-de-France</button>
+              <button style={chip(!inviteIdf, true)} onClick={function () { setInviteIdf(false); requestCandidateDates(inviteType, false); }}>Province</button>
             </div>
-            {inviteDates.map(function (d) { return <div key={d} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: "1px solid " + bd, fontSize: 13 }}><span>{KIT_PURE.formatDateFr(d)}</span><button onClick={function () { setInviteDates(inviteDates.filter(function (x) { return x !== d; })); }} style={{ border: "none", background: "transparent", color: "#BE3C1A", cursor: "pointer" }}>Retirer</button></div>; })}
+            {inviteCandidateResult.etat === "chargement" ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#F6F5F2", color: ac, fontSize: 13 }}>{"Recherche des disponibilités…"}</div> : null}
+            {inviteCandidateResult.etat === "non-connecte" ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#FFF7E6", color: "#7A5208", fontSize: 13 }}>{"Agenda non connecté — saisissez vos dates"}</div> : null}
+            {inviteCandidateResult.etat === "erreur" ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#FFF1ED", color: "#9A3412", fontSize: 13 }}>{"Agenda indisponible — saisissez vos dates"}</div> : null}
+            {inviteCandidateResult.etat === "ok" && inviteCandidateResult.candidates.length === 0 ? <div style={{ padding: 12, marginBottom: 12, borderRadius: 8, background: "#FFF7E6", color: "#7A5208", fontSize: 13 }}>{"Aucune date disponible sur l'horizon — ajoutez des dates manuellement"}</div> : null}
+            {inviteCandidateResult.etat === "ok" && inviteCandidateResult.candidates.length > 0 ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+              {inviteCandidateResult.candidates.map(function (d) {
+                var active = inviteCandidateDates.indexOf(d) >= 0;
+                return <button key={d} style={chip(active, true)} onClick={function () {
+                  var next = active ? inviteCandidateDates.filter(function (x) { return x !== d; }) : inviteCandidateDates.concat([d]);
+                  setInviteCandidateDates(next);
+                  updateComposedDates(next, inviteManualDates);
+                }}>{KIT_PURE.formatDateFr(d)}</button>;
+              })}
+            </div> : null}
+            {inviteCandidateResult.etat !== "chargement" ? <div>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 6 }}>AJOUT MANUEL</label>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input type="date" value={inviteDate} onChange={function (e) { setInviteDate(e.target.value); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff }} />
+                <button disabled={!inviteDate || inviteDates.length >= needDates || inviteDates.indexOf(inviteDate) >= 0} onClick={function () {
+                  var nextManual = KIT_PURE.mergeDates(inviteManualDates, [inviteDate]);
+                  setInviteManualDates(nextManual);
+                  updateComposedDates(inviteCandidateDates, nextManual);
+                  setInviteDate("");
+                }} style={{ background: abl, color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontWeight: 600, cursor: "pointer", opacity: !inviteDate || inviteDates.length >= needDates || inviteDates.indexOf(inviteDate) >= 0 ? 0.5 : 1 }}>Ajouter</button>
+              </div>
+            </div> : null}
+            {inviteDates.length > 0 ? <div>
+              <p style={{ margin: "0 0 4px", fontSize: 12, fontWeight: 600, color: "#64748B" }}>DATES CHOISIES — APPUYEZ POUR RETIRER</p>
+              {inviteDates.map(function (d) { return <button key={d} onClick={function () {
+                var nextCandidates = inviteCandidateDates.filter(function (x) { return x !== d; });
+                var nextManual = inviteManualDates.filter(function (x) { return x !== d; });
+                setInviteCandidateDates(nextCandidates); setInviteManualDates(nextManual); updateComposedDates(nextCandidates, nextManual);
+              }} style={{ display: "flex", width: "100%", justifyContent: "space-between", padding: "8px 0", border: "none", borderTop: "1px solid " + bd, background: "transparent", color: ac, fontSize: 13, cursor: "pointer", fontFamily: ff }}><span>{KIT_PURE.formatDateFr(d)}</span><span style={{ color: "#BE3C1A" }}>Retirer</span></button>; })}
+            </div> : null}
           </div> : null}
           {inviteStep === "preview" ? <div>
             {inviteCanal === "mail" ? <div><label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>OBJET</label><input value={inviteObjet} onChange={function (e) { setInviteObjet(e.target.value); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, marginBottom: 12 }} /></div> : null}
@@ -2113,7 +2206,7 @@ function App() {
           </div> : null}
           <div style={{ display: "flex", gap: 10, marginTop: 20, justifyContent: "flex-end" }}>
             <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={inviteStep === "options" ? resetInvite : function () { setInviteStep(inviteStep === "preview" && needDates > 0 ? "dates" : "options"); }}>{"Retour"}</button>
-            {inviteStep !== "preview" ? <button disabled={!hasCoord || (inviteStep === "dates" && inviteDates.length !== needDates)} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: !hasCoord || (inviteStep === "dates" && inviteDates.length !== needDates) ? 0.5 : 1 }} onClick={advanceInvite}>Continuer</button> :
+            {inviteStep !== "preview" ? <button disabled={!hasCoord || (inviteStep === "dates" && (inviteDates.length !== needDates || inviteCandidateResult.etat === "chargement"))} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: !hasCoord || (inviteStep === "dates" && (inviteDates.length !== needDates || inviteCandidateResult.etat === "chargement")) ? 0.5 : 1 }} onClick={advanceInvite}>Continuer</button> :
               <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { launchInvite({ contactId: inviteId, type: inviteType, canal: inviteCanal, registre: inviteRegister, templateId: t.id, dates: inviteDates.slice(), objet: inviteObjet, corps: inviteCorps }); }}>{mainLabel}</button>}
           </div>
         </div>
