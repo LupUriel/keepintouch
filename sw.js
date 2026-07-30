@@ -1,4 +1,4 @@
-var CACHE_NAME = "kit-crm-v31";
+var CACHE_NAME = "kit-crm-v32";
 self.addEventListener("message", function (e) {
   if (e.data === "kit-get-version" && e.source) {
     try { e.source.postMessage({ type: "kit-version", v: CACHE_NAME }); } catch (err) {}
@@ -22,6 +22,7 @@ self.addEventListener("activate", function (event) {
 });
 
 self.addEventListener("fetch", function (event) {
+  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     caches.match(event.request).then(function (response) {
       return response || fetch(event.request).then(function (fetchResponse) {
