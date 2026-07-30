@@ -3,3 +3,4 @@ react-dom.production.min.js | react-dom@18.3.1 | sha256:35f4f974f4b2bcd44da73963
 babel.min.js | @babel/standalone@7.29.7 | sha256:7f55bd5c3efadeaa83d4de97dc91da8bf0733789801cf28b9273c4284739798e
 xlsx.full.min.js | xlsx@0.18.5 | sha256:c9506197caf809a075b6dee1da0d36fb19da7158ffe8a88e7b0c96c5d8623c99
 exceljs.min.js | exceljs@4.4.0 | sha256:7e49da68588e250dbb8bba190d2caa8ab3787cc0284bda1d8b2f805c4df742c9
+msal-browser.min.js | @azure/msal-browser@5.17.3 | sha256:9b890db3ff7c399318b805665a13fb89006ced0baaac351ffd1c77bd39e5b652

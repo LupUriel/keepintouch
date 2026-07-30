@@ -21,6 +21,7 @@
   <div id="root"></div>
   <script src="./lib/react.production.min.js"></script>
   <script src="./lib/react-dom.production.min.js"></script>
+  <script src="./lib/msal-browser.min.js"></script>
   <script src="./lib/babel.min.js"></script>
   <script src="./lib/xlsx.full.min.js"></script>
   <script src="./lib/exceljs.min.js"></script>
@@ -98,7 +99,16 @@ var KIT_PURE = (function () {
   function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
   function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
   function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
+  function redirectUriFor(hostname) { return hostname === "localhost" ? "http://localhost:8000" : "https://lupuriel.github.io/keepintouch/"; }
+  function classifyMsalError(error) {
+    var text = [error && error.errorCode, error && error.errorMessage, error && error.message, error && error.name].filter(Boolean).join(" ");
+    if (/AADSTS65001|AADSTS90094|consent_required/i.test(text)) return "consentement-requis";
+    if (/InteractionRequiredAuthError|interaction_required|login_required/i.test(text)) return "interaction";
+    if (/network|offline|failed to fetch|ERR_INTERNET_DISCONNECTED/i.test(text)) return "indisponible";
+    return "indisponible";
+  }
+  function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -133,6 +143,148 @@ KIT_TESTS.add("fusion dates cochées et manuelles ordonnée sans doublon", funct
 KIT_TESTS.add("préfixe international 0033", function () { kitAssert(KIT_PURE.isMobileFr("0033 6 12 34 56 78")); kitAssert(KIT_PURE.buildWa("0033 6 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("0033 6 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
 KIT_TESTS.add("liste de dates inline selon le nombre", function () { kitAssert(KIT_PURE.formatDatesList([], "inline") === ""); kitAssert(KIT_PURE.formatDatesList(["2026-06-17"], "inline") === "Mercredi 17 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18"], "inline") === "Mercredi 17 juin 2026 ou Jeudi 18 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "inline") === "Mercredi 17 juin 2026, Jeudi 18 juin 2026 ou Vendredi 19 juin 2026"); });
 KIT_TESTS.add("sms iOS avec esperluette", function () { kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", true) === "sms:+33612345678&body=x"); });
+KIT_TESTS.add("redirect URI localhost", function () { kitAssert(KIT_PURE.redirectUriFor("localhost") === "http://localhost:8000"); });
+KIT_TESTS.add("redirect URI production", function () { kitAssert(KIT_PURE.redirectUriFor("lupuriel.github.io") === "https://lupuriel.github.io/keepintouch/"); });
+KIT_TESTS.add("classification consentement MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "AADSTS65001: consent_required" }) === "consentement-requis"); });
+KIT_TESTS.add("classification réseau MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "Failed to fetch: network error" }) === "indisponible"); });
+KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ name: "InteractionRequiredAuthError" }) === "interaction"); });
+KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
+  </script>
+  <script>
+var KIT_AGENDA = (function () {
+  var STORAGE_KEY = "kit-crm-v5";
+  var SCOPES = ["Calendars.ReadBasic"];
+  var state = { etat: "deconnecte", compte: "" };
+  var listeners = [];
+  var checkpointProvider = null;
+  var restoreHandler = null;
+  var pendingRestore = null;
+  var client = null;
+
+  function publish(next) {
+    state = next;
+    listeners.slice().forEach(function (fn) { try { fn(state); } catch (e) {} });
+  }
+  function accountLabel(account) { return account && (account.username || account.name) || ""; }
+  function consumeCheckpoint() {
+    var raw;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var saved = JSON.parse(raw);
+      var entries = saved.pendingInvites || [];
+      var checkpoint = entries.find(function (x) { return x && x.statut === "checkpoint-composition"; });
+      if (!checkpoint) return;
+      saved.pendingInvites = entries.filter(function (x) { return x !== checkpoint; });
+      var serialized = JSON.stringify(saved);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      if (localStorage.getItem(STORAGE_KEY) !== serialized) throw new Error("relecture checkpoint");
+      pendingRestore = checkpoint;
+      if (restoreHandler) { restoreHandler(pendingRestore); pendingRestore = null; }
+    } catch (e2) {
+      publish({ etat: "indisponible", compte: "", message: "Impossible de restaurer le brouillon." });
+    }
+  }
+  function checkpoint() {
+    if (!checkpointProvider) return true;
+    var packet = checkpointProvider();
+    if (!packet) return true;
+    try {
+      var serialized = JSON.stringify(packet.data);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      var back = localStorage.getItem(STORAGE_KEY);
+      if (back !== serialized) throw new Error("relecture différente");
+      var checked = JSON.parse(back);
+      if (!(checked.pendingInvites || []).some(function (x) { return x.id === packet.entry.id && x.statut === "checkpoint-composition"; })) throw new Error("checkpoint absent");
+      return true;
+    } catch (e) {
+      alert("Impossible d'enregistrer le brouillon — connexion annulée.");
+      return false;
+    }
+  }
+  function redirect(method) {
+    if (!navigator.onLine) { publish({ etat: "indisponible", compte: "" }); return Promise.resolve(); }
+    if (!checkpoint()) return Promise.resolve();
+    return method({ scopes: SCOPES, redirectUri: KIT_PURE.redirectUriFor(location.hostname) }).catch(function (error) {
+      publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+    });
+  }
+  function silent(account, allowRedirect) {
+    return client.acquireTokenSilent({ scopes: SCOPES, account: account }).then(function (result) {
+      var chosen = result.account || account;
+      publish({ etat: "connecte", compte: accountLabel(chosen) });
+      return result.accessToken;
+    }).catch(function (error) {
+      var kind = KIT_PURE.classifyMsalError(error);
+      if (kind === "interaction" && allowRedirect) {
+        if (!navigator.onLine) { publish({ etat: "indisponible", compte: accountLabel(account) }); return null; }
+        return redirect(function (request) { request.account = account; return client.acquireTokenRedirect(request); }).then(function () { return null; });
+      }
+      publish({ etat: kind, compte: accountLabel(account) });
+      return null;
+    });
+  }
+  function purge() {
+    var keys = [];
+    for (var i = 0; i < localStorage.length; i += 1) {
+      var key = localStorage.key(i);
+      if (KIT_PURE.shouldPurgeMsalKey(key)) keys.push(key);
+    }
+    keys.forEach(function (key) { localStorage.removeItem(key); });
+  }
+
+  var ready = Promise.resolve();
+  try {
+    client = new msal.PublicClientApplication({
+      auth: {
+        clientId: "e7f79152-aea0-4672-a680-a2eb9040974d",
+        authority: "https://login.microsoftonline.com/c07cfba5-a8cc-4225-a260-31c6ea54ac33",
+        redirectUri: KIT_PURE.redirectUriFor(location.hostname)
+      },
+      cache: { cacheLocation: "localStorage" }
+    });
+    ready = client.initialize().then(function () {
+      return client.handleRedirectPromise().then(function (result) {
+        consumeCheckpoint();
+        var account = result && result.account || client.getAllAccounts()[0];
+        if (!account) { publish({ etat: "deconnecte", compte: "" }); return null; }
+        if (result && result.accessToken) { publish({ etat: "connecte", compte: accountLabel(account) }); return result.accessToken; }
+        return silent(account, true);
+      }, function (error) {
+        publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+        consumeCheckpoint();
+        return null;
+      });
+    }).catch(function (error) {
+      publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+      consumeCheckpoint();
+      return null;
+    });
+  } catch (error) {
+    publish({ etat: "indisponible", compte: "" });
+  }
+
+  return {
+    getState: function () { return state; },
+    subscribe: function (fn) { listeners.push(fn); fn(state); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
+    setCheckpointProvider: function (fn) { checkpointProvider = fn; },
+    setRestoreHandler: function (fn) { restoreHandler = fn; if (pendingRestore) { fn(pendingRestore); pendingRestore = null; } },
+    getToken: function (done) {
+      ready.then(function () {
+        var account = client && client.getAllAccounts()[0];
+        if (!account) { publish({ etat: "deconnecte", compte: "" }); done(null); return; }
+        silent(account, false).then(done);
+      });
+    },
+    connect: function () { return ready.then(function () { return redirect(function (request) { return client.loginRedirect(request); }); }); },
+    disconnect: function () {
+      publish({ etat: "deconnecte", compte: "" });
+      return ready.then(function () {
+        return client && client.clearCache ? client.clearCache() : null;
+      }).catch(function () {}).then(purge);
+    }
+  };
+}());
   </script>
   <script type="text/babel" data-type="module">
 
@@ -237,7 +389,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.3.2";
+var APP_VERSION = "1.4.0";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -892,6 +1044,7 @@ function App() {
   var [confirmInviteVisible, setConfirmInviteVisible] = useState(false);
   var [replayInvite, setReplayInvite] = useState(null);
   var [doubleInviteId, setDoubleInviteId] = useState(null);
+  var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -1005,6 +1158,48 @@ function App() {
     });
     return true;
   }, [data]);
+
+  useEffect(function () {
+    return KIT_AGENDA.subscribe(setAgendaState);
+  }, []);
+
+  useEffect(function () {
+    KIT_AGENDA.setRestoreHandler(function (checkpoint) {
+      try {
+        var current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        setData(current);
+        idbSet("data", current);
+      } catch (e) {}
+      restoreInvite(checkpoint);
+    });
+    return function () { KIT_AGENDA.setRestoreHandler(null); };
+  }, []);
+
+  useEffect(function () {
+    KIT_AGENDA.setCheckpointProvider(function () {
+      if (!showInvite || !data || !inviteId) return null;
+      var entry = {
+        id: makeId(),
+        contactId: inviteId,
+        statut: "checkpoint-composition",
+        meal: inviteType,
+        canal: inviteCanal,
+        registre: inviteRegister,
+        dates: inviteDates.slice(),
+        manualDates: inviteManualDates.slice(),
+        candidateDates: inviteCandidateDates.slice(),
+        candidateResult: inviteCandidateResult,
+        idf: inviteIdf,
+        step: inviteStep,
+        coord: inviteCoord,
+        objet: inviteObjet,
+        corps: inviteCorps,
+        createdAt: nowTS()
+      };
+      return { entry: entry, data: Object.assign({}, data, { pendingInvites: (data.pendingInvites || []).concat([entry]) }) };
+    });
+    return function () { KIT_AGENDA.setCheckpointProvider(null); };
+  }, [showInvite, data, inviteId, inviteType, inviteCanal, inviteRegister, inviteDates, inviteManualDates, inviteCandidateDates, inviteCandidateResult, inviteIdf, inviteStep, inviteCoord, inviteObjet, inviteCorps]);
 
   async function enableNotifs() {
     setShowMenu(false);
@@ -1204,8 +1399,8 @@ function App() {
   function restoreInvite(payload) {
     setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
     setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
-    setInviteCandidateDates([]); setInviteManualDates((payload.dates || []).slice()); setInviteCandidateResult({ etat: "non-connecte", candidates: [] });
-    setInviteStep("preview"); setInviteCoord(""); setShowInvite(true); setReplayInvite(null);
+    setInviteCandidateDates((payload.candidateDates || []).slice()); setInviteManualDates((payload.manualDates || payload.dates || []).slice()); setInviteCandidateResult(payload.candidateResult || { etat: "non-connecte", candidates: [] });
+    setInviteIdf(payload.idf !== false); setInviteStep(payload.step || "preview"); setInviteCoord(payload.coord || ""); setShowInvite(true); setReplayInvite(null);
   }
   function updateComposedDates(candidates, manual) {
     setInviteDates(KIT_PURE.mergeDates(candidates, manual));
@@ -2997,6 +3192,30 @@ function App() {
         {showMeetingSettings ? (
           <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
             <p style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: ac }}>{"Rencontres & agenda"}</p>
+            <div style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <p style={{ margin: "0 0 5px", fontSize: 14, fontWeight: 700, color: ac }}>Connecter mon agenda</p>
+              {agendaState.etat === "connecte" ? (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#234A41" }}>{"Agenda connecté" + (agendaState.compte ? " · " + agendaState.compte : "")}</p>
+                  <button onClick={function () { KIT_AGENDA.disconnect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", color: ac, cursor: "pointer", fontFamily: ff }}>Se déconnecter</button>
+                </div>
+              ) : agendaState.etat === "consentement-requis" ? (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#9A3115" }}>Consentement administrateur en attente</p>
+                  <button onClick={function () { KIT_AGENDA.connect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: ac, color: "#fff", cursor: "pointer", fontFamily: ff }}>Réessayer</button>
+                </div>
+              ) : agendaState.etat === "indisponible" ? (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748B" }}>Agenda indisponible{navigator.onLine ? "." : " hors ligne. Le mode de secours reste disponible."}</p>
+                  {navigator.onLine ? <button onClick={function () { KIT_AGENDA.connect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: ac, color: "#fff", cursor: "pointer", fontFamily: ff }}>Réessayer</button> : null}
+                </div>
+              ) : (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748B" }}>Connectez votre compte Microsoft pour préparer la lecture de vos disponibilités.</p>
+                  <button onClick={function () { KIT_AGENDA.connect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: ac, color: "#fff", cursor: "pointer", fontFamily: ff }}>Connecter</button>
+                </div>
+              )}
+            </div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>COLLABORATEURS (TRIGRAMMES SÉPARÉS PAR DES VIRGULES)</label>
             <input defaultValue={(data.settings.trigrammes || []).join(", ")} onBlur={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.trigrammes = v.split(",").map(function (x) { return x.trim(); }).filter(Boolean); }); }} style={{ width: "100%", padding: 9, margin: "4px 0 14px", borderRadius: 8, border: "1.5px solid " + bd, boxSizing: "border-box" }} />
             <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#64748B" }}>FENÊTRES PAR TYPE</p>
