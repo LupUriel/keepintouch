@@ -246,7 +246,8 @@ KIT_TESTS.add("fenêtres de repas utilisent le chevauchement", function () { var
 KIT_TESTS.add("statuts occupants Graph", function () { kitAssert(KIT_PURE.isOccupyingStatus("busy") && KIT_PURE.isOccupyingStatus("tentative") && KIT_PURE.isOccupyingStatus("oof")); kitAssert(!KIT_PURE.isOccupyingStatus("free") && !KIT_PURE.isOccupyingStatus("workingElsewhere")); });
 KIT_TESTS.add("trigrammes réels avec frontière et casse", function () { var listed = ["TR", "CGI", "CME"]; kitAssert(KIT_PURE.subjectStartsWithTrigram("TR - TEREOS C/ TABET - Dernier délai conclusion défendeur en réponse", listed)); kitAssert(KIT_PURE.subjectStartsWithTrigram("CGI - MEDIA & ARTISANAT / JONQUIERES (CA) : deadline pour envoyer nos conclusions", listed)); kitAssert(KIT_PURE.subjectStartsWithTrigram("cgi - x", listed)); kitAssert(!KIT_PURE.subjectStartsWithTrigram("CMEX - réunion", listed)); kitAssert(!KIT_PURE.subjectStartsWithTrigram("Usine", ["US"])); });
 KIT_TESTS.add("pagination accumule plus de 100 événements", function () { var first = new Array(100).fill({ subject: "a" }); var all = KIT_PURE.accumulateGraphPage([], { value: first }); all = KIT_PURE.accumulateGraphPage(all, { value: [{ subject: "b" }] }); kitAssert(all.length === 101); });
-KIT_TESTS.add("plafond conserve les dix premières dates", function () { var s = candidateSettings({ horizon: { minJours: 0, maxJours: 30, plafond: 10 } }); var dates = KIT_PURE.candidateDates("2026-09-01", [], "dejeuner", true, s); kitAssert(dates.length === 10 && JSON.stringify(dates) === JSON.stringify(dates.slice().sort())); });
+KIT_TESTS.add("plafond conserve les dix premières dates", function () { var s = candidateSettings({ horizon: { minJours: 0, maxJours: 30, plafond: 10 } }); var dates = KIT_PURE.candidateDates("2026-09-01", [], "dejeuner", true, s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14"])); });
+KIT_TESTS.add("journée entière occupée bloque toutes les fenêtres", function () { var e = graphEvent("Séminaire", "busy", "2026-08-03T00:00:00.0000000", "2026-08-04T00:00:00.0000000", true); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 0); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "diner", true, candidateSettings()).length === 0); });
 KIT_TESTS.add("horizon respecte J+3 et les jours ouvrés", function () { var s = candidateSettings({ horizon: { minJours: 3, maxJours: 6, plafond: 10 } }); var dates = KIT_PURE.generateCandidateHorizon("2026-07-30", s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-08-03", "2026-08-04", "2026-08-05"])); });
   </script>
   <script>
@@ -265,6 +266,26 @@ var KIT_AGENDA = (function () {
     listeners.slice().forEach(function (fn) { try { fn(state); } catch (e) {} });
   }
   function accountLabel(account) { return account && (account.username || account.name) || ""; }
+  function removeCheckpointEntry(id) {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      var entries = saved.pendingInvites || [];
+      if (!entries.some(function (x) { return x && x.id === id; })) return;
+      saved.pendingInvites = entries.filter(function (x) { return !x || x.id !== id; });
+      var serialized = JSON.stringify(saved);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      if (localStorage.getItem(STORAGE_KEY) !== serialized) throw new Error("relecture retrait");
+    } catch (e) { /* silencieux : l'entrée sera re-consommée au prochain chargement */ }
+  }
+  function deliverRestore() {
+    if (!pendingRestore || !restoreHandler) return;
+    var checkpoint = pendingRestore;
+    pendingRestore = null;
+    removeCheckpointEntry(checkpoint.id);
+    restoreHandler(checkpoint);
+  }
   function consumeCheckpoint() {
     var raw;
     try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
@@ -274,12 +295,10 @@ var KIT_AGENDA = (function () {
       var entries = saved.pendingInvites || [];
       var checkpoint = entries.find(function (x) { return x && x.statut === "checkpoint-composition"; });
       if (!checkpoint) return;
-      saved.pendingInvites = entries.filter(function (x) { return x !== checkpoint; });
-      var serialized = JSON.stringify(saved);
-      localStorage.setItem(STORAGE_KEY, serialized);
-      if (localStorage.getItem(STORAGE_KEY) !== serialized) throw new Error("relecture checkpoint");
+      // L'entrée reste en localStorage jusqu'à sa livraison effective à React :
+      // un redirect automatique avant le montage ne peut plus perdre le brouillon.
       pendingRestore = checkpoint;
-      if (restoreHandler) { restoreHandler(pendingRestore); pendingRestore = null; }
+      deliverRestore();
     } catch (e2) {
       publish({ etat: "indisponible", compte: "", message: "Impossible de restaurer le brouillon." });
     }
@@ -295,7 +314,7 @@ var KIT_AGENDA = (function () {
       if (back !== serialized) throw new Error("relecture différente");
       var checked = JSON.parse(back);
       if (!(checked.pendingInvites || []).some(function (x) { return x.id === packet.entry.id && x.statut === "checkpoint-composition"; })) throw new Error("checkpoint absent");
-      return true;
+      return packet.entry.id;
     } catch (e) {
       alert("Impossible d'enregistrer le brouillon — connexion annulée.");
       return false;
@@ -303,8 +322,10 @@ var KIT_AGENDA = (function () {
   }
   function redirect(method) {
     if (!navigator.onLine) { publish({ etat: "indisponible", compte: "" }); return Promise.resolve(); }
-    if (!checkpoint()) return Promise.resolve();
+    var saved = checkpoint();
+    if (saved === false) return Promise.resolve();
     return method({ scopes: SCOPES, redirectUri: KIT_PURE.redirectUriFor(location.hostname) }).catch(function (error) {
+      if (typeof saved === "string") removeCheckpointEntry(saved);
       publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
     });
   }
@@ -367,13 +388,17 @@ var KIT_AGENDA = (function () {
     getState: function () { return state; },
     subscribe: function (fn) { listeners.push(fn); fn(state); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
     setCheckpointProvider: function (fn) { checkpointProvider = fn; },
-    setRestoreHandler: function (fn) { restoreHandler = fn; if (pendingRestore) { fn(pendingRestore); pendingRestore = null; } },
+    setRestoreHandler: function (fn) { restoreHandler = fn; deliverRestore(); },
     getToken: function (done) {
       ready.then(function () {
         var account = client && client.getAllAccounts()[0];
-        if (!account) { publish({ etat: "deconnecte", compte: "" }); done(null); return; }
+        if (!account) {
+          if (state.etat === "connecte" || state.etat === "deconnecte") publish({ etat: "deconnecte", compte: "" });
+          done(null);
+          return;
+        }
         silent(account, false).then(done);
-      });
+      }).catch(function () { try { done(null); } catch (e) {} });
     },
     connect: function () { return ready.then(function () { return redirect(function (request) { return client.loginRedirect(request); }); }); },
     disconnect: function () {
@@ -419,7 +444,11 @@ function fetchCandidateDates(ctx, done) {
         var url = "https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=" + encodeURIComponent(start) + "&endDateTime=" + encodeURIComponent(end) + "&$select=subject,start,end,showAs,isAllDay&$top=100";
         var events = [];
         function loadPage(nextUrl) {
-          fetch(nextUrl, { headers: { Authorization: "Bearer " + token, Prefer: 'outlook.timezone="Romance Standard Time"' } }).then(function (response) {
+          // Délai limite par page : un réseau suspendu ne doit jamais figer « Recherche des disponibilités… »
+          var controller = typeof AbortController === "function" ? new AbortController() : null;
+          var timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 15000) : null;
+          fetch(nextUrl, { headers: { Authorization: "Bearer " + token, Prefer: 'outlook.timezone="Romance Standard Time"' }, signal: controller ? controller.signal : undefined }).then(function (response) {
+            if (timer) clearTimeout(timer);
             if (!response.ok) throw new Error("Graph HTTP " + response.status);
             return response.json();
           }).then(function (page) {
@@ -427,7 +456,7 @@ function fetchCandidateDates(ctx, done) {
             if (page && page["@odata.nextLink"]) return loadPage(page["@odata.nextLink"]);
             var candidates = KIT_PURE.candidateDates(today, events, ctx.meal, ctx.idf, ctx.settings || {});
             finish({ etat: "ok", candidates: candidates });
-          }).catch(function () { finish({ etat: "erreur", candidates: [] }); });
+          }).catch(function () { if (timer) clearTimeout(timer); finish({ etat: "erreur", candidates: [] }); });
         }
         loadPage(url);
       } catch (e) { finish({ etat: "erreur", candidates: [] }); }
@@ -494,7 +523,7 @@ function ProtectedApp() {
   return React.createElement(App);
 }
 
-var { useState, useEffect, useCallback, useMemo } = React;
+var { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const STORAGE_KEY = "kit-crm-v5";
 const DEFAULT_CATS = ["Client", "Prospect"];
@@ -1183,6 +1212,7 @@ function App() {
   var [replayInvite, setReplayInvite] = useState(null);
   var [doubleInviteId, setDoubleInviteId] = useState(null);
   var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
+  var candidateReqSeq = useRef(0);
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -1308,6 +1338,9 @@ function App() {
         setData(current);
         idbSet("data", current);
       } catch (e) {}
+      // La restauration prime : une confirmation éclair déjà affichée (z-1020) recouvrirait
+      // la feuille restaurée (z-1000) ; l'entrée « lien-ouvert » persistée se représentera.
+      setConfirmInviteVisible(false);
       restoreInvite(checkpoint);
     });
     return function () { KIT_AGENDA.setRestoreHandler(null); };
@@ -1547,11 +1580,16 @@ function App() {
     var c = contacts.find(function (x) { return x.id === inviteId; });
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!c || !t) return;
+    // Garde de séquence : seule la réponse de la DERNIÈRE demande s'applique
+    // (changer de repas ou basculer IDF/Province pendant un vol ne mélange plus les résultats).
+    var seq = candidateReqSeq.current + 1;
+    candidateReqSeq.current = seq;
     setInviteCandidateResult({ etat: "chargement", candidates: [] });
     setInviteCandidateDates([]);
     setInviteManualDates([]);
     setInviteDates([]);
     fetchCandidateDates({ meal: meal, idf: idf, settings: data.settings || {}, contact: c }, function (result) {
+      if (seq !== candidateReqSeq.current) return;
       var normalized = result || { etat: "erreur", candidates: [] };
       var candidates = KIT_PURE.mergeDates(normalized.candidates || [], []);
       var checked = normalized.etat === "ok" ? candidates.slice(0, Number(t.nbDates || 0)) : [];
