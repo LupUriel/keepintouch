@@ -106,6 +106,15 @@ var KIT_PURE = (function () {
     var p = String(isoDate || "").split("-");
     return isoDateFromUTC(new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + Number(days || 0))));
   }
+  function addMonthsISO(isoDate, months) {
+    var p = String(isoDate || "").split("-");
+    var year = Number(p[0]);
+    var month = Number(p[1]) - 1 + Number(months || 0);
+    var target = new Date(Date.UTC(year, month, 1));
+    var lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    target.setUTCDate(Math.min(Number(p[2]), lastDay));
+    return isoDateFromUTC(target);
+  }
   function weekdayISO(isoDate) {
     var p = String(isoDate || "").split("-");
     return new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).getUTCDay();
@@ -118,6 +127,82 @@ var KIT_PURE = (function () {
   function isYearEndExcluded(isoDate) {
     var monthDay = String(isoDate || "").slice(5);
     return monthDay >= "12-24" || monthDay <= "01-02";
+  }
+  function cycleForContact(contact) {
+    var c = contact || {};
+    if (c.inTransition) return { due: 6, warn: 5 };
+    if (c.priority === "high") return { due: 6, warn: 5 };
+    if (c.priority === "none") return null;
+    if (c.priority === "low") return { due: 18, warn: 16 };
+    return String(c.category || "").toLowerCase() === "client" ? { due: 12, warn: 9 } : { due: 12, warn: 11 };
+  }
+  function latestInteraction(contact) {
+    return (contact && contact.interactions || []).reduce(function (best, item) { return !best || String(item.date || "") > String(best.date || "") ? item : best; }, null);
+  }
+  function nextDueDate(contact, today) {
+    var c = contact || {};
+    var cycle = cycleForContact(c);
+    if (c.archived || !cycle) return null;
+    if (c.awaitingUntil && c.awaitingUntil > today) return { date: c.awaitingUntil, motif: "attente" };
+    var latest = latestInteraction(c);
+    var candidates = [];
+    if (latest && latest.awaitingResponse && latest.date) candidates.push({ date: addDaysISO(latest.date, 14), motif: "sans réponse" });
+    if (latest && latest.retryPending && latest.date) candidates.push({ date: addDaysISO(latest.date, 21), motif: "à recontacter" });
+    if (c.followUpDate) candidates.push({ date: c.followUpDate, motif: "planifiée" });
+    var lastMeeting = (c.interactions || []).reduce(function (best, item) {
+      var types = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
+      return types.indexOf(item.type) >= 0 && (!best || item.date > best) ? item.date : best;
+    }, null);
+    if (lastMeeting) {
+      var cycleDate = addMonthsISO(lastMeeting, cycle.due);
+      if (c.snoozedUntil && c.snoozedUntil > today && c.snoozedUntil > cycleDate) cycleDate = c.snoozedUntil;
+      candidates.push({ date: cycleDate, motif: "cycle" });
+    }
+    candidates.sort(function (a, b) { return a.date.localeCompare(b.date); });
+    return candidates[0] || null;
+  }
+  function silenceValide(dateStr, today) { return /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || "")) && dateStr > today; }
+  function quietDay(isoDate, settings, today) {
+    var exclusions = settings && settings.exclusions || {};
+    var silence = settings && settings.rappels && settings.rappels.silenceUntil;
+    return !!((exclusions.aoutPlein && isFullAugustWeek(isoDate)) || (exclusions.fetesFinAnnee && isYearEndExcluded(isoDate)) || (silenceValide(silence, today) && isoDate <= silence));
+  }
+  function nextWorkingDay(date, settings, today) {
+    var candidate = date;
+    while (weekdayISO(candidate) === 0 || weekdayISO(candidate) === 6 || quietDay(candidate, settings, today)) candidate = addDaysISO(candidate, 1);
+    return candidate;
+  }
+  function resumeDay(settings, today) {
+    var silence = settings && settings.rappels && settings.rappels.silenceUntil;
+    return silenceValide(silence, today) ? nextWorkingDay(addDaysISO(silence, 1), settings, today) : null;
+  }
+  function projectionDays(contacts, settings, today) {
+    var maxDays = Math.max(0, Number(settings && settings.horizon && settings.horizon.maxJours) || 28);
+    var horizonEnd = addDaysISO(today, maxDays);
+    var silenceResume = resumeDay(settings, today);
+    var grouped = {};
+    (contacts || []).forEach(function (contact) {
+      var due = nextDueDate(contact, today);
+      if (!due) return;
+      var date = due.date < today ? today : due.date;
+      var underSilence = !!(silenceResume && date <= settings.rappels.silenceUntil);
+      if (date > horizonEnd && !underSilence) return;
+      var target = underSilence ? silenceResume : nextWorkingDay(date, settings, today);
+      if (!grouped[target]) grouped[target] = { date: target, entries: [], recap: target !== date };
+      grouped[target].recap = grouped[target].recap || target !== date;
+      grouped[target].entries.push({ contactId: contact.id, nom: contact.nom || contact.name || [contact.firstName, contact.lastName].filter(Boolean).join(" "), motif: due.motif });
+    });
+    return Object.keys(grouped).sort().map(function (date) { return grouped[date]; });
+  }
+  function lastSunday(year, monthIndex) {
+    var last = new Date(Date.UTC(year, monthIndex + 1, 0));
+    return last.getUTCDate() - last.getUTCDay();
+  }
+  function deferredSendUTC(isoDate, heure) {
+    var d = String(isoDate || "").split("-").map(Number);
+    var t = String(heure || "").split(":").map(Number);
+    var summer = d[1] > 3 && d[1] < 10 || d[1] === 3 && d[2] >= lastSunday(d[0], 2) || d[1] === 10 && d[2] < lastSunday(d[0], 9);
+    return new Date(Date.UTC(d[0], d[1] - 1, d[2], t[0] - (summer ? 2 : 1), t[1], 0, 0)).toISOString();
   }
   function generateCandidateHorizon(today, settings) {
     var horizon = settings && settings.horizon || {};
@@ -193,7 +278,7 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, addMonthsISO: addMonthsISO, nextDueDate: nextDueDate, quietDay: quietDay, resumeDay: resumeDay, projectionDays: projectionDays, deferredSendUTC: deferredSendUTC, silenceValide: silenceValide, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -249,6 +334,18 @@ KIT_TESTS.add("pagination accumule plus de 100 événements", function () { var 
 KIT_TESTS.add("plafond conserve les dix premières dates", function () { var s = candidateSettings({ horizon: { minJours: 0, maxJours: 30, plafond: 10 } }); var dates = KIT_PURE.candidateDates("2026-09-01", [], "dejeuner", true, s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14"])); });
 KIT_TESTS.add("journée entière occupée bloque toutes les fenêtres", function () { var e = graphEvent("Séminaire", "busy", "2026-08-03T00:00:00.0000000", "2026-08-04T00:00:00.0000000", true); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 0); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "diner", true, candidateSettings()).length === 0); });
 KIT_TESTS.add("horizon respecte J+3 et les jours ouvrés", function () { var s = candidateSettings({ horizon: { minJours: 3, maxJours: 6, plafond: 10 } }); var dates = KIT_PURE.generateCandidateHorizon("2026-07-30", s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-08-03", "2026-08-04", "2026-08-05"])); });
+function reminderSettings(overrides) { var s = { horizon: { maxJours: 28 }, exclusions: { aoutPlein: false, fetesFinAnnee: false }, rappels: {} }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
+function reminderContact(id, extras) { var c = { id: id, name: id, category: "prospect", priority: "normal", interactions: [{ type: "dejeuner", date: "2025-01-01" }] }; Object.keys(extras || {}).forEach(function (key) { c[key] = extras[key]; }); return c; }
+KIT_TESTS.add("échéances pures et préséance", function () { var today = "2026-01-01"; kitAssert(KIT_PURE.nextDueDate(reminderContact("a", { awaitingUntil: "2026-01-11", followUpDate: "2026-01-02" }), today).date === "2026-01-11"); kitAssert(KIT_PURE.nextDueDate(reminderContact("b", { interactions: [{ type: "email", date: "2026-01-01", awaitingResponse: true }] }), today).date === "2026-01-15"); kitAssert(KIT_PURE.nextDueDate(reminderContact("c", { interactions: [{ type: "email", date: "2026-01-01", retryPending: true }] }), today).date === "2026-01-22"); kitAssert(KIT_PURE.nextDueDate(reminderContact("d", { interactions: [{ type: "email", date: "2025-12-01" }], followUpDate: "2026-02-03" }), today).motif === "planifiée"); kitAssert(KIT_PURE.nextDueDate(reminderContact("e", { interactions: [{ type: "email", date: "2026-01-01", awaitingResponse: true }], followUpDate: "2026-01-10" }), today).date === "2026-01-10"); });
+KIT_TESTS.add("cycle, fin de mois et report", function () { kitAssert(KIT_PURE.addMonthsISO("2026-01-31", 1) === "2026-02-28" && KIT_PURE.addMonthsISO("2024-01-31", 1) === "2024-02-29"); var due = KIT_PURE.nextDueDate(reminderContact("a", { interactions: [{ type: "dejeuner", date: "2025-09-10" }] }), "2026-01-01"); kitAssert(due.date === "2026-09-10" && due.motif === "cycle"); kitAssert(KIT_PURE.nextDueDate(reminderContact("b", { snoozedUntil: "2027-01-01" }), "2026-01-01").date === "2027-01-01"); });
+KIT_TESTS.add("contacts hors cycle", function () { kitAssert(KIT_PURE.nextDueDate(reminderContact("a", { priority: "none" }), "2026-01-01") === null); kitAssert(KIT_PURE.nextDueDate(reminderContact("b", { archived: true }), "2026-01-01") === null); });
+KIT_TESTS.add("projection vide et regroupée", function () { kitAssert(KIT_PURE.projectionDays([], reminderSettings(), "2026-01-01").length === 0); var contacts = [reminderContact("Alice", { followUpDate: "2026-01-12" }), reminderContact("Bob", { followUpDate: "2026-01-12" })]; var days = KIT_PURE.projectionDays(contacts, reminderSettings(), "2026-01-01"); kitAssert(days.length === 1 && days[0].entries.length === 2 && !days[0].recap); });
+KIT_TESTS.add("AE4 report août plein", function () { var s = reminderSettings({ horizon: { maxJours: 40 }, exclusions: { aoutPlein: true, fetesFinAnnee: false }, rappels: {} }); var days = KIT_PURE.projectionDays([reminderContact("Août", { followUpDate: "2026-08-12" })], s, "2026-08-01"); kitAssert(days.length === 1 && days[0].date === "2026-08-31" && days[0].recap); });
+KIT_TESTS.add("AE5 silence balayé hors horizon", function () { var s = reminderSettings({ horizon: { maxJours: 28 }, exclusions: { aoutPlein: false, fetesFinAnnee: false }, rappels: { silenceUntil: "2026-09-15" } }); var contacts = [reminderContact("Août", { followUpDate: "2026-08-05" }), reminderContact("Septembre", { followUpDate: "2026-09-02" })]; var days = KIT_PURE.projectionDays(contacts, s, "2026-08-01"); kitAssert(days.length === 1 && days[0].date === "2026-09-16" && days[0].entries.length === 2 && days[0].recap); });
+KIT_TESTS.add("reprise après fêtes", function () { var s = reminderSettings({ exclusions: { aoutPlein: false, fetesFinAnnee: true }, rappels: { silenceUntil: "2026-12-27" } }); kitAssert(KIT_PURE.resumeDay(s, "2026-12-01") === "2027-01-04"); });
+KIT_TESTS.add("silence passé sans effet", function () { var s = reminderSettings({ rappels: { silenceUntil: "2026-01-01" } }); kitAssert(!KIT_PURE.silenceValide("2026-01-01", "2026-01-01") && !KIT_PURE.quietDay("2026-01-02", s, "2026-01-01")); kitAssert(KIT_PURE.projectionDays([reminderContact("A", { interactions: [{ type: "email", date: "2025-12-01" }], followUpDate: "2026-01-02" })], s, "2026-01-01")[0].date === "2026-01-02"); });
+KIT_TESTS.add("quiétude exclusions et silence", function () { kitAssert(KIT_PURE.quietDay("2026-08-12", reminderSettings({ exclusions: { aoutPlein: true, fetesFinAnnee: false } }), "2026-08-01")); kitAssert(KIT_PURE.quietDay("2026-08-12", reminderSettings({ rappels: { silenceUntil: "2026-09-15" } }), "2026-08-01")); kitAssert(!KIT_PURE.quietDay("2026-08-12", reminderSettings(), "2026-08-01")); });
+KIT_TESTS.add("conversion différée Europe Paris", function () { kitAssert(KIT_PURE.deferredSendUTC("2026-01-15", "08:30") === "2026-01-15T07:30:00.000Z"); kitAssert(KIT_PURE.deferredSendUTC("2026-07-15", "08:30") === "2026-07-15T06:30:00.000Z"); kitAssert(KIT_PURE.deferredSendUTC("2026-03-29", "08:30") === "2026-03-29T06:30:00.000Z"); kitAssert(KIT_PURE.deferredSendUTC("2026-10-25", "08:30") === "2026-10-25T07:30:00.000Z"); });
   </script>
   <script>
 var KIT_AGENDA = (function () {
