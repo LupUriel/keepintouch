@@ -1,61 +1,93 @@
-# Keep In Touch — Guide de déploiement
+# Keep In Touch — Guide de déploiement et d'utilisation
 
-## Étape 1 : Créer un compte Netlify (gratuit)
+## Où vit l'application
 
-1. Ouvre https://app.netlify.com/signup dans ton navigateur
-2. Clique "Sign up with email"
-3. Entre ton email et un mot de passe
-4. Confirme ton email via le lien reçu par mail
+- Le code est hébergé sur GitHub : https://github.com/LupUriel/keepintouch
+- L'application est servie par GitHub Pages à l'adresse : https://lupuriel.github.io/keepintouch/
+- Toute fusion sur la branche `main` (bouton « Merge pull request » sur GitHub) redéploie
+  automatiquement le site en une à deux minutes. Aucune autre manipulation n'est nécessaire.
+- (L'ancien guide décrivait un déploiement Netlify par glisser-déposer : il est obsolète.)
 
-## Étape 2 : Déployer l'application
+## Mettre à jour l'application
 
-1. Ouvre https://app.netlify.com/drop dans ton navigateur
-2. Décompresse le fichier ZIP "keep_in_touch_pwa.zip" sur ton bureau
-3. Fais glisser le DOSSIER "pwa" (pas le ZIP) vers la zone de dépôt sur la page Netlify
-4. Attends quelques secondes — Netlify affiche une URL du type : https://xxxxx.netlify.app
-5. Clique sur cette URL : ton app est en ligne !
+1. Une modification arrive sous forme de « Pull Request » (PR) sur GitHub
+2. Ouvrez la PR, cliquez « Merge pull request » puis « Confirm merge »
+3. Attendez ~2 minutes, puis rechargez l'app : le bandeau « Nouvelle version disponible »
+   apparaît — cliquez « Recharger »
+4. Vérifiez le numéro de version dans ⋯ > À propos
 
-## Étape 3 : Personnaliser l'URL (optionnel)
+## Installer sur Android (Samsung)
 
-1. Dans Netlify, clique "Site settings" > "Change site name"
-2. Choisis un nom, par exemple : keepintouch-uriel
-3. Ton app sera accessible à : https://keepintouch-uriel.netlify.app
+1. Ouvrez Chrome et allez sur https://lupuriel.github.io/keepintouch/
+2. Attendez le chargement complet
+3. Menu ⋮ (3 points) > « Ajouter à l'écran d'accueil » (ou « Installer l'application »)
+4. L'icône « KIT » apparaît ; l'app s'ouvre comme une vraie application, sans barre Chrome
 
-## Étape 4 : Installer sur Android (Samsung)
+## Installer sur PC
 
-1. Ouvre Chrome sur ton Samsung
-2. Va à l'adresse de ton app (ex : https://keepintouch-uriel.netlify.app)
-3. Attends que la page charge complètement
-4. Appuie sur les 3 points en haut à droite de Chrome
-5. Appuie sur "Ajouter à l'écran d'accueil" (ou "Installer l'application")
-6. Confirme — l'icône "KIT" apparaît sur ton écran d'accueil
-7. L'app s'ouvre désormais comme une vraie application, sans barre Chrome
+1. Ouvrez Chrome et allez sur https://lupuriel.github.io/keepintouch/
+2. Dans la barre d'adresse, cliquez la petite icône « Installer » (ou ⋮ > « Installer Keep In Touch »)
 
-## Étape 5 : Installer sur PC
+## Connexion de l'agenda Outlook (proposition automatique de dates)
 
-1. Ouvre Chrome sur ton PC
-2. Va à l'adresse de ton app
-3. Dans la barre d'adresse, un petit icône "installer" apparaît à droite (ou clique les 3 points > "Installer Keep In Touch")
-4. L'app s'installe et s'ouvre dans sa propre fenêtre
+L'app peut lire votre agenda Outlook (Microsoft 365) pour proposer d'elle-même des dates de
+petit-déjeuner, déjeuner, dîner ou verre. Tout se passe directement entre votre navigateur et
+Microsoft : aucune donnée d'agenda ne transite par un autre serveur, rien n'est stocké
+(ni dans l'app, ni dans les sauvegardes), et la permission se limite à la lecture basique
+du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des rendez-vous).
 
-## Important
+### Se connecter / se déconnecter
+
+- ⋯ > ⚙ Rencontres & agenda > bloc « Connecter mon agenda » > bouton « Connecter »
+- Vous êtes redirigé vers la page de connexion Microsoft habituelle du cabinet, puis ramené
+  dans l'app. L'état affiche alors « Agenda connecté » avec votre adresse.
+- « Se déconnecter » purge le cache d'authentification local. À froid, une reconnexion
+  quasi silencieuse peut être demandée : c'est normal.
+- Hors ligne ou en cas de souci, l'app reste entièrement utilisable : l'écran de dates
+  propose la saisie manuelle (mode secours).
+
+### Réglages utiles
+
+- « Collaborateurs (trigrammes) » : les initiales en tête d'un titre d'évènement
+  (ex. « CME - RDV client ») signalent un créneau tenu par un collaborateur — il est donc
+  considéré comme libre pour vous. Ajoutez ici tous les trigrammes de vos collaborateurs
+  (ex. CME, CGI, TR). Vos propres évènements (« US - … », « USA - … ») et les évènements
+  sans trigramme comptent comme occupés.
+- Fenêtres par type de repas, horizon (J+3 à J+28), exclusions (semaines entièrement en
+  août, 24/12 au 02/01), bascule Île-de-France/Province : tout est modifiable dans le
+  même panneau.
+- Note : fin juillet et en août, l'exclusion des semaines pleines d'août peut vider
+  l'horizon — « Aucune date disponible » est alors normal, pas une panne.
+
+### Enregistrement Entra (déjà fait — à refaire seulement si l'application change d'annuaire)
+
+1. https://entra.microsoft.com > Entra ID > Inscriptions d'applications > Nouvelle inscription
+   - Nom : Keep In Touch ; comptes de cet annuaire uniquement (mono-locataire)
+   - Plateforme « Application à page unique » (SPA) ; URI de redirection :
+     https://lupuriel.github.io/keepintouch/ (exacte) et http://localhost:8000 (développement)
+2. Noter l'ID d'application (client) et l'ID de l'annuaire (locataire) — identifiants
+   publics par conception, inscrits dans le code de l'app
+3. API autorisées > Ajouter une autorisation > Microsoft Graph > Déléguées > Calendars.ReadBasic
+4. Si l'annuaire l'exige (erreur AADSTS50105) : Applications d'entreprise > Keep In Touch >
+   Propriétés > « Affectation requise ? » > Non (ou ajouter l'utilisateur dans
+   « Utilisateurs et groupes »)
+5. Consentement administrateur, si demandé : un administrateur ouvre
+   https://login.microsoftonline.com/<ID-locataire>/adminconsent?client_id=<ID-client>
+   et clique « Accepter »
+
+## Vos données
 
 - Les données sont stockées LOCALEMENT dans chaque navigateur
 - Les données du PC et du mobile sont INDÉPENDANTES
-- Fais régulièrement un export (bouton "Export" dans le dashboard) pour sauvegarder
-- Pour synchroniser : exporte d'un côté, importe de l'autre via un fichier CSV
+- Faites régulièrement une sauvegarde (Sauvegarder/JSON dans le tableau de bord) ;
+  la fusion permet de rapprocher deux appareils
+- Les sauvegardes ne contiennent JAMAIS de données d'authentification Microsoft
 
 ## Mot de passe
 
 - À la première ouverture, l'app vous demande de créer un mot de passe
 - Ce mot de passe est demandé à chaque lancement de l'app
-- Le bouton 🔒 dans le dashboard verrouille l'app immédiatement
+- Le bouton 🔒 dans le tableau de bord verrouille l'app immédiatement
 - Le mot de passe est stocké localement (hashé, non lisible) dans chaque navigateur
-- Si vous perdez votre mot de passe : effacez les données du site dans les paramètres de Chrome, mais attention, cela efface aussi vos contacts (faites un export avant)
-
-## Mettre à jour l'application
-
-Si on modifie l'app ensemble dans Claude :
-1. Retélécharge le nouveau ZIP
-2. Dans Netlify : "Deploys" > "Drag and drop" > dépose le nouveau dossier
-3. L'app se met à jour automatiquement sur tous tes appareils au prochain chargement
+- Mot de passe perdu : effacez les données du site dans les paramètres de Chrome —
+  attention, cela efface aussi vos contacts (faites une sauvegarde avant)
