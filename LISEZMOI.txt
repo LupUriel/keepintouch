@@ -67,13 +67,22 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
      https://lupuriel.github.io/keepintouch/ (exacte) et http://localhost:8000 (développement)
 2. Noter l'ID d'application (client) et l'ID de l'annuaire (locataire) — identifiants
    publics par conception, inscrits dans le code de l'app
-3. API autorisées > Ajouter une autorisation > Microsoft Graph > Déléguées > Calendars.ReadBasic
+3. API autorisées > Ajouter une autorisation > Microsoft Graph > Déléguées :
+   Calendars.ReadBasic, Calendars.ReadWrite et Mail.Send
+   - Calendars.ReadWrite permet d'écrire sur les agendas de l'utilisateur ; l'app se
+     limite par construction à un agenda dédié « Keep In Touch ».
+   - Mail.Send permet l'envoi ; l'app n'envoie qu'à l'utilisateur lui-même.
 4. Si l'annuaire l'exige (erreur AADSTS50105) : Applications d'entreprise > Keep In Touch >
    Propriétés > « Affectation requise ? » > Non (ou ajouter l'utilisateur dans
    « Utilisateurs et groupes »)
 5. Consentement administrateur, si demandé : un administrateur ouvre
    https://login.microsoftonline.com/<ID-locataire>/adminconsent?client_id=<ID-client>
    et clique « Accepter »
+
+Message à transmettre au prestataire : en cas d'erreur AADSTS50105, effectuer
+l'affectation décrite à l'étape 4, puis accorder le consentement avec le lien
+/adminconsent de l'étape 5. Les portées réelles sont précisées à l'étape 3 afin
+que l'utilisateur et l'administrateur donnent un consentement éclairé.
 
 ## Vos données
 

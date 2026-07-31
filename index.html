@@ -278,7 +278,9 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, addMonthsISO: addMonthsISO, nextDueDate: nextDueDate, quietDay: quietDay, resumeDay: resumeDay, projectionDays: projectionDays, deferredSendUTC: deferredSendUTC, silenceValide: silenceValide, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  function agendaScopeSets() { return { lecture: ["Calendars.ReadBasic"], ecriture: ["Calendars.ReadWrite", "Mail.Send"] }; }
+  function writeStateFor(hasToken, error) { return hasToken ? "accordee" : error && classifyMsalError(error) === "consentement-requis" ? "consentement-requis" : "absente"; }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, addMonthsISO: addMonthsISO, nextDueDate: nextDueDate, quietDay: quietDay, resumeDay: resumeDay, projectionDays: projectionDays, deferredSendUTC: deferredSendUTC, silenceValide: silenceValide, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, agendaScopeSets: agendaScopeSets, writeStateFor: writeStateFor };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -320,6 +322,8 @@ KIT_TESTS.add("classification accès non affecté MSAL", function () { kitAssert
 KIT_TESTS.add("classification réseau MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "Failed to fetch: network error" }) === "indisponible"); });
 KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ name: "InteractionRequiredAuthError" }) === "interaction"); });
 KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
+KIT_TESTS.add("scopes lecture et écriture séparés et complets", function () { var sets = KIT_PURE.agendaScopeSets(); kitAssert(JSON.stringify(sets.lecture) === JSON.stringify(["Calendars.ReadBasic"])); kitAssert(JSON.stringify(sets.ecriture) === JSON.stringify(["Calendars.ReadWrite", "Mail.Send"])); kitAssert(sets.lecture.every(function (scope) { return sets.ecriture.indexOf(scope) < 0; }) && sets.ecriture.every(function (scope) { return sets.lecture.indexOf(scope) < 0; })); });
+KIT_TESTS.add("état écriture pur", function () { kitAssert(KIT_PURE.writeStateFor(true, null) === "accordee"); kitAssert(KIT_PURE.writeStateFor(false, { message: "AADSTS65001: consent_required" }) === "consentement-requis"); kitAssert(KIT_PURE.writeStateFor(false, null) === "absente"); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -351,7 +355,8 @@ KIT_TESTS.add("conversion différée Europe Paris", function () { kitAssert(KIT_
 var KIT_AGENDA = (function () {
   var STORAGE_KEY = "kit-crm-v5";
   var SCOPES = ["Calendars.ReadBasic"];
-  var state = { etat: "deconnecte", compte: "" };
+  var SCOPES_ECRITURE = ["Calendars.ReadWrite", "Mail.Send"];
+  var state = { etat: "deconnecte", compte: "", ecriture: "absente" };
   var listeners = [];
   var checkpointProvider = null;
   var restoreHandler = null;
@@ -359,6 +364,7 @@ var KIT_AGENDA = (function () {
   var client = null;
 
   function publish(next) {
+    if (!next.ecriture) next.ecriture = state.ecriture;
     state = next;
     listeners.slice().forEach(function (fn) { try { fn(state); } catch (e) {} });
   }
@@ -417,13 +423,23 @@ var KIT_AGENDA = (function () {
       return false;
     }
   }
-  function redirect(method) {
-    if (!navigator.onLine) { publish({ etat: "indisponible", compte: "" }); return Promise.resolve(); }
+  function redirect(method, scopes) {
+    var isWrite = scopes === SCOPES_ECRITURE;
+    if (!navigator.onLine) {
+      if (!isWrite) publish({ etat: "indisponible", compte: "" });
+      return Promise.resolve();
+    }
     var saved = checkpoint();
     if (saved === false) return Promise.resolve();
-    return method({ scopes: SCOPES, redirectUri: KIT_PURE.redirectUriFor(location.hostname) }).catch(function (error) {
+    return method({ scopes: scopes || SCOPES, redirectUri: KIT_PURE.redirectUriFor(location.hostname) }).catch(function (error) {
       if (typeof saved === "string") removeCheckpointEntry(saved);
-      publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+      if (isWrite) {
+        var nextWrite = KIT_PURE.writeStateFor(false, error);
+        if (state.ecriture === "consentement-requis" && nextWrite === "absente") nextWrite = state.ecriture;
+        publish({ etat: state.etat, compte: state.compte, ecriture: nextWrite });
+      } else {
+        publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+      }
     });
   }
   function silent(account, allowRedirect) {
@@ -438,6 +454,17 @@ var KIT_AGENDA = (function () {
         return redirect(function (request) { request.account = account; return client.acquireTokenRedirect(request); }).then(function () { return null; });
       }
       publish({ etat: kind, compte: accountLabel(account) });
+      return null;
+    });
+  }
+  function silentWrite(account) {
+    return client.acquireTokenSilent({ scopes: SCOPES_ECRITURE, account: account }).then(function (result) {
+      publish({ etat: "connecte", compte: accountLabel(result.account || account), ecriture: "accordee" });
+      return result.accessToken;
+    }).catch(function (error) {
+      var nextWrite = KIT_PURE.writeStateFor(false, error);
+      if (state.ecriture === "consentement-requis" && nextWrite === "absente") nextWrite = state.ecriture;
+      publish({ etat: state.etat, compte: state.compte || accountLabel(account), ecriture: nextWrite });
       return null;
     });
   }
@@ -497,9 +524,23 @@ var KIT_AGENDA = (function () {
         silent(account, false).then(done);
       }).catch(function () { try { done(null); } catch (e) {} });
     },
+    getWriteToken: function (done) {
+      ready.then(function () {
+        var account = client && client.getAllAccounts()[0];
+        if (!account) {
+          if (state.ecriture === "accordee" || state.ecriture === "absente") publish({ etat: state.etat, compte: state.compte, ecriture: "absente" });
+          done(null);
+          return;
+        }
+        silentWrite(account).then(done);
+      }).catch(function () { try { done(null); } catch (e) {} });
+    },
+    getWriteState: function () { return state.ecriture; },
     connect: function () { return ready.then(function () { return redirect(function (request) { return client.loginRedirect(request); }); }); },
+    // Mail.Send est réservé par construction aux messages envoyés à l'utilisateur lui-même (R7).
+    connectWrite: function () { return ready.then(function () { return redirect(function (request) { request.account = client.getAllAccounts()[0]; return client.acquireTokenRedirect(request); }, SCOPES_ECRITURE); }); },
     disconnect: function () {
-      publish({ etat: "deconnecte", compte: "" });
+      publish({ etat: "deconnecte", compte: "", ecriture: "absente" });
       return ready.then(function () {
         return client && client.clearCache ? client.clearCache() : null;
       }).catch(function () {}).then(purge);
@@ -1425,7 +1466,9 @@ function App() {
   }, [data]);
 
   useEffect(function () {
-    return KIT_AGENDA.subscribe(setAgendaState);
+    var unsubscribe = KIT_AGENDA.subscribe(setAgendaState);
+    KIT_AGENDA.getWriteToken(function () {});
+    return unsubscribe;
   }, []);
 
   useEffect(function () {
@@ -3470,6 +3513,14 @@ function App() {
               {agendaState.etat === "connecte" ? (
                 <div>
                   <p style={{ margin: "0 0 10px", fontSize: 13, color: "#234A41" }}>{"Agenda connecté" + (agendaState.compte ? " · " + agendaState.compte : "")}</p>
+                  {agendaState.ecriture === "accordee" ? (
+                    <p style={{ margin: "0 0 10px", fontSize: 13, color: "#234A41" }}>écriture autorisée ✓</p>
+                  ) : (
+                    <p style={{ margin: "0 0 10px", fontSize: 13, color: agendaState.ecriture === "consentement-requis" ? "#9A3115" : "#64748B" }}>
+                      {agendaState.ecriture === "consentement-requis" ? "Accès ou consentement administrateur en attente — " : "Rappels Outlook : écriture non autorisée — "}
+                      <button onClick={function () { KIT_AGENDA.connectWrite(); }} style={{ padding: 0, border: "none", background: "transparent", color: ac, textDecoration: "underline", cursor: "pointer", fontFamily: ff }}>Autoriser</button>
+                    </p>
+                  )}
                   <button onClick={function () { KIT_AGENDA.disconnect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", color: ac, cursor: "pointer", fontFamily: ff }}>Se déconnecter</button>
                 </div>
               ) : agendaState.etat === "consentement-requis" ? (
