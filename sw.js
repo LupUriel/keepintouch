@@ -1,10 +1,11 @@
-var CACHE_NAME = "kit-crm-v33";
+var CACHE_NAME = "kit-crm-v35";
 var PRECACHE_URLS = [
   "./",
   "./index.html",
   "./manifest.json",
   "./lib/react.production.min.js",
   "./lib/react-dom.production.min.js",
+  "./lib/msal-browser.min.js",
   "./lib/babel.min.js",
   "./lib/xlsx.full.min.js",
   "./lib/exceljs.min.js",

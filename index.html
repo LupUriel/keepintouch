@@ -21,6 +21,7 @@
   <div id="root"></div>
   <script src="./lib/react.production.min.js"></script>
   <script src="./lib/react-dom.production.min.js"></script>
+  <script src="./lib/msal-browser.min.js"></script>
   <script src="./lib/babel.min.js"></script>
   <script src="./lib/xlsx.full.min.js"></script>
   <script src="./lib/exceljs.min.js"></script>
@@ -30,7 +31,10 @@ var KIT_PURE = (function () {
   var MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
   var TYPE_NAMES = { petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre", formation_repas: "formation avec repas", conference_repas: "conférence avec repas" };
   function renderTemplate(corps, valeurs) {
-    return String(corps || "").replace(/\{(prenom|accroche|dates|type)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+    return String(corps || "").replace(/\{(prenom|accroche|dates|type|entreprise)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+  }
+  function cleanSubject(objet) {
+    return String(objet || "").replace(/\s+/g, " ").replace(/^[\s\-–—]+/, "").replace(/[\s\-–—]+$/, "").trim();
   }
   function dateParts(isoDate) {
     var p = String(isoDate || "").split("-");
@@ -95,7 +99,101 @@ var KIT_PURE = (function () {
   function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
   function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
   function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
-  return { renderTemplate: renderTemplate, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip };
+  function isoDateFromUTC(d) {
+    return String(d.getUTCFullYear()).padStart(4, "0") + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
+  }
+  function addDaysISO(isoDate, days) {
+    var p = String(isoDate || "").split("-");
+    return isoDateFromUTC(new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + Number(days || 0))));
+  }
+  function weekdayISO(isoDate) {
+    var p = String(isoDate || "").split("-");
+    return new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]))).getUTCDay();
+  }
+  function isFullAugustWeek(isoDate) {
+    var day = weekdayISO(isoDate);
+    var monday = addDaysISO(isoDate, -(day === 0 ? 6 : day - 1));
+    return monday.slice(5, 7) === "08" && addDaysISO(monday, 6).slice(5, 7) === "08";
+  }
+  function isYearEndExcluded(isoDate) {
+    var monthDay = String(isoDate || "").slice(5);
+    return monthDay >= "12-24" || monthDay <= "01-02";
+  }
+  function generateCandidateHorizon(today, settings) {
+    var horizon = settings && settings.horizon || {};
+    var exclusions = settings && settings.exclusions || {};
+    var min = Math.max(0, Number(horizon.minJours) || 0);
+    var max = Math.max(min, Number(horizon.maxJours) || 0);
+    var dates = [];
+    for (var offset = min; offset <= max; offset += 1) {
+      var date = addDaysISO(today, offset);
+      var weekday = weekdayISO(date);
+      if (weekday === 0 || weekday === 6) continue;
+      if (exclusions.aoutPlein && isFullAugustWeek(date)) continue;
+      if (exclusions.fetesFinAnnee && isYearEndExcluded(date)) continue;
+      dates.push(date);
+    }
+    return dates;
+  }
+  function isOccupyingStatus(showAs) { return ["busy", "tentative", "oof"].indexOf(String(showAs || "").toLowerCase()) >= 0; }
+  function subjectStartsWithTrigram(subject, trigrammes) {
+    var title = String(subject || "").trim().toUpperCase();
+    return (trigrammes || []).some(function (value) {
+      var tri = String(value || "").trim().toUpperCase();
+      return !!tri && title.indexOf(tri) === 0 && (title.length === tri.length || !/[A-ZÀ-ÖØ-öø-ÿ0-9]/i.test(title.charAt(tri.length)));
+    });
+  }
+  function normalizeGraphEvents(events, trigrammes) {
+    var segments = [];
+    (events || []).forEach(function (event) {
+      if (!isOccupyingStatus(event && event.showAs) || subjectStartsWithTrigram(event && event.subject, trigrammes)) return;
+      var start = String(event && event.start && event.start.dateTime || "");
+      var end = String(event && event.end && event.end.dateTime || "");
+      var startDate = start.slice(0, 10);
+      var endDate = end.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || end < start) return;
+      if (event.isAllDay) {
+        for (var allDay = startDate; allDay < endDate; allDay = addDaysISO(allDay, 1)) segments.push({ date: allDay, start: "00:00", end: "24:00", allDay: true });
+        return;
+      }
+      var endTime = end.slice(11, 16);
+      for (var date = startDate; date <= endDate; date = addDaysISO(date, 1)) {
+        var segmentStart = date === startDate ? start.slice(11, 16) : "00:00";
+        var segmentEnd = date === endDate ? endTime : "24:00";
+        if (segmentStart < segmentEnd) segments.push({ date: date, start: segmentStart, end: segmentEnd, allDay: false });
+      }
+    });
+    return segments;
+  }
+  function intervalsOverlap(startA, endA, startB, endB) { return startA < endB && endA > startB; }
+  function windowIsFree(date, segments, meal, settings) {
+    var window = settings && settings.fenetres && settings.fenetres[meal];
+    if (!window) return false;
+    return !(segments || []).some(function (segment) { return segment.date === date && intervalsOverlap(segment.start, segment.end, window.debut, window.fin); });
+  }
+  function provinceAllowsDate(date, segments, idf) {
+    return !!idf || !(segments || []).some(function (segment) { return segment.date === date; });
+  }
+  function dateIsFree(date, segments, meal, idf, settings) {
+    return windowIsFree(date, segments, meal, settings) && provinceAllowsDate(date, segments, idf);
+  }
+  function candidateDates(today, events, meal, idf, settings) {
+    var horizon = generateCandidateHorizon(today, settings);
+    var occupants = normalizeGraphEvents(events, settings && settings.trigrammes || []);
+    var limit = Math.max(0, Number(settings && settings.horizon && settings.horizon.plafond) || 0);
+    return horizon.filter(function (date) { return dateIsFree(date, occupants, meal, idf, settings); }).sort().slice(0, limit);
+  }
+  function accumulateGraphPage(items, page) { return (items || []).concat(page && page.value || []); }
+  function redirectUriFor(hostname) { return hostname === "localhost" ? "http://localhost:8000" : "https://lupuriel.github.io/keepintouch/"; }
+  function classifyMsalError(error) {
+    var text = [error && error.errorCode, error && error.errorMessage, error && error.message, error && error.name].filter(Boolean).join(" ");
+    if (/AADSTS50105|AADSTS65001|AADSTS90094|consent_required/i.test(text)) return "consentement-requis";
+    if (/InteractionRequiredAuthError|interaction_required|login_required/i.test(text)) return "interaction";
+    if (/network|offline|failed to fetch|ERR_INTERNET_DISCONNECTED/i.test(text)) return "indisponible";
+    return "indisponible";
+  }
+  function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -109,6 +207,8 @@ var KIT_TESTS = {
 function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
+KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
+KIT_TESTS.add("objet sans entreprise sans tiret orphelin", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "", type: "dîner" })); kitAssert(s === "Proposition de dîner", s); });
 KIT_TESTS.add("accroche depuis déjeuner", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "dejeuner", date: "2026-03-12" }], ["dejeuner"]) === "depuis notre déjeuner de mars, "); });
 KIT_TESTS.add("accroche ignore invitation précédente", function () { kitAssert(KIT_PURE.accrocheFor([{ type: "email", date: "2026-05-01", metadata: { invitation: true } }, { type: "appel_echange", date: "2026-04-01" }], ["dejeuner"]) === "depuis notre échange d'avril, "); });
 KIT_TESTS.add("AE7 numéro français", function () { kitAssert(KIT_PURE.buildWa("06 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
@@ -128,6 +228,187 @@ KIT_TESTS.add("fusion dates cochées et manuelles ordonnée sans doublon", funct
 KIT_TESTS.add("préfixe international 0033", function () { kitAssert(KIT_PURE.isMobileFr("0033 6 12 34 56 78")); kitAssert(KIT_PURE.buildWa("0033 6 12 34 56 78", "x") === "https://wa.me/33612345678?text=x"); kitAssert(KIT_PURE.buildSms("0033 6 12 34 56 78", "x", false) === "sms:+33612345678?body=x"); });
 KIT_TESTS.add("liste de dates inline selon le nombre", function () { kitAssert(KIT_PURE.formatDatesList([], "inline") === ""); kitAssert(KIT_PURE.formatDatesList(["2026-06-17"], "inline") === "Mercredi 17 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18"], "inline") === "Mercredi 17 juin 2026 ou Jeudi 18 juin 2026"); kitAssert(KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "inline") === "Mercredi 17 juin 2026, Jeudi 18 juin 2026 ou Vendredi 19 juin 2026"); });
 KIT_TESTS.add("sms iOS avec esperluette", function () { kitAssert(KIT_PURE.buildSms("06 12 34 56 78", "x", true) === "sms:+33612345678&body=x"); });
+KIT_TESTS.add("redirect URI localhost", function () { kitAssert(KIT_PURE.redirectUriFor("localhost") === "http://localhost:8000"); });
+KIT_TESTS.add("redirect URI production", function () { kitAssert(KIT_PURE.redirectUriFor("lupuriel.github.io") === "https://lupuriel.github.io/keepintouch/"); });
+KIT_TESTS.add("classification consentement MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "AADSTS65001: consent_required" }) === "consentement-requis"); });
+KIT_TESTS.add("classification accès non affecté MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "AADSTS50105: accès non affecté" }) === "consentement-requis"); });
+KIT_TESTS.add("classification réseau MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "Failed to fetch: network error" }) === "indisponible"); });
+KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ name: "InteractionRequiredAuthError" }) === "interaction"); });
+KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
+function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
+function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
+KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
+KIT_TESTS.add("AE2 et AE3 occupants sans trigramme écartent", function () { ["US — Audience", "Réunion cabinet"].forEach(function (title) { var e = graphEvent(title, "busy", "2026-08-03T13:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 0); }); });
+KIT_TESTS.add("AE11 journée entière libre n'occupe pas", function () { var e = graphEvent("Anniversaire Marie", "free", "2026-08-03T00:00:00.0000000", "2026-08-04T00:00:00.0000000", true); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 1); });
+KIT_TESTS.add("AE4 Province exige toute la journée libre", function () { var e = graphEvent("Réunion", "busy", "2026-08-03T17:00:00.0000000", "2026-08-03T18:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", false, candidateSettings()).length === 0); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 1); });
+KIT_TESTS.add("AE10 exclusions août plein et fêtes", function () { var august = candidateSettings({ horizon: { minJours: 13, maxJours: 32, plafond: 30 }, exclusions: { aoutPlein: true, fetesFinAnnee: false } }); var dates = KIT_PURE.generateCandidateHorizon("2026-07-30", august); kitAssert(dates.indexOf("2026-08-12") < 0 && dates.indexOf("2026-08-31") >= 0); var holidays = candidateSettings({ horizon: { minJours: 0, maxJours: 12, plafond: 20 }, exclusions: { aoutPlein: false, fetesFinAnnee: true } }); var yearEnd = KIT_PURE.generateCandidateHorizon("2026-12-24", holidays); kitAssert(yearEnd.indexOf("2026-12-28") < 0 && yearEnd.indexOf("2027-01-04") >= 0); });
+KIT_TESTS.add("fenêtres de repas utilisent le chevauchement", function () { var base = "2026-08-03T", end = ":00.0000000"; function available(meal, start, finish) { var e = graphEvent("Réunion", "busy", base + start + end, base + finish + end); return KIT_PURE.candidateDates("2026-07-31", [e], meal, true, candidateSettings()).length === 1; } kitAssert(!available("dejeuner", "12:00", "13:00")); kitAssert(available("dejeuner", "16:00", "17:00") && available("diner", "16:00", "17:00")); kitAssert(!available("diner", "19:00", "20:00")); kitAssert(!available("petitdej", "09:00", "10:00")); });
+KIT_TESTS.add("statuts occupants Graph", function () { kitAssert(KIT_PURE.isOccupyingStatus("busy") && KIT_PURE.isOccupyingStatus("tentative") && KIT_PURE.isOccupyingStatus("oof")); kitAssert(!KIT_PURE.isOccupyingStatus("free") && !KIT_PURE.isOccupyingStatus("workingElsewhere")); });
+KIT_TESTS.add("trigrammes réels avec frontière et casse", function () { var listed = ["TR", "CGI", "CME"]; kitAssert(KIT_PURE.subjectStartsWithTrigram("TR - TEREOS C/ TABET - Dernier délai conclusion défendeur en réponse", listed)); kitAssert(KIT_PURE.subjectStartsWithTrigram("CGI - MEDIA & ARTISANAT / JONQUIERES (CA) : deadline pour envoyer nos conclusions", listed)); kitAssert(KIT_PURE.subjectStartsWithTrigram("cgi - x", listed)); kitAssert(!KIT_PURE.subjectStartsWithTrigram("CMEX - réunion", listed)); kitAssert(!KIT_PURE.subjectStartsWithTrigram("Usine", ["US"])); });
+KIT_TESTS.add("pagination accumule plus de 100 événements", function () { var first = new Array(100).fill({ subject: "a" }); var all = KIT_PURE.accumulateGraphPage([], { value: first }); all = KIT_PURE.accumulateGraphPage(all, { value: [{ subject: "b" }] }); kitAssert(all.length === 101); });
+KIT_TESTS.add("plafond conserve les dix premières dates", function () { var s = candidateSettings({ horizon: { minJours: 0, maxJours: 30, plafond: 10 } }); var dates = KIT_PURE.candidateDates("2026-09-01", [], "dejeuner", true, s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14"])); });
+KIT_TESTS.add("journée entière occupée bloque toutes les fenêtres", function () { var e = graphEvent("Séminaire", "busy", "2026-08-03T00:00:00.0000000", "2026-08-04T00:00:00.0000000", true); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 0); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "diner", true, candidateSettings()).length === 0); });
+KIT_TESTS.add("horizon respecte J+3 et les jours ouvrés", function () { var s = candidateSettings({ horizon: { minJours: 3, maxJours: 6, plafond: 10 } }); var dates = KIT_PURE.generateCandidateHorizon("2026-07-30", s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-08-03", "2026-08-04", "2026-08-05"])); });
+  </script>
+  <script>
+var KIT_AGENDA = (function () {
+  var STORAGE_KEY = "kit-crm-v5";
+  var SCOPES = ["Calendars.ReadBasic"];
+  var state = { etat: "deconnecte", compte: "" };
+  var listeners = [];
+  var checkpointProvider = null;
+  var restoreHandler = null;
+  var pendingRestore = null;
+  var client = null;
+
+  function publish(next) {
+    state = next;
+    listeners.slice().forEach(function (fn) { try { fn(state); } catch (e) {} });
+  }
+  function accountLabel(account) { return account && (account.username || account.name) || ""; }
+  function removeCheckpointEntry(id) {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      var entries = saved.pendingInvites || [];
+      if (!entries.some(function (x) { return x && x.id === id; })) return;
+      saved.pendingInvites = entries.filter(function (x) { return !x || x.id !== id; });
+      var serialized = JSON.stringify(saved);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      if (localStorage.getItem(STORAGE_KEY) !== serialized) throw new Error("relecture retrait");
+    } catch (e) { /* silencieux : l'entrée sera re-consommée au prochain chargement */ }
+  }
+  function deliverRestore() {
+    if (!pendingRestore || !restoreHandler) return;
+    var checkpoint = pendingRestore;
+    pendingRestore = null;
+    removeCheckpointEntry(checkpoint.id);
+    restoreHandler(checkpoint);
+  }
+  function consumeCheckpoint() {
+    var raw;
+    try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+    if (!raw) return;
+    try {
+      var saved = JSON.parse(raw);
+      var entries = saved.pendingInvites || [];
+      var checkpoint = entries.find(function (x) { return x && x.statut === "checkpoint-composition"; });
+      if (!checkpoint) return;
+      // L'entrée reste en localStorage jusqu'à sa livraison effective à React :
+      // un redirect automatique avant le montage ne peut plus perdre le brouillon.
+      pendingRestore = checkpoint;
+      deliverRestore();
+    } catch (e2) {
+      publish({ etat: "indisponible", compte: "", message: "Impossible de restaurer le brouillon." });
+    }
+  }
+  function checkpoint() {
+    if (!checkpointProvider) return true;
+    var packet = checkpointProvider();
+    if (!packet) return true;
+    try {
+      var serialized = JSON.stringify(packet.data);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      var back = localStorage.getItem(STORAGE_KEY);
+      if (back !== serialized) throw new Error("relecture différente");
+      var checked = JSON.parse(back);
+      if (!(checked.pendingInvites || []).some(function (x) { return x.id === packet.entry.id && x.statut === "checkpoint-composition"; })) throw new Error("checkpoint absent");
+      return packet.entry.id;
+    } catch (e) {
+      alert("Impossible d'enregistrer le brouillon — connexion annulée.");
+      return false;
+    }
+  }
+  function redirect(method) {
+    if (!navigator.onLine) { publish({ etat: "indisponible", compte: "" }); return Promise.resolve(); }
+    var saved = checkpoint();
+    if (saved === false) return Promise.resolve();
+    return method({ scopes: SCOPES, redirectUri: KIT_PURE.redirectUriFor(location.hostname) }).catch(function (error) {
+      if (typeof saved === "string") removeCheckpointEntry(saved);
+      publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+    });
+  }
+  function silent(account, allowRedirect) {
+    return client.acquireTokenSilent({ scopes: SCOPES, account: account }).then(function (result) {
+      var chosen = result.account || account;
+      publish({ etat: "connecte", compte: accountLabel(chosen) });
+      return result.accessToken;
+    }).catch(function (error) {
+      var kind = KIT_PURE.classifyMsalError(error);
+      if (kind === "interaction" && allowRedirect) {
+        if (!navigator.onLine) { publish({ etat: "indisponible", compte: accountLabel(account) }); return null; }
+        return redirect(function (request) { request.account = account; return client.acquireTokenRedirect(request); }).then(function () { return null; });
+      }
+      publish({ etat: kind, compte: accountLabel(account) });
+      return null;
+    });
+  }
+  function purge() {
+    var keys = [];
+    for (var i = 0; i < localStorage.length; i += 1) {
+      var key = localStorage.key(i);
+      if (KIT_PURE.shouldPurgeMsalKey(key)) keys.push(key);
+    }
+    keys.forEach(function (key) { localStorage.removeItem(key); });
+  }
+
+  var ready = Promise.resolve();
+  try {
+    client = new msal.PublicClientApplication({
+      auth: {
+        clientId: "e7f79152-aea0-4672-a680-a2eb9040974d",
+        authority: "https://login.microsoftonline.com/c07cfba5-a8cc-4225-a260-31c6ea54ac33",
+        redirectUri: KIT_PURE.redirectUriFor(location.hostname)
+      },
+      cache: { cacheLocation: "localStorage" }
+    });
+    ready = client.initialize().then(function () {
+      return client.handleRedirectPromise().then(function (result) {
+        consumeCheckpoint();
+        var account = result && result.account || client.getAllAccounts()[0];
+        if (!account) { publish({ etat: "deconnecte", compte: "" }); return null; }
+        if (result && result.accessToken) { publish({ etat: "connecte", compte: accountLabel(account) }); return result.accessToken; }
+        return silent(account, true);
+      }, function (error) {
+        publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+        consumeCheckpoint();
+        return null;
+      });
+    }).catch(function (error) {
+      publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
+      consumeCheckpoint();
+      return null;
+    });
+  } catch (error) {
+    publish({ etat: "indisponible", compte: "" });
+  }
+
+  return {
+    getState: function () { return state; },
+    subscribe: function (fn) { listeners.push(fn); fn(state); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
+    setCheckpointProvider: function (fn) { checkpointProvider = fn; },
+    setRestoreHandler: function (fn) { restoreHandler = fn; deliverRestore(); },
+    getToken: function (done) {
+      ready.then(function () {
+        var account = client && client.getAllAccounts()[0];
+        if (!account) {
+          if (state.etat === "connecte" || state.etat === "deconnecte") publish({ etat: "deconnecte", compte: "" });
+          done(null);
+          return;
+        }
+        silent(account, false).then(done);
+      }).catch(function () { try { done(null); } catch (e) {} });
+    },
+    connect: function () { return ready.then(function () { return redirect(function (request) { return client.loginRedirect(request); }); }); },
+    disconnect: function () {
+      publish({ etat: "deconnecte", compte: "" });
+      return ready.then(function () {
+        return client && client.clearCache ? client.clearCache() : null;
+      }).catch(function () {}).then(purge);
+    }
+  };
+}());
   </script>
   <script type="text/babel" data-type="module">
 
@@ -137,7 +418,50 @@ var LAST_EXPORT_KEY = "kit-crm-last-export";
 var AUTH_KEY = "kit-crm-auth";
 
 function fetchCandidateDates(ctx, done) {
-  done({ etat: "non-connecte", candidates: [] });
+  var finished = false;
+  function finish(result) { if (!finished) { finished = true; try { done(result); } catch (e) {} } }
+  try {
+    KIT_AGENDA.getToken(function (token) {
+      if (!token) {
+        var agendaState = KIT_AGENDA.getState();
+        finish({ etat: agendaState && agendaState.etat === "deconnecte" ? "non-connecte" : "erreur", candidates: [] });
+        return;
+      }
+      try {
+        var now = new Date();
+        var today = String(now.getFullYear()).padStart(4, "0") + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+        var maxDays = Math.max(0, Number(ctx && ctx.settings && ctx.settings.horizon && ctx.settings.horizon.maxJours) || 0);
+        function graphBoundary(date) {
+          var p = date.split("-");
+          var local = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 0, 0, 0, 0);
+          var minutes = -local.getTimezoneOffset();
+          var sign = minutes >= 0 ? "+" : "-";
+          var absolute = Math.abs(minutes);
+          return date + "T00:00:00" + sign + String(Math.floor(absolute / 60)).padStart(2, "0") + ":" + String(absolute % 60).padStart(2, "0");
+        }
+        var start = graphBoundary(today);
+        var end = graphBoundary(KIT_PURE.addDaysISO(today, maxDays + 1));
+        var url = "https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=" + encodeURIComponent(start) + "&endDateTime=" + encodeURIComponent(end) + "&$select=subject,start,end,showAs,isAllDay&$top=100";
+        var events = [];
+        function loadPage(nextUrl) {
+          // Délai limite par page : un réseau suspendu ne doit jamais figer « Recherche des disponibilités… »
+          var controller = typeof AbortController === "function" ? new AbortController() : null;
+          var timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 15000) : null;
+          fetch(nextUrl, { headers: { Authorization: "Bearer " + token, Prefer: 'outlook.timezone="Romance Standard Time"' }, signal: controller ? controller.signal : undefined }).then(function (response) {
+            if (timer) clearTimeout(timer);
+            if (!response.ok) throw new Error("Graph HTTP " + response.status);
+            return response.json();
+          }).then(function (page) {
+            events = KIT_PURE.accumulateGraphPage(events, page);
+            if (page && page["@odata.nextLink"]) return loadPage(page["@odata.nextLink"]);
+            var candidates = KIT_PURE.candidateDates(today, events, ctx.meal, ctx.idf, ctx.settings || {});
+            finish({ etat: "ok", candidates: candidates });
+          }).catch(function () { if (timer) clearTimeout(timer); finish({ etat: "erreur", candidates: [] }); });
+        }
+        loadPage(url);
+      } catch (e) { finish({ etat: "erreur", candidates: [] }); }
+    });
+  } catch (e) { finish({ etat: "erreur", candidates: [] }); }
 }
 
 async function hashPassword(pwd) {
@@ -199,7 +523,7 @@ function ProtectedApp() {
   return React.createElement(App);
 }
 
-var { useState, useEffect, useCallback, useMemo } = React;
+var { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const STORAGE_KEY = "kit-crm-v5";
 const DEFAULT_CATS = ["Client", "Prospect"];
@@ -232,20 +556,22 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.3.1";
+var APP_VERSION = "1.4.0";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
 var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
+var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
+var LEGACY_MAIL_SUBJECTS = ["Déjeuner ?", "Invitation à déjeuner"];
 function defaultSettings() {
   return { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 28, plafond: 10 }, exclusions: { aoutPlein: true, fetesFinAnnee: true }, idfParDefaut: true, updatedAt: TS_BASE };
 }
 function defaultTemplates() {
   return [
-    { id: "mail-tu", nom: "Mail — tutoiement", canal: "mail", registre: "tu", objet: "Déjeuner ?", corps: "Salut {prenom},\n\nJ'espère que tu vas bien ?\n\n{accroche}Que dirais-tu de nous organiser un {type} prochainement ?\n\nJ'ai quelques disponibilités à venir :\n\n{dates}\n\nLe cas échéant, est-ce qu'une de ces dates pourrait te convenir ?\n\nA très bientôt,", nbDates: 3, updatedAt: TS_BASE },
-    { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: "Invitation à déjeuner", corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
+    { id: "mail-tu", nom: "Mail — tutoiement", canal: "mail", registre: "tu", objet: MAIL_SUBJECT, corps: "Salut {prenom},\n\nJ'espère que tu vas bien ?\n\n{accroche}Que dirais-tu de nous organiser un {type} prochainement ?\n\nJ'ai quelques disponibilités à venir :\n\n{dates}\n\nLe cas échéant, est-ce qu'une de ces dates pourrait te convenir ?\n\nA très bientôt,", nbDates: 3, updatedAt: TS_BASE },
+    { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: MAIL_SUBJECT, corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
     { id: "texte-tu", nom: "WhatsApp/SMS — tutoiement", canal: "texte", registre: "tu", corps: "Salut {prenom} ! Tu vas bien ? {accroche}Serais-tu disponible pour un {type} la semaine prochaine ? A très bientôt !", nbDates: 0, updatedAt: TS_BASE },
     { id: "texte-vous", nom: "WhatsApp/SMS — vouvoiement", canal: "texte", registre: "vous", corps: "Bonjour {prenom}, j'espère que vous allez bien. {accroche}Seriez-vous disponible pour un {type} la semaine prochaine ? Bien à vous,", nbDates: 0, updatedAt: TS_BASE }
   ];
@@ -264,6 +590,11 @@ function migrateData(d) {
   if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
   if (!d.settings) { d.settings = defaultSettings(); changed = true; }
   if (!Array.isArray(d.templates)) { d.templates = defaultTemplates(); changed = true; }
+  /* Objets de mail historiques remplacés par le libellé « Entreprise - Proposition de … ».
+     Un objet personnalisé par l'utilisateur n'est jamais écrasé. */
+  d.templates.forEach(function (t) {
+    if (t.canal === "mail" && LEGACY_MAIL_SUBJECTS.indexOf(t.objet) >= 0) { t.objet = MAIL_SUBJECT; changed = true; }
+  });
   d.contacts.forEach(function (c) {
     if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
     if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
@@ -880,6 +1211,8 @@ function App() {
   var [confirmInviteVisible, setConfirmInviteVisible] = useState(false);
   var [replayInvite, setReplayInvite] = useState(null);
   var [doubleInviteId, setDoubleInviteId] = useState(null);
+  var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
+  var candidateReqSeq = useRef(0);
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -993,6 +1326,51 @@ function App() {
     });
     return true;
   }, [data]);
+
+  useEffect(function () {
+    return KIT_AGENDA.subscribe(setAgendaState);
+  }, []);
+
+  useEffect(function () {
+    KIT_AGENDA.setRestoreHandler(function (checkpoint) {
+      try {
+        var current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        setData(current);
+        idbSet("data", current);
+      } catch (e) {}
+      // La restauration prime : une confirmation éclair déjà affichée (z-1020) recouvrirait
+      // la feuille restaurée (z-1000) ; l'entrée « lien-ouvert » persistée se représentera.
+      setConfirmInviteVisible(false);
+      restoreInvite(checkpoint);
+    });
+    return function () { KIT_AGENDA.setRestoreHandler(null); };
+  }, []);
+
+  useEffect(function () {
+    KIT_AGENDA.setCheckpointProvider(function () {
+      if (!showInvite || !data || !inviteId) return null;
+      var entry = {
+        id: makeId(),
+        contactId: inviteId,
+        statut: "checkpoint-composition",
+        meal: inviteType,
+        canal: inviteCanal,
+        registre: inviteRegister,
+        dates: inviteDates.slice(),
+        manualDates: inviteManualDates.slice(),
+        candidateDates: inviteCandidateDates.slice(),
+        candidateResult: inviteCandidateResult,
+        idf: inviteIdf,
+        step: inviteStep,
+        coord: inviteCoord,
+        objet: inviteObjet,
+        corps: inviteCorps,
+        createdAt: nowTS()
+      };
+      return { entry: entry, data: Object.assign({}, data, { pendingInvites: (data.pendingInvites || []).concat([entry]) }) };
+    });
+    return function () { KIT_AGENDA.setCheckpointProvider(null); };
+  }, [showInvite, data, inviteId, inviteType, inviteCanal, inviteRegister, inviteDates, inviteManualDates, inviteCandidateDates, inviteCandidateResult, inviteIdf, inviteStep, inviteCoord, inviteObjet, inviteCorps]);
 
   async function enableNotifs() {
     setShowMenu(false);
@@ -1192,8 +1570,8 @@ function App() {
   function restoreInvite(payload) {
     setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
     setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
-    setInviteCandidateDates([]); setInviteManualDates((payload.dates || []).slice()); setInviteCandidateResult({ etat: "non-connecte", candidates: [] });
-    setInviteStep("preview"); setInviteCoord(""); setShowInvite(true); setReplayInvite(null);
+    setInviteCandidateDates((payload.candidateDates || []).slice()); setInviteManualDates((payload.manualDates || payload.dates || []).slice()); setInviteCandidateResult(payload.candidateResult || { etat: "non-connecte", candidates: [] });
+    setInviteIdf(payload.idf !== false); setInviteStep(payload.step || "preview"); setInviteCoord(payload.coord || ""); setShowInvite(true); setReplayInvite(null);
   }
   function updateComposedDates(candidates, manual) {
     setInviteDates(KIT_PURE.mergeDates(candidates, manual));
@@ -1202,11 +1580,16 @@ function App() {
     var c = contacts.find(function (x) { return x.id === inviteId; });
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!c || !t) return;
+    // Garde de séquence : seule la réponse de la DERNIÈRE demande s'applique
+    // (changer de repas ou basculer IDF/Province pendant un vol ne mélange plus les résultats).
+    var seq = candidateReqSeq.current + 1;
+    candidateReqSeq.current = seq;
     setInviteCandidateResult({ etat: "chargement", candidates: [] });
     setInviteCandidateDates([]);
     setInviteManualDates([]);
     setInviteDates([]);
     fetchCandidateDates({ meal: meal, idf: idf, settings: data.settings || {}, contact: c }, function (result) {
+      if (seq !== candidateReqSeq.current) return;
       var normalized = result || { etat: "erreur", candidates: [] };
       var candidates = KIT_PURE.mergeDates(normalized.candidates || [], []);
       var checked = normalized.etat === "ok" ? candidates.slice(0, Number(t.nbDates || 0)) : [];
@@ -1227,8 +1610,8 @@ function App() {
     var c = contacts.find(function (x) { return x.id === inviteId; });
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!c || !t) return;
-    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType] };
-    setInviteObjet(KIT_PURE.renderTemplate(t.objet || "", vals));
+    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType], entreprise: (c.company || "").trim() };
+    setInviteObjet(KIT_PURE.cleanSubject(KIT_PURE.renderTemplate(t.objet || "", vals)));
     setInviteCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
     setInviteStep("preview");
   }
@@ -2985,6 +3368,30 @@ function App() {
         {showMeetingSettings ? (
           <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
             <p style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: ac }}>{"Rencontres & agenda"}</p>
+            <div style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 10, padding: 14, marginBottom: 16 }}>
+              <p style={{ margin: "0 0 5px", fontSize: 14, fontWeight: 700, color: ac }}>Connecter mon agenda</p>
+              {agendaState.etat === "connecte" ? (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#234A41" }}>{"Agenda connecté" + (agendaState.compte ? " · " + agendaState.compte : "")}</p>
+                  <button onClick={function () { KIT_AGENDA.disconnect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", color: ac, cursor: "pointer", fontFamily: ff }}>Se déconnecter</button>
+                </div>
+              ) : agendaState.etat === "consentement-requis" ? (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#9A3115" }}>Accès ou consentement administrateur en attente</p>
+                  <button onClick={function () { KIT_AGENDA.connect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: ac, color: "#fff", cursor: "pointer", fontFamily: ff }}>Réessayer</button>
+                </div>
+              ) : agendaState.etat === "indisponible" ? (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748B" }}>Agenda indisponible{navigator.onLine ? "." : " hors ligne. Le mode de secours reste disponible."}</p>
+                  {navigator.onLine ? <button onClick={function () { KIT_AGENDA.connect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: ac, color: "#fff", cursor: "pointer", fontFamily: ff }}>Réessayer</button> : null}
+                </div>
+              ) : (
+                <div>
+                  <p style={{ margin: "0 0 10px", fontSize: 13, color: "#64748B" }}>Connectez votre compte Microsoft pour préparer la lecture de vos disponibilités.</p>
+                  <button onClick={function () { KIT_AGENDA.connect(); }} style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: ac, color: "#fff", cursor: "pointer", fontFamily: ff }}>Connecter</button>
+                </div>
+              )}
+            </div>
             <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>COLLABORATEURS (TRIGRAMMES SÉPARÉS PAR DES VIRGULES)</label>
             <input defaultValue={(data.settings.trigrammes || []).join(", ")} onBlur={function (e) { var v = e.target.value; updateMeetingSettings(function (s) { s.trigrammes = v.split(",").map(function (x) { return x.trim(); }).filter(Boolean); }); }} style={{ width: "100%", padding: 9, margin: "4px 0 14px", borderRadius: 8, border: "1.5px solid " + bd, boxSizing: "border-box" }} />
             <p style={{ margin: "0 0 6px", fontSize: 12, fontWeight: 700, color: "#64748B" }}>FENÊTRES PAR TYPE</p>
