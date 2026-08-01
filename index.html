@@ -40,6 +40,26 @@ var KIT_PURE = (function () {
     var p = String(isoDate || "").split("-");
     return p.length === 3 ? new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])) : null;
   }
+  function nextAnnualOccurrence(dateISO, todayISO) {
+    function validParts(value) {
+      var p = String(value || "").split("-");
+      if (p.length !== 3 || !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return null;
+      var year = Number(p[0]);
+      var month = Number(p[1]);
+      var day = Number(p[2]);
+      var stamp = new Date(Date.UTC(year, month - 1, day));
+      if (stamp.getUTCFullYear() !== year || stamp.getUTCMonth() !== month - 1 || stamp.getUTCDate() !== day) return null;
+      return { year: year, month: month, day: day };
+    }
+    var source = validParts(dateISO);
+    var today = validParts(todayISO);
+    if (!source || !today) return null;
+    var todayTime = Date.UTC(today.year, today.month - 1, today.day);
+    var occurrenceTime = Date.UTC(today.year, source.month - 1, source.day);
+    if (occurrenceTime < todayTime) occurrenceTime = Date.UTC(today.year + 1, source.month - 1, source.day);
+    var occurrence = new Date(occurrenceTime);
+    return { date: isoDateFromUTC(occurrence), daysLeft: Math.round((occurrenceTime - todayTime) / 86400000) };
+  }
   function formatDateFr(isoDate) {
     var d = dateParts(isoDate);
     return d && !isNaN(d.getTime()) ? DAYS[d.getDay()] + " " + String(d.getDate()) + " " + MONTHS[d.getMonth()] + " " + String(d.getFullYear()) : "";
@@ -193,7 +213,7 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -218,6 +238,12 @@ KIT_TESTS.add("garde-fou mailto détectable", function () { kitAssert(KIT_PURE.b
 KIT_TESTS.add("format date français", function () { kitAssert(KIT_PURE.formatDateFr("2026-06-17") === "Mercredi 17 juin 2026"); });
 KIT_TESTS.add("détection mobile français", function () { kitAssert(KIT_PURE.isMobileFr("06 12 34 56 78") && KIT_PURE.isMobileFr("07 12 34 56 78") && !KIT_PURE.isMobileFr("01 12 34 56 78") && !KIT_PURE.isMobileFr("09 12 34 56 78")); });
 KIT_TESTS.add("canaux invitation vers types non-rencontre", function () { var types = ["mail", "whatsapp", "sms"].map(KIT_PURE.canalToInteractionType); kitAssert(types[0] === "email" && types[1] === "sms" && types[2] === "sms"); kitAssert(types.every(function (x) { return ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"].indexOf(x) < 0; })); });
+KIT_TESTS.add("occurrence annuelle aujourd'hui", function () { var o = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); kitAssert(o.daysLeft === 0 && o.date === "2025-06-15"); });
+KIT_TESTS.add("occurrence annuelle demain", function () { var o = KIT_PURE.nextAnnualOccurrence("1980-06-16", "2025-06-15"); kitAssert(o.daysLeft === 1 && o.date === "2025-06-16"); });
+KIT_TESTS.add("occurrence annuelle hier bascule l'année suivante", function () { var o = KIT_PURE.nextAnnualOccurrence("1980-06-14", "2025-06-15"); kitAssert(o.daysLeft === 364 && o.date === "2026-06-14"); });
+KIT_TESTS.add("occurrence du 29 février en année non bissextile", function () { var o = KIT_PURE.nextAnnualOccurrence("2000-02-29", "2025-01-01"); kitAssert(o.date === "2025-03-01" && o.daysLeft === 59); });
+KIT_TESTS.add("occurrence annuelle indépendante de l'heure", function () { var a = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); var b = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); kitAssert(JSON.stringify(a) === JSON.stringify(b)); });
+KIT_TESTS.add("occurrence annuelle rejette une entrée invalide", function () { kitAssert(KIT_PURE.nextAnnualOccurrence("", "2025-06-15") === null); kitAssert(KIT_PURE.nextAnnualOccurrence("pas-une-date", "2025-06-15") === null); });
 KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
 KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
 KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
@@ -2363,16 +2389,13 @@ function App() {
     return daysUntil(a.followUpDate) - daysUntil(b.followUpDate);
   });
 
+  var upcomingToday = todayStr();
   var upcomingKDs = [];
   activeContacts.forEach(function (c) {
     (c.keyDates || []).forEach(function (kd) {
-      var now = new Date();
-      var d = new Date(kd.date);
-      d.setFullYear(now.getFullYear());
-      if (d < now) d.setFullYear(now.getFullYear() + 1);
-      var diff = Math.floor((d.getTime() - now.getTime()) / 86400000);
-      if (diff >= 0 && diff <= 30) {
-        upcomingKDs.push({ label: kd.label, contactName: displayName(c), daysLeft: diff });
+      var occ = KIT_PURE.nextAnnualOccurrence(kd.date, upcomingToday);
+      if (occ && occ.daysLeft <= 30) {
+        upcomingKDs.push({ label: kd.label, contactName: displayName(c), contactId: c.id, daysLeft: occ.daysLeft, date: occ.date });
       }
     });
   });
@@ -2381,13 +2404,9 @@ function App() {
   var upcomingBdays = [];
   activeContacts.forEach(function (c) {
     if (!c.birthday) return;
-    var now = new Date();
-    var bd = new Date(c.birthday);
-    bd.setFullYear(now.getFullYear());
-    if (bd < now) bd.setFullYear(now.getFullYear() + 1);
-    var diff = Math.floor((bd.getTime() - now.getTime()) / 86400000);
-    if (diff >= 0 && diff <= 30) {
-      upcomingBdays.push({ contactName: displayName(c), contactId: c.id, daysLeft: diff, date: bd.toISOString().split("T")[0] });
+    var occ = KIT_PURE.nextAnnualOccurrence(c.birthday, upcomingToday);
+    if (occ && occ.daysLeft <= 30) {
+      upcomingBdays.push({ contactName: displayName(c), contactId: c.id, daysLeft: occ.daysLeft, date: occ.date });
     }
   });
   upcomingBdays.sort(function (a, b) { return a.daysLeft - b.daysLeft; });
@@ -3135,10 +3154,11 @@ function App() {
           <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
             <h3 style={{ margin: "0 0 10px", fontSize: 14, color: ac }}>{"Dates clés à venir (30j)"}</h3>
             {upcomingKDs.map(function (k, idx) {
+              var text = k.daysLeft === 0 ? "Aujourd'hui !" : "dans " + String(k.daysLeft) + "j";
               return (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid " + bd : "none" }}>
                   <span style={{ fontSize: 13 }}><strong>{k.contactName}</strong>{" — " + k.label}</span>
-                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{"dans " + String(k.daysLeft) + "j"}</span>
+                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{text}</span>
                 </div>
               );
             })}
