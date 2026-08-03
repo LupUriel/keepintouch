@@ -31,7 +31,7 @@ var KIT_PURE = (function () {
   var MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
   var TYPE_NAMES = { petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre", formation_repas: "formation avec repas", conference_repas: "conférence avec repas" };
   function renderTemplate(corps, valeurs) {
-    return String(corps || "").replace(/\{(prenom|accroche|dates|type|entreprise)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+    return String(corps || "").replace(/\{(prenom|accroche|dates|type|entreprise|occasion)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
   }
   function cleanSubject(objet) {
     return String(objet || "").replace(/\s+/g, " ").replace(/^[\s\-–—]+/, "").replace(/[\s\-–—]+$/, "").trim();
@@ -95,6 +95,7 @@ var KIT_PURE = (function () {
   function buildWa(numNational, texte) { return "https://wa.me/" + toIntlDigits(numNational) + "?text=" + encodeURIComponent(texte || ""); }
   function buildSms(numNational, corps, isIOS) { return "sms:" + toE164(numNational) + (isIOS ? "&body=" : "?body=") + encodeURIComponent(corps || ""); }
   function isMobileFr(num) { var n = cleanPhone(num).replace(/^\+33/, "0"); return /^0[67]\d{8}$/.test(n); }
+  function voeuxCanalFor(email, mobile) { return String(email || "").trim() ? "mail" : (String(mobile || "").trim() ? "whatsapp" : "aucun"); }
   function extractPostal(texteLibre) {
     var match = String(texteLibre || "").match(/(?:^|[^\d])((?:0[1-9]|[1-8]\d|9[0-8])\d{3})(?=$|[^\d])/);
     return match ? match[1] : null;
@@ -213,7 +214,7 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -244,6 +245,11 @@ KIT_TESTS.add("occurrence annuelle hier bascule l'année suivante", function () 
 KIT_TESTS.add("occurrence du 29 février en année non bissextile", function () { var o = KIT_PURE.nextAnnualOccurrence("2000-02-29", "2025-01-01"); kitAssert(o.date === "2025-03-01" && o.daysLeft === 59); });
 KIT_TESTS.add("occurrence annuelle indépendante de l'heure", function () { var a = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); var b = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); kitAssert(JSON.stringify(a) === JSON.stringify(b)); });
 KIT_TESTS.add("occurrence annuelle rejette une entrée invalide", function () { kitAssert(KIT_PURE.nextAnnualOccurrence("", "2025-06-15") === null); kitAssert(KIT_PURE.nextAnnualOccurrence("pas-une-date", "2025-06-15") === null); });
+KIT_TESTS.add("canal de vœux selon les coordonnées", function () { kitAssert(KIT_PURE.voeuxCanalFor("a@b.fr", "06 12 34 56 78") === "mail"); kitAssert(KIT_PURE.voeuxCanalFor("", "06 12 34 56 78") === "whatsapp"); kitAssert(KIT_PURE.voeuxCanalFor("", "") === "aucun"); });
+KIT_TESTS.add("rendu des variables de vœux", function () { var s = KIT_PURE.renderTemplate("Bonjour {prenom}, {occasion} — {inconnue}", { prenom: "Léa", occasion: "votre anniversaire" }); kitAssert(s === "Bonjour Léa, votre anniversaire — {inconnue}", s); });
+KIT_TESTS.add("occasion anniversaire selon le registre", function () { var tu = "Salut {prenom}, ton occasion est {occasion}"; var vous = "Chère/Cher {prenom}, votre occasion est {occasion}"; kitAssert(KIT_PURE.renderTemplate(tu, { prenom: "Léa", occasion: "ton anniversaire" }) === "Salut Léa, ton occasion est ton anniversaire"); kitAssert(KIT_PURE.renderTemplate(vous, { prenom: "Léa", occasion: "votre anniversaire" }) === "Chère/Cher Léa, votre occasion est votre anniversaire"); });
+KIT_TESTS.add("migration idempotente des modèles de vœux", function () { var historiques = ["mail-tu", "mail-vous", "texte-tu", "texte-vous"].map(function (id) { return { id: id, canal: id.indexOf("mail") === 0 ? "mail" : "texte" }; }); var voeux = ["voeux-anniv-tu", "voeux-anniv-vous", "voeux-datecle-tu", "voeux-datecle-vous"].map(function (id) { return { id: id, canal: "voeux" }; }); function migrate(d) { var changed = false; if (!d.templates.some(function (t) { return t.canal === "voeux"; })) { d.templates = d.templates.concat(voeux); changed = true; } return { d: d, changed: changed }; } var first = migrate({ templates: historiques }); kitAssert(first.changed && first.d.templates.filter(function (t) { return t.canal === "voeux"; }).length === 4); var second = migrate(first.d); kitAssert(!second.changed && second.d.templates.filter(function (t) { return t.canal === "voeux"; }).length === 4); });
+KIT_TESTS.add("sélection invitation exclut les modèles de vœux", function () { var all = [{ canal: "mail", registre: "tu" }, { canal: "mail", registre: "vous" }, { canal: "texte", registre: "tu" }, { canal: "texte", registre: "vous" }].concat(["tu", "vous"].map(function (registre) { return { canal: "voeux", registre: registre }; })); function select(canal, registre) { var wanted = canal === "mail" ? "mail" : "texte"; return all.find(function (t) { return t.canal === wanted && t.registre === registre; }); } [select("mail", "tu"), select("whatsapp", "vous")].forEach(function (t) { kitAssert(t && t.canal !== "voeux"); }); });
 KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
 KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
 KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
@@ -582,7 +588,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.4.0";
+var APP_VERSION = "1.4.2";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -600,6 +606,14 @@ function defaultTemplates() {
     { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: MAIL_SUBJECT, corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
     { id: "texte-tu", nom: "WhatsApp/SMS — tutoiement", canal: "texte", registre: "tu", corps: "Salut {prenom} ! Tu vas bien ? {accroche}Serais-tu disponible pour un {type} la semaine prochaine ? A très bientôt !", nbDates: 0, updatedAt: TS_BASE },
     { id: "texte-vous", nom: "WhatsApp/SMS — vouvoiement", canal: "texte", registre: "vous", corps: "Bonjour {prenom}, j'espère que vous allez bien. {accroche}Seriez-vous disponible pour un {type} la semaine prochaine ? Bien à vous,", nbDates: 0, updatedAt: TS_BASE }
+  ];
+}
+function defaultVoeuxTemplates() {
+  return [
+    { id: "voeux-anniv-tu", nom: "Vœux anniversaire — tutoiement", canal: "voeux", famille: "anniversaire", registre: "tu", objet: "Joyeux anniversaire !", corps: "Salut {prenom},\n\nJe pense bien à toi aujourd'hui : très joyeux anniversaire !\n\nAu plaisir de se voir bientôt,\n\nÀ très vite,", nbDates: 0, updatedAt: TS_BASE },
+    { id: "voeux-anniv-vous", nom: "Vœux anniversaire — vouvoiement", canal: "voeux", famille: "anniversaire", registre: "vous", objet: "Joyeux anniversaire !", corps: "Chère/Cher {prenom},\n\nJe tenais à vous souhaiter un très joyeux anniversaire.\n\nAu plaisir de vous revoir prochainement,\n\nBien cordialement,", nbDates: 0, updatedAt: TS_BASE },
+    { id: "voeux-datecle-tu", nom: "Vœux date clé — tutoiement", canal: "voeux", famille: "datecle", registre: "tu", objet: "{occasion}", corps: "Salut {prenom},\n\nJe pense bien à toi pour {occasion} !\n\nÀ très vite,", nbDates: 0, updatedAt: TS_BASE },
+    { id: "voeux-datecle-vous", nom: "Vœux date clé — vouvoiement", canal: "voeux", famille: "datecle", registre: "vous", objet: "{occasion}", corps: "Chère/Cher {prenom},\n\nJe tenais à vous adresser mes meilleures pensées à l'occasion de {occasion}.\n\nBien cordialement,", nbDates: 0, updatedAt: TS_BASE }
   ];
 }
 function downloadJSON(obj, filename) {
@@ -621,6 +635,7 @@ function migrateData(d) {
   d.templates.forEach(function (t) {
     if (t.canal === "mail" && LEGACY_MAIL_SUBJECTS.indexOf(t.objet) >= 0) { t.objet = MAIL_SUBJECT; changed = true; }
   });
+  if (!d.templates.some(function (t) { return t.canal === "voeux"; })) { d.templates = d.templates.concat(defaultVoeuxTemplates()); changed = true; }
   d.contacts.forEach(function (c) {
     if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
     if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
@@ -1237,6 +1252,10 @@ function App() {
   var [confirmInviteVisible, setConfirmInviteVisible] = useState(false);
   var [replayInvite, setReplayInvite] = useState(null);
   var [doubleInviteId, setDoubleInviteId] = useState(null);
+  var [voeuxTarget, setVoeuxTarget] = useState(null);
+  var [voeuxObjet, setVoeuxObjet] = useState("");
+  var [voeuxCorps, setVoeuxCorps] = useState("");
+  var [voeuxCanal, setVoeuxCanal] = useState("aucun");
   var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
   var candidateReqSeq = useRef(0);
 
@@ -1571,6 +1590,31 @@ function App() {
     var nums = [c.phonePerso, c.phonePro, c.phone];
     for (var i = 0; i < nums.length; i++) { if (KIT_PURE.isMobileFr(nums[i])) return nums[i]; }
     return "";
+  }
+  function openVoeuxModal(contactId, famille, occasion) {
+    var c = contacts.find(function (x) { return x.id === contactId; });
+    if (!c) return;
+    var registre = c.registre === "tu" ? "tu" : "vous";
+    var renderedOccasion = famille === "anniversaire" ? (registre === "tu" ? "ton anniversaire" : "votre anniversaire") : occasion;
+    var t = (data.templates || []).find(function (x) { return x.canal === "voeux" && x.famille === famille && x.registre === registre; });
+    if (!t) return;
+    var vals = { prenom: c.firstName || displayName(c), occasion: renderedOccasion };
+    setVoeuxTarget({ contactId: contactId, famille: famille, occasion: renderedOccasion });
+    setVoeuxObjet(KIT_PURE.renderTemplate(t.objet || "", vals));
+    setVoeuxCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
+    setVoeuxCanal(KIT_PURE.voeuxCanalFor(c.email, inviteMobile(c)));
+  }
+  function closeVoeuxModal() { setVoeuxTarget(null); setVoeuxObjet(""); setVoeuxCorps(""); setVoeuxCanal("aucun"); }
+  function launchVoeux(canal) {
+    var c = contacts.find(function (x) { return voeuxTarget && x.id === voeuxTarget.contactId; });
+    if (!c) return;
+    var mobile = inviteMobile(c);
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    setVoeuxCanal(canal);
+    if (canal === "mail") location.href = KIT_PURE.buildMailto(c.email, voeuxObjet, voeuxCorps);
+    else if (canal === "whatsapp") window.open(KIT_PURE.buildWa(mobile, voeuxCorps), "_blank", "noopener");
+    else if (canal === "sms") location.href = KIT_PURE.buildSms(mobile, voeuxCorps, isIOS);
+    else navigator.clipboard.writeText(voeuxCorps).catch(function () { alert("Impossible de copier le message — copiez-le depuis l'aperçu."); });
   }
   function resetInvite() {
     setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
@@ -2544,6 +2588,35 @@ function App() {
     );
   }
 
+  function renderVoeuxModal() {
+    if (!voeuxTarget) return null;
+    var c = contacts.find(function (x) { return x.id === voeuxTarget.contactId; });
+    if (!c) return null;
+    var mobile = inviteMobile(c);
+    var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    var actionStyle = { background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff };
+    return (
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={closeVoeuxModal}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 520, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>Envoyer des vœux</h3>
+          <p style={{ margin: "0 0 16px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
+          {c.email ? <input value={voeuxObjet} onChange={function (e) { setVoeuxObjet(e.target.value); }} placeholder="Objet" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", marginBottom: 10 }} /> : null}
+          <textarea value={voeuxCorps} onChange={function (e) { setVoeuxCorps(e.target.value); }} rows={9} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", resize: "vertical" }} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+            {c.email ? <button style={actionStyle} onClick={function () { launchVoeux("mail"); }}>Mail</button> : null}
+            {mobile ? <button style={actionStyle} onClick={function () { launchVoeux("whatsapp"); }}>WhatsApp</button> : null}
+            {mobile && !isPC ? <button style={actionStyle} onClick={function () { launchVoeux("sms"); }}>SMS</button> : null}
+            {isPC || (!c.email && !mobile) ? <button style={actionStyle} onClick={function () { launchVoeux("copie"); }}>Copier</button> : null}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeVoeuxModal}>Fermer</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(c.id, "Vœux — " + voeuxTarget.occasion, todayStr(), KIT_PURE.canalToInteractionType(voeuxCanal), false, false); closeVoeuxModal(); }}>C'est envoyé ✓</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderInviteModal() {
     if (!showInvite) return null;
     var c = contacts.find(function (x) { return x.id === inviteId; });
@@ -3143,7 +3216,7 @@ function App() {
               return (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid #FBCFE8" : "none" }}>
                   <span style={{ fontSize: 13 }}><strong>{b.contactName}</strong>{" — " + fmtDate(b.date)}</span>
-                  <span style={{ fontSize: 12, color: isSoon ? "#BE185D" : "#9D174D", fontWeight: 600, background: isSoon ? "#FCE7F3" : "none", padding: isSoon ? "2px 8px" : 0, borderRadius: 4 }}>{text}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 12, color: isSoon ? "#BE185D" : "#9D174D", fontWeight: 600, background: isSoon ? "#FCE7F3" : "none", padding: isSoon ? "2px 8px" : 0, borderRadius: 4 }}>{text}</span><button onClick={function (e) { e.stopPropagation(); openVoeuxModal(b.contactId, "anniversaire", ""); }} style={{ background: "#fff", color: "#9D174D", border: "1px solid #F9A8D4", borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>🎂 Vœux</button></span>
                 </div>
               );
             })}
@@ -3158,7 +3231,7 @@ function App() {
               return (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid " + bd : "none" }}>
                   <span style={{ fontSize: 13 }}><strong>{k.contactName}</strong>{" — " + k.label}</span>
-                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{text}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{text}</span><button onClick={function (e) { e.stopPropagation(); openVoeuxModal(k.contactId, "datecle", k.label); }} style={{ background: "#fff", color: ac, border: "1px solid " + bd, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>✉ Vœux</button></span>
                 </div>
               );
             })}
@@ -3345,7 +3418,7 @@ function App() {
     save({ templates: next });
   }
   function resetTemplate(id) {
-    var original = defaultTemplates().find(function (t) { return t.id === id; });
+    var original = defaultTemplates().concat(defaultVoeuxTemplates()).find(function (t) { return t.id === id; });
     var next = (data.templates || defaultTemplates()).map(function (t) {
       return t.id === id ? Object.assign({}, original, { updatedAt: nowTS() }) : t;
     });
@@ -3429,9 +3502,9 @@ function App() {
             <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: ac }}>MODÈLES DE MESSAGE</p>
             {(data.templates || []).map(function (t) { return <div key={t.id} style={{ borderTop: "1px solid " + bd, padding: "12px 0" }}>
               <input value={t.nom} onChange={function (e) { updateTemplate(t.id, "nom", e.target.value); }} style={{ width: "100%", padding: 7, fontWeight: 600, boxSizing: "border-box", marginBottom: 6 }} />
-              {t.canal === "mail" ? <input value={t.objet || ""} placeholder="Objet" onChange={function (e) { updateTemplate(t.id, "objet", e.target.value); }} style={{ width: "100%", padding: 7, boxSizing: "border-box", marginBottom: 6 }} /> : null}
+              {t.canal === "mail" || t.canal === "voeux" ? <input value={t.objet || ""} placeholder="Objet" onChange={function (e) { updateTemplate(t.id, "objet", e.target.value); }} style={{ width: "100%", padding: 7, boxSizing: "border-box", marginBottom: 6 }} /> : null}
               <textarea value={t.corps} rows={6} onChange={function (e) { updateTemplate(t.id, "corps", e.target.value); }} style={{ width: "100%", padding: 8, boxSizing: "border-box", fontFamily: ff, resize: "vertical" }} />
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}><label style={{ fontSize: 12 }}>Nombre de dates <input type="number" min="0" value={t.nbDates} onChange={function (e) { updateTemplate(t.id, "nbDates", Number(e.target.value)); }} style={{ width: 55, padding: 5 }} /></label><button onClick={function () { resetTemplate(t.id); }} style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", cursor: "pointer" }}>Réinitialiser ce modèle</button></div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>{t.canal !== "voeux" ? <label style={{ fontSize: 12 }}>Nombre de dates <input type="number" min="0" value={t.nbDates} onChange={function (e) { updateTemplate(t.id, "nbDates", Number(e.target.value)); }} style={{ width: 55, padding: 5 }} /></label> : null}<button onClick={function () { resetTemplate(t.id); }} style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", cursor: "pointer" }}>Réinitialiser ce modèle</button></div>
             </div>; })}
           </div>
         ) : null}
@@ -3646,6 +3719,7 @@ function App() {
     <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: "16px 16px 80px" }}>
       <style>{KIT_CSS}</style>
       {renderLogModal()}
+      {renderVoeuxModal()}
       {renderInviteModal()}
       {renderDoubleInviteModal()}
       {renderPendingInviteModal()}
