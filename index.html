@@ -105,6 +105,9 @@ var KIT_PURE = (function () {
     dates.sort();
     return { shouldWrite: true, drop: dates.slice(0, Math.max(0, dates.length + 1 - Math.max(0, Number(max) || 0))) };
   }
+  function exportModeFor(canShareFiles, hasFsAccess) {
+    return canShareFiles ? "partage" : "telechargement";
+  }
   function isoDateFromUTC(d) {
     return String(d.getUTCFullYear()).padStart(4, "0") + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
@@ -199,7 +202,7 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -232,6 +235,8 @@ KIT_TESTS.add("instantané purge le plus ancien", function () { var dates = []; 
 KIT_TESTS.add("instantané purge multiple", function () { var dates = []; for (var i = 1; i <= 16; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01", "2026-07-02", "2026-07-03"])); });
 KIT_TESTS.add("instantané trie les dates avant purge", function () { var p = KIT_PURE.snapshotPlan(["2026-07-03", "2026-07-01", "2026-07-02"], "2026-08-01", 3); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01"])); });
 KIT_TESTS.add("instantané respecte le maximum paramétrable", function () { var p = KIT_PURE.snapshotPlan(["2026-07-04", "2026-07-02", "2026-07-03", "2026-07-01"], "2026-08-01", 3); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01", "2026-07-02"])); });
+KIT_TESTS.add("partage natif disponible", function () { kitAssert(KIT_PURE.exportModeFor(true, false) === "partage"); });
+KIT_TESTS.add("partage indisponible revient au téléchargement", function () { kitAssert(KIT_PURE.exportModeFor(false, true) === "telechargement" && KIT_PURE.exportModeFor(false, false) === "telechargement"); });
 KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
 KIT_TESTS.add("adresse lyonnaise prérègle Province", function () { var c = { address: "69003 Lyon" }; kitAssert(KIT_PURE.extractPostal(c.address) === "69003" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: true }) === false); });
 KIT_TESTS.add("adresse vide utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "", workLocation: "" }, { idfParDefaut: false }) === false); });
@@ -568,7 +573,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.4.0";
+var APP_VERSION = "1.4.3";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -835,6 +840,72 @@ function saveDailySnapshot(serialized) {
     });
   }).catch(function () {});
 }
+var KIT_TRACKED_FILE = (function () {
+  var handle = null;
+  var active = false;
+  var writing = false;
+  var pending = null;
+  var listeners = [];
+  var state = { supported: typeof window !== "undefined" && "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false };
+  function publish(patch) {
+    state = Object.assign({}, state, patch || {});
+    listeners.slice().forEach(function (cb) { cb(state); });
+  }
+  function subscribe(cb) {
+    listeners.push(cb); cb(state);
+    return function () { listeners = listeners.filter(function (item) { return item !== cb; }); };
+  }
+  function backupJSON(serialized) {
+    return JSON.stringify({ version: "kit-crm-v5", exportDate: localDateISO(new Date()), data: JSON.parse(serialized) }, null, 2);
+  }
+  function drain() {
+    if (writing || !active || !handle || pending === null) return;
+    var json = pending; pending = null; writing = true;
+    handle.createWritable().then(function (writable) {
+      return writable.write(json).then(function () { return writable.close(); });
+    }).then(function () {
+      writing = false;
+      publish({ lastWrite: new Date().toISOString(), failed: false });
+      drain();
+    }).catch(function () {
+      writing = false; pending = null; active = false;
+      publish({ lastWrite: "", failed: true });
+    });
+  }
+  function queue(serialized) {
+    if (!active || !handle) return;
+    try { pending = backupJSON(serialized); drain(); } catch (e) {}
+  }
+  function load() {
+    if (!state.supported) return;
+    idbGet("backupHandle").then(function (stored) {
+      if (!stored) return;
+      handle = stored; active = true;
+      publish({ name: stored.name || "fichier de sauvegarde", failed: false });
+    });
+  }
+  function choose(serialized) {
+    if (!state.supported) return Promise.resolve(false);
+    return window.showSaveFilePicker({ suggestedName: "keepintouch-sauvegarde-" + localDateISO(new Date()) + ".json", types: [{ description: "Sauvegarde JSON", accept: { "application/json": [".json"] } }] }).then(function (chosen) {
+      var permission = typeof chosen.queryPermission === "function" ? chosen.queryPermission({ mode: "readwrite" }) : Promise.resolve("granted");
+      return permission.then(function (result) {
+        if (result === "granted" || typeof chosen.requestPermission !== "function") return result;
+        return chosen.requestPermission({ mode: "readwrite" });
+      }).then(function (result) {
+        if (result !== "granted") throw new Error("permission refusée");
+        handle = chosen; active = true;
+        return idbSet("backupHandle", chosen).then(function () {
+          publish({ name: chosen.name || "fichier de sauvegarde", lastWrite: "", failed: false });
+          queue(serialized); return true;
+        });
+      });
+    }).catch(function (error) {
+      if (error && error.name === "AbortError") return false;
+      active = false; publish({ failed: true }); return false;
+    });
+  }
+  return { subscribe: subscribe, load: load, choose: choose, queue: queue };
+}());
 // Ensemble « à suivre » actionnable maintenant — mêmes règles que la vue À suivre
 function computeDue(contacts) {
   contacts = (contacts || []).filter(function (c) { return !c.archived; });
@@ -1262,6 +1333,7 @@ function App() {
   var [swBuild, setSwBuild] = useState("");
   var [mergePrev, setMergePrev] = useState(null);
   var [saveOk, setSaveOk] = useState(true);
+  var [trackedFile, setTrackedFile] = useState({ supported: "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false });
   var [snapshots, setSnapshots] = useState([]);
   var [logCmt, setLogCmt] = useState("");
   var [logDate, setLogDate] = useState("");
@@ -1362,6 +1434,12 @@ function App() {
   useEffect(function () { return KIT_SAVE_STATUS.subscribe(setSaveOk); }, []);
 
   useEffect(function () {
+    var unsubscribe = KIT_TRACKED_FILE.subscribe(setTrackedFile);
+    KIT_TRACKED_FILE.load();
+    return unsubscribe;
+  }, []);
+
+  useEffect(function () {
     if (!showBackup) return;
     var active = true;
     idbKeys().then(function (keys) {
@@ -1421,6 +1499,7 @@ function App() {
         if (!ok) return false;
         KIT_SAVE_STATUS.notify(true);
         saveDailySnapshot(serialized);
+        KIT_TRACKED_FILE.queue(serialized);
       } catch (e) { KIT_SAVE_STATUS.notify(false); return false; }
       setData(nd); idbSet("data", nd);
       return true;
@@ -1432,6 +1511,7 @@ function App() {
         localStorage.setItem(STORAGE_KEY, serialized);
         KIT_SAVE_STATUS.notify(true);
         saveDailySnapshot(serialized);
+        KIT_TRACKED_FILE.queue(serialized);
       } catch (e) { KIT_SAVE_STATUS.notify(false); }
       idbSet("data", nd);
       return nd;
@@ -2036,6 +2116,34 @@ function App() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     try { localStorage.setItem(LAST_EXPORT_KEY, todayStr()); } catch (eE) {}
     setLastExport(todayStr());
+  }
+
+  function shareBackupJSON() {
+    var backup = { version: "kit-crm-v5", exportDate: todayStr(), data: data };
+    var filename = "keepintouch-sauvegarde-" + todayStr() + ".json";
+    var json = JSON.stringify(backup, null, 2);
+    var file = null;
+    try { file = new File([json], filename, { type: "application/json" }); } catch (e) {}
+    var canShareFiles = false;
+    try { canShareFiles = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e2) {}
+    if (KIT_PURE.exportModeFor(canShareFiles, "showSaveFilePicker" in window) === "partage") {
+      navigator.share({ files: [file], title: "Sauvegarde Keep In Touch" }).catch(function (error) {
+        if (!error || error.name !== "AbortError") downloadJSON(backup, filename);
+      });
+      return;
+    }
+    downloadJSON(backup, filename);
+  }
+
+  function chooseTrackedFile() {
+    var serialized;
+    try { serialized = JSON.stringify(data); } catch (e) { KIT_SAVE_STATUS.notify(false); return; }
+    KIT_TRACKED_FILE.choose(serialized);
+  }
+
+  function trackedWriteLabel() {
+    if (!trackedFile.lastWrite) return "";
+    try { return new Date(trackedFile.lastWrite).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
   }
 
     function handleRestoreJSON(e) {
@@ -3543,7 +3651,17 @@ function App() {
             <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#235C68" }}>Sauvegarde et restauration</p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
               <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={backupJSON}>{"Sauvegarder tout (JSON)"}</button>
+              <button style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={shareBackupJSON}>{"Partager la sauvegarde"}</button>
               <p style={{ margin: "auto 0", fontSize: 12, color: "#235C68" }}>{"Exporte toutes vos données."}</p>
+            </div>
+            {trackedFile.supported ? <div style={{ borderTop: "1px solid #9FCAD3", padding: "12px 0" }}>
+              <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={chooseTrackedFile}>{trackedFile.name ? "Re-choisir le fichier suivi" : "Suivre un fichier de sauvegarde"}</button>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#235C68" }}>{trackedFile.name && !trackedFile.failed ? "Fichier suivi : " + trackedFile.name + (trackedWriteLabel() ? " — dernière écriture " + trackedWriteLabel() : "") : "Aucun fichier suivi"}</p>
+              <p style={{ margin: "5px 0 0", fontSize: 11.5, color: "#2F7C8C" }}>Choisissez de préférence un fichier dans votre dossier OneDrive.</p>
+            </div> : null}
+            <div style={{ borderTop: "1px solid #9FCAD3", padding: "12px 0" }}>
+              <p style={{ margin: "0 0 5px", fontSize: 13, fontWeight: 700, color: "#235C68" }}>Synchroniser mes deux appareils</p>
+              <p style={{ margin: 0, fontSize: 12, color: "#2F7C8C", lineHeight: 1.5 }}>Sur PC, suivez un fichier placé dans OneDrive. Sur Android, partagez la sauvegarde, puis importez-la sur l'autre appareil avec « Importer / fusionner ».</p>
             </div>
             <div style={{ borderTop: "1px solid #9FCAD3", paddingTop: 12 }}>
               <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>{"Importer / fusionner (JSON)"}</p>
@@ -3746,9 +3864,10 @@ function App() {
   }
 
   return (
-    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: (saveOk ? "16px" : "64px") + " 16px 80px" }}>
+    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: (saveOk && !trackedFile.failed ? "16px" : "64px") + " 16px 80px" }}>
       <style>{KIT_CSS}</style>
       {!saveOk ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Vos dernières modifications n'ont pas pu être enregistrées — exportez une sauvegarde</div> : null}
+      {saveOk && trackedFile.failed ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Le fichier suivi n'est plus accessible — re-choisissez-le</div> : null}
       {renderLogModal()}
       {renderInviteModal()}
       {renderDoubleInviteModal()}
