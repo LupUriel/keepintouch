@@ -193,7 +193,14 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  function digitsOf(value) { return String(value || "").replace(/\D/g, ""); }
+  function contactHaystack(contact) {
+    var c = contact || {};
+    var values = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes, c.email, c.phonePro, c.phonePerso, c.phone, c.address, c.workLocation, c.metAt, c.origin, c.nextAction, c.followUpNote];
+    values.push((c.keyDates || []).map(function (entry) { return entry && entry.label; }).filter(Boolean).join(" "));
+    return values.filter(function (value) { return value != null && String(value); }).map(String).join(" ");
+  }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -235,6 +242,10 @@ KIT_TESTS.add("classification accès non affecté MSAL", function () { kitAssert
 KIT_TESTS.add("classification réseau MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "Failed to fetch: network error" }) === "indisponible"); });
 KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ name: "InteractionRequiredAuthError" }) === "interaction"); });
 KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
+KIT_TESTS.add("recherche contact couvre les champs étendus", function () { var hay = KIT_PURE.contactHaystack({ name: "Dupont", firstName: "Léa", lastName: "Martin", company: "Acme", jobTitle: "Associée", sector: "Droit", tags: ["réseau", "alumni"], notes: "Note libre", email: "lea@example.fr", phonePro: "01 23 45 67 89", phonePerso: "06 12 34 56 78", phone: "07 98 76 54 32", address: "12 rue Victor Hugo", workLocation: "La Défense", metAt: "Conférence IA", origin: "Recommandation", nextAction: "Envoyer le dossier", followUpNote: "Rappeler jeudi", keyDates: [{ label: "Anniversaire", date: "2026-09-12" }, { label: "Renouvellement", date: "2027-01-01" }] }); ["Dupont", "Léa", "Martin", "Acme", "Associée", "Droit", "réseau alumni", "Note libre", "lea@example.fr", "01 23 45 67 89", "06 12 34 56 78", "07 98 76 54 32", "12 rue Victor Hugo", "La Défense", "Conférence IA", "Recommandation", "Envoyer le dossier", "Rappeler jeudi", "Anniversaire Renouvellement"].forEach(function (value) { kitAssert(hay.indexOf(value) >= 0, value); }); });
+KIT_TESTS.add("recherche téléphone ignore le formatage", function () { kitAssert(KIT_PURE.digitsOf("06 12 34 56 78").indexOf(KIT_PURE.digitsOf("0612")) >= 0); });
+KIT_TESTS.add("recherche contact tolère les champs absents", function () { kitAssert(KIT_PURE.contactHaystack({}) === "" && KIT_PURE.contactHaystack(null) === ""); });
+KIT_TESTS.add("contact sans coordonnées ne matche pas des chiffres", function () { var c = { name: "Équipe 123" }; var phoneDigits = [c.phonePro, c.phonePerso, c.phone].map(KIT_PURE.digitsOf).join(" "); kitAssert(phoneDigits.indexOf(KIT_PURE.digitsOf("123")) < 0); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -2311,8 +2322,10 @@ function App() {
     if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return false;
     if (search) {
       var q = norm(search);
-      var hay = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes];
-      var hit = hay.some(function (v) { return v && norm(String(v)).indexOf(q) >= 0; });
+      var hay = KIT_PURE.contactHaystack(c);
+      var hit = norm(hay).indexOf(q) >= 0;
+      var queryDigits = KIT_PURE.digitsOf(q);
+      if (!hit && queryDigits.length >= 3) hit = [c.phonePro, c.phonePerso, c.phone].some(function (phone) { return KIT_PURE.digitsOf(phone).indexOf(queryDigits) >= 0; });
       if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
       if (!hit) return false;
     }
@@ -3060,6 +3073,7 @@ function App() {
                   <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     <span style={{ fontSize: 12, color: "#9A3115", fontWeight: 600 }}>{String(daysAwaiting(c)) + "j sans retour"}</span>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
                   </span>
                 </div>
@@ -3077,6 +3091,7 @@ function App() {
                   <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{String(daysRetry(c)) + "j depuis le message"}</span>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
                   </span>
                 </div>
