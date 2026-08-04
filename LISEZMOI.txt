@@ -28,6 +28,14 @@
 1. Ouvrez Chrome et allez sur https://lupuriel.github.io/keepintouch/
 2. Dans la barre d'adresse, cliquez la petite icône « Installer » (ou ⋮ > « Installer Keep In Touch »)
 
+## Envoyer des vœux en un geste
+
+Dans « À suivre », le bouton « Vœux » d'un anniversaire ou d'une date clé ouvre un message
+prérempli que vous pouvez modifier avant de l'envoyer par mail, WhatsApp ou SMS (ou de le
+copier). Les quatre modèles de vœux sont modifiables dans ⋯ > ⚙ Rencontres & agenda >
+« MODÈLES DE MESSAGE ». Après l'envoi, cliquez « C'est envoyé ✓ » pour le journaliser dans
+la fiche ; fermer l'aperçu ne journalise rien.
+
 ## Connexion de l'agenda Outlook (proposition automatique de dates)
 
 L'app peut lire votre agenda Outlook (Microsoft 365) pour proposer d'elle-même des dates de
