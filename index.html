@@ -913,17 +913,28 @@ var KIT_TRACKED_FILE = (function () {
   function backupJSON(serialized) {
     return JSON.stringify({ version: "kit-crm-v5", exportDate: localDateISO(new Date()), data: JSON.parse(serialized) }, null, 2);
   }
+  var retriedOnce = false;
+  var retryTimer = null;
   function drain() {
     if (writing || !active || !handle || pending === null) return;
     var json = pending; pending = null; writing = true;
     handle.createWritable().then(function (writable) {
       return writable.write(json).then(function () { return writable.close(); });
     }).then(function () {
-      writing = false;
+      writing = false; retriedOnce = false;
       publish({ lastWrite: new Date().toISOString(), failed: false });
       drain();
     }).catch(function () {
-      writing = false; pending = null; active = false;
+      writing = false;
+      /* Verrou passager possible (rafale de synchronisation OneDrive, antivirus) : une nouvelle tentative avant de désactiver le suivi */
+      if (!retriedOnce) {
+        retriedOnce = true;
+        if (pending === null) pending = json;
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(function () { retryTimer = null; drain(); }, 4000);
+        return;
+      }
+      retriedOnce = false; pending = null; active = false;
       publish({ lastWrite: "", failed: true });
     });
   }
@@ -948,7 +959,8 @@ var KIT_TRACKED_FILE = (function () {
         return chosen.requestPermission({ mode: "readwrite" });
       }).then(function (result) {
         if (result !== "granted") throw new Error("permission refusée");
-        handle = chosen; active = true;
+        handle = chosen; active = true; retriedOnce = false;
+        if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
         return idbSet("backupHandle", chosen).then(function () {
           publish({ name: chosen.name || "fichier de sauvegarde", lastWrite: "", failed: false });
           queue(serialized); return true;
