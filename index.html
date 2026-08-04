@@ -200,6 +200,12 @@ var KIT_PURE = (function () {
     values.push((c.keyDates || []).map(function (entry) { return entry && entry.label; }).filter(Boolean).join(" "));
     return values.filter(function (value) { return value != null && String(value); }).map(String).join(" ");
   }
+  function matchesPhoneDigits(query, phones) {
+    /* Branche téléphone : uniquement pour une requête qui EST un numéro (chiffres et séparateurs), jamais pour une requête mixte texte+chiffres */
+    var stripped = String(query || "").replace(/[\s.\-()\/+]/g, "");
+    if (stripped.length < 3 || /\D/.test(stripped)) return false;
+    return (phones || []).some(function (phone) { var d = String(phone || "").replace(/\D/g, ""); return d && d.indexOf(stripped) >= 0; });
+  }
   function patchInteraction(entry, patch) {
     var next = Object.assign({}, entry || {});
     ["comment", "date", "type", "awaitingResponse", "retryPending"].forEach(function (key) {
@@ -207,7 +213,7 @@ var KIT_PURE = (function () {
     });
     return next;
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, patchInteraction: patchInteraction };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -250,9 +256,11 @@ KIT_TESTS.add("classification réseau MSAL", function () { kitAssert(KIT_PURE.cl
 KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ name: "InteractionRequiredAuthError" }) === "interaction"); });
 KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
 KIT_TESTS.add("recherche contact couvre les champs étendus", function () { var hay = KIT_PURE.contactHaystack({ name: "Dupont", firstName: "Léa", lastName: "Martin", company: "Acme", jobTitle: "Associée", sector: "Droit", tags: ["réseau", "alumni"], notes: "Note libre", email: "lea@example.fr", phonePro: "01 23 45 67 89", phonePerso: "06 12 34 56 78", phone: "07 98 76 54 32", address: "12 rue Victor Hugo", workLocation: "La Défense", metAt: "Conférence IA", origin: "Recommandation", nextAction: "Envoyer le dossier", followUpNote: "Rappeler jeudi", keyDates: [{ label: "Anniversaire", date: "2026-09-12" }, { label: "Renouvellement", date: "2027-01-01" }] }); ["Dupont", "Léa", "Martin", "Acme", "Associée", "Droit", "réseau alumni", "Note libre", "lea@example.fr", "01 23 45 67 89", "06 12 34 56 78", "07 98 76 54 32", "12 rue Victor Hugo", "La Défense", "Conférence IA", "Recommandation", "Envoyer le dossier", "Rappeler jeudi", "Anniversaire Renouvellement"].forEach(function (value) { kitAssert(hay.indexOf(value) >= 0, value); }); });
-KIT_TESTS.add("recherche téléphone ignore le formatage", function () { kitAssert(KIT_PURE.digitsOf("06 12 34 56 78").indexOf(KIT_PURE.digitsOf("0612")) >= 0); });
+KIT_TESTS.add("recherche téléphone ignore le formatage", function () { kitAssert(KIT_PURE.matchesPhoneDigits("0612", ["06 12 34 56 78"])); kitAssert(KIT_PURE.matchesPhoneDigits("06.12.34", ["06 12 34 56 78"])); });
+KIT_TESTS.add("requête mixte texte et chiffres ne matche pas un téléphone", function () { kitAssert(!KIT_PURE.matchesPhoneDigits("dupont 0612", ["06 12 34 56 78"])); kitAssert(!KIT_PURE.matchesPhoneDigits("12b", ["06 12 34 56 78"])); });
 KIT_TESTS.add("recherche contact tolère les champs absents", function () { kitAssert(KIT_PURE.contactHaystack({}) === "" && KIT_PURE.contactHaystack(null) === ""); });
-KIT_TESTS.add("contact sans coordonnées ne matche pas des chiffres", function () { var c = { name: "Équipe 123" }; var phoneDigits = [c.phonePro, c.phonePerso, c.phone].map(KIT_PURE.digitsOf).join(" "); kitAssert(phoneDigits.indexOf(KIT_PURE.digitsOf("123")) < 0); });
+KIT_TESTS.add("contact sans coordonnées ne matche pas des chiffres", function () { kitAssert(!KIT_PURE.matchesPhoneDigits("123", [undefined, null, ""])); kitAssert(!KIT_PURE.matchesPhoneDigits("12", ["06 12 34 56 78"])); });
+KIT_TESTS.add("patch interaction tolère un patch absent", function () { var e = { iid: "i1", comment: "x" }; var p = KIT_PURE.patchInteraction(e, null); kitAssert(p !== e && p.iid === "i1" && p.comment === "x"); var q = KIT_PURE.patchInteraction(e, undefined); kitAssert(q.iid === "i1" && q.comment === "x"); });
 KIT_TESTS.add("patch interaction préserve iid et métadonnées", function () { var e = { iid: "i1", date: "2026-01-01", invitation: true, meal: "dejeuner", datesProposees: ["2026-02-01"], canal: "mail" }; var p = KIT_PURE.patchInteraction(e, { comment: "Corrigé" }); kitAssert(p !== e && p.iid === "i1" && p.invitation && p.meal === "dejeuner" && p.datesProposees === e.datesProposees && p.canal === "mail"); });
 KIT_TESTS.add("patch interaction applique les champs éditables", function () { var p = KIT_PURE.patchInteraction({ iid: "i1" }, { comment: "Note", date: "2026-08-04", type: "dejeuner", awaitingResponse: true, retryPending: false }); kitAssert(p.comment === "Note" && p.date === "2026-08-04" && p.type === "dejeuner" && p.awaitingResponse === true && p.retryPending === false); });
 KIT_TESTS.add("patch interaction partiel conserve les autres champs", function () { var p = KIT_PURE.patchInteraction({ iid: "i1", comment: "Avant", date: "2026-01-01", type: "email", awaitingResponse: true }, { comment: "Après" }); kitAssert(p.comment === "Après" && p.date === "2026-01-01" && p.type === "email" && p.awaitingResponse === true); });
@@ -1577,7 +1585,17 @@ function App() {
 
   function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setEditIid(null); }
   function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
-  function openEditInteraction(id, entry) { setLogId(id); setEditIid(entry.iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setShowLog(true); }
+  function openEditInteraction(id, entry) {
+    var iid = entry.iid;
+    /* Entrée sans iid (données créées avant la migration de la session) : rétro-remplir avant d'éditer, sinon la confirmation créerait un doublon */
+    if (!iid) {
+      iid = makeId();
+      var c = contacts.find(function (x) { return x.id === id; });
+      if (!c) return;
+      updContact(id, { interactions: (c.interactions || []).map(function (e) { return e === entry ? Object.assign({}, e, { iid: iid }) : e; }) });
+    }
+    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setShowLog(true);
+  }
 
   function inviteMobile(c) {
     var nums = [c.phonePerso, c.phonePro, c.phone];
@@ -2232,10 +2250,10 @@ function App() {
 
       var interactions = [];
       if (rdvVal) {
-        interactions.push({ date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
+        interactions.push({ iid: makeId(), date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
       }
       if (contactVal && contactVal !== rdvVal) {
-        interactions.push({ date: contactVal, comment: "Importé depuis Excel", type: contactType });
+        interactions.push({ iid: makeId(), date: contactVal, comment: "Importé depuis Excel", type: contactType });
       }
       interactions.sort(function (a, b) { return b.date.localeCompare(a.date); });
 
@@ -2351,8 +2369,7 @@ function App() {
       var q = norm(search);
       var hay = KIT_PURE.contactHaystack(c);
       var hit = norm(hay).indexOf(q) >= 0;
-      var queryDigits = KIT_PURE.digitsOf(q);
-      if (!hit && queryDigits.length >= 3) hit = [c.phonePro, c.phonePerso, c.phone].some(function (phone) { return KIT_PURE.digitsOf(phone).indexOf(queryDigits) >= 0; });
+      if (!hit) hit = KIT_PURE.matchesPhoneDigits(search, [c.phonePro, c.phonePerso, c.phone]);
       if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
       if (!hit) return false;
     }
@@ -3086,7 +3103,7 @@ function App() {
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{" — " + fmtDate(c.followUpDate) + " (" + txt + ")"}</span>
                     {c.followUpNote ? <p style={{ margin: "2px 0 0", fontSize: 13, color: "#475569" }}>{c.followUpNote}</p> : null}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <button style={{ background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { updContact(c.id, { followUpDate: "", followUpNote: "" }); }}>{"Fait ✓"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Contacté"}</button>
                   </div>
@@ -3103,7 +3120,7 @@ function App() {
               return (
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #F4D6CB" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
                   <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <span style={{ fontSize: 12, color: "#9A3115", fontWeight: 600 }}>{String(daysAwaiting(c)) + "j sans retour"}</span>
                     <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
@@ -3121,7 +3138,7 @@ function App() {
               return (
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #C7E0E6" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
                   <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{String(daysRetry(c)) + "j depuis le message"}</span>
                     <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
