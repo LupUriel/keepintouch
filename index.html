@@ -232,7 +232,27 @@ var KIT_PURE = (function () {
     return "indisponible";
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey };
+  function digitsOf(value) { return String(value || "").replace(/\D/g, ""); }
+  function contactHaystack(contact) {
+    var c = contact || {};
+    var values = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes, c.email, c.phonePro, c.phonePerso, c.phone, c.address, c.workLocation, c.metAt, c.origin, c.nextAction, c.followUpNote];
+    values.push((c.keyDates || []).map(function (entry) { return entry && entry.label; }).filter(Boolean).join(" "));
+    return values.filter(function (value) { return value != null && String(value); }).map(String).join(" ");
+  }
+  function matchesPhoneDigits(query, phones) {
+    /* Branche téléphone : uniquement pour une requête qui EST un numéro (chiffres et séparateurs), jamais pour une requête mixte texte+chiffres */
+    var stripped = String(query || "").replace(/[\s.\-()\/+]/g, "");
+    if (stripped.length < 3 || /\D/.test(stripped)) return false;
+    return (phones || []).some(function (phone) { var d = String(phone || "").replace(/\D/g, ""); return d && d.indexOf(stripped) >= 0; });
+  }
+  function patchInteraction(entry, patch) {
+    var next = Object.assign({}, entry || {});
+    ["comment", "date", "type", "awaitingResponse", "retryPending"].forEach(function (key) {
+      if (patch && Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
+    });
+    return next;
+  }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -294,6 +314,15 @@ KIT_TESTS.add("classification accès non affecté MSAL", function () { kitAssert
 KIT_TESTS.add("classification réseau MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ message: "Failed to fetch: network error" }) === "indisponible"); });
 KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PURE.classifyMsalError({ name: "InteractionRequiredAuthError" }) === "interaction"); });
 KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
+KIT_TESTS.add("recherche contact couvre les champs étendus", function () { var hay = KIT_PURE.contactHaystack({ name: "Dupont", firstName: "Léa", lastName: "Martin", company: "Acme", jobTitle: "Associée", sector: "Droit", tags: ["réseau", "alumni"], notes: "Note libre", email: "lea@example.fr", phonePro: "01 23 45 67 89", phonePerso: "06 12 34 56 78", phone: "07 98 76 54 32", address: "12 rue Victor Hugo", workLocation: "La Défense", metAt: "Conférence IA", origin: "Recommandation", nextAction: "Envoyer le dossier", followUpNote: "Rappeler jeudi", keyDates: [{ label: "Anniversaire", date: "2026-09-12" }, { label: "Renouvellement", date: "2027-01-01" }] }); ["Dupont", "Léa", "Martin", "Acme", "Associée", "Droit", "réseau alumni", "Note libre", "lea@example.fr", "01 23 45 67 89", "06 12 34 56 78", "07 98 76 54 32", "12 rue Victor Hugo", "La Défense", "Conférence IA", "Recommandation", "Envoyer le dossier", "Rappeler jeudi", "Anniversaire Renouvellement"].forEach(function (value) { kitAssert(hay.indexOf(value) >= 0, value); }); });
+KIT_TESTS.add("recherche téléphone ignore le formatage", function () { kitAssert(KIT_PURE.matchesPhoneDigits("0612", ["06 12 34 56 78"])); kitAssert(KIT_PURE.matchesPhoneDigits("06.12.34", ["06 12 34 56 78"])); });
+KIT_TESTS.add("requête mixte texte et chiffres ne matche pas un téléphone", function () { kitAssert(!KIT_PURE.matchesPhoneDigits("dupont 0612", ["06 12 34 56 78"])); kitAssert(!KIT_PURE.matchesPhoneDigits("12b", ["06 12 34 56 78"])); });
+KIT_TESTS.add("recherche contact tolère les champs absents", function () { kitAssert(KIT_PURE.contactHaystack({}) === "" && KIT_PURE.contactHaystack(null) === ""); });
+KIT_TESTS.add("contact sans coordonnées ne matche pas des chiffres", function () { kitAssert(!KIT_PURE.matchesPhoneDigits("123", [undefined, null, ""])); kitAssert(!KIT_PURE.matchesPhoneDigits("12", ["06 12 34 56 78"])); });
+KIT_TESTS.add("patch interaction tolère un patch absent", function () { var e = { iid: "i1", comment: "x" }; var p = KIT_PURE.patchInteraction(e, null); kitAssert(p !== e && p.iid === "i1" && p.comment === "x"); var q = KIT_PURE.patchInteraction(e, undefined); kitAssert(q.iid === "i1" && q.comment === "x"); });
+KIT_TESTS.add("patch interaction préserve iid et métadonnées", function () { var e = { iid: "i1", date: "2026-01-01", invitation: true, meal: "dejeuner", datesProposees: ["2026-02-01"], canal: "mail" }; var p = KIT_PURE.patchInteraction(e, { comment: "Corrigé" }); kitAssert(p !== e && p.iid === "i1" && p.invitation && p.meal === "dejeuner" && p.datesProposees === e.datesProposees && p.canal === "mail"); });
+KIT_TESTS.add("patch interaction applique les champs éditables", function () { var p = KIT_PURE.patchInteraction({ iid: "i1" }, { comment: "Note", date: "2026-08-04", type: "dejeuner", awaitingResponse: true, retryPending: false }); kitAssert(p.comment === "Note" && p.date === "2026-08-04" && p.type === "dejeuner" && p.awaitingResponse === true && p.retryPending === false); });
+KIT_TESTS.add("patch interaction partiel conserve les autres champs", function () { var p = KIT_PURE.patchInteraction({ iid: "i1", comment: "Avant", date: "2026-01-01", type: "email", awaitingResponse: true }, { comment: "Après" }); kitAssert(p.comment === "Après" && p.date === "2026-01-01" && p.type === "email" && p.awaitingResponse === true); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -615,7 +644,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.4.3";
+var APP_VERSION = "1.4.4";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -1409,6 +1438,7 @@ function App() {
   var [logRetry, setLogRetry] = useState(false);
   var [showLog, setShowLog] = useState(false);
   var [logId, setLogId] = useState(null);
+  var [editIid, setEditIid] = useState(null);
   var [showImp, setShowImp] = useState(false);
   var [showMenu, setShowMenu] = useState(false);
   var [showBackup, setShowBackup] = useState(false);
@@ -1779,6 +1809,20 @@ function App() {
     updContact(id, patch, rootUpdates);
   }
 
+  function updateInteraction(contactId, iid, patch) {
+    var c = contacts.find(function (x) { return x.id === contactId; });
+    if (!c) return;
+    var found = false;
+    var interactions = (c.interactions || []).map(function (entry) {
+      if (entry.iid !== iid) return entry;
+      found = true;
+      return KIT_PURE.patchInteraction(entry, patch);
+    });
+    if (!found) return;
+    interactions.sort(function (a, b) { return String(b.date || "").localeCompare(String(a.date || "")); });
+    updContact(contactId, { interactions: interactions });
+  }
+
   function deleteInteraction(id, idx) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
@@ -1808,7 +1852,19 @@ function App() {
   function archiveContact(id) { updContact(id, { archived: true }); }
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
-  function openLogModal(id) { setLogId(id); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setEditIid(null); }
+  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+  function openEditInteraction(id, entry) {
+    var iid = entry.iid;
+    /* Entrée sans iid (données créées avant la migration de la session) : rétro-remplir avant d'éditer, sinon la confirmation créerait un doublon */
+    if (!iid) {
+      iid = makeId();
+      var c = contacts.find(function (x) { return x.id === id; });
+      if (!c) return;
+      updContact(id, { interactions: (c.interactions || []).map(function (e) { return e === entry ? Object.assign({}, e, { iid: iid }) : e; }) });
+    }
+    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setShowLog(true);
+  }
 
   function inviteMobile(c) {
     var nums = [c.phonePerso, c.phonePro, c.phone];
@@ -2524,10 +2580,10 @@ function App() {
 
       var interactions = [];
       if (rdvVal) {
-        interactions.push({ date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
+        interactions.push({ iid: makeId(), date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
       }
       if (contactVal && contactVal !== rdvVal) {
-        interactions.push({ date: contactVal, comment: "Importé depuis Excel", type: contactType });
+        interactions.push({ iid: makeId(), date: contactVal, comment: "Importé depuis Excel", type: contactType });
       }
       interactions.sort(function (a, b) { return b.date.localeCompare(a.date); });
 
@@ -2641,8 +2697,9 @@ function App() {
     if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return false;
     if (search) {
       var q = norm(search);
-      var hay = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes];
-      var hit = hay.some(function (v) { return v && norm(String(v)).indexOf(q) >= 0; });
+      var hay = KIT_PURE.contactHaystack(c);
+      var hit = norm(hay).indexOf(q) >= 0;
+      if (!hit) hit = KIT_PURE.matchesPhoneDigits(search, [c.phonePro, c.phonePerso, c.phone]);
       if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
       if (!hit) return false;
     }
@@ -2813,9 +2870,10 @@ function App() {
     for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === logId) { c = contacts[i]; break; } }
     if (!c) return null;
     return (
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={function () { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>Enregistrer un contact</h3>
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={closeLogModal}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%", position: "relative" }} onClick={function (e) { e.stopPropagation(); }}>
+          <button title="Fermer" onClick={closeLogModal} style={{ position: "absolute", top: 12, right: 12, background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 6, fontFamily: ff }}>{"✕"}</button>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>{editIid ? "Modifier l'interaction" : "Enregistrer un contact"}</h3>
           <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TYPE D'INTERACTION</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
@@ -2841,8 +2899,8 @@ function App() {
             {"🔁 Tentative de nouvel échange (relance conseillée après " + String(FOLLOWUP_RETRY_DAYS) + " jours)"}
           </label>
           <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
-            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>Annuler</button>
-            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>Confirmer</button>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeLogModal}>Annuler</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { if (editIid) updateInteraction(logId, editIid, { comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: !!logAwait, retryPending: !!logRetry }); else logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
           </div>
         </div>
       </div>
@@ -3330,6 +3388,7 @@ function App() {
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>Enregistrer :</span>
           <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Je l'ai contacté"}</button>
+          <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(c.id, "", todayStr(), "dejeuner", false, false); }}>{"Déjeuner ✓"}</button>
         </div>
 
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
@@ -3360,7 +3419,10 @@ function App() {
                       </p>
                       {x.comment ? <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#475569" }}>{x.comment}</p> : null}
                     </div>
-                    <button title="Supprimer cette interaction" className="kit-btn" onClick={function () { deleteInteraction(c.id, idx); }} style={{ alignSelf: "flex-start", background: "transparent", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff, flexShrink: 0 }}>{"✕"}</button>
+                    <div style={{ display: "flex", alignItems: "flex-start", flexShrink: 0 }}>
+                      <button title="Modifier cette interaction" className="kit-btn" onClick={function () { openEditInteraction(c.id, x); }} style={{ background: "transparent", border: "none", color: "#64748B", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff }}>{"✏"}</button>
+                      <button title="Supprimer cette interaction" className="kit-btn" onClick={function () { deleteInteraction(c.id, idx); }} style={{ background: "transparent", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff }}>{"✕"}</button>
+                    </div>
                   </div>
                 );
               })}
@@ -3394,7 +3456,7 @@ function App() {
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{" — " + fmtDate(c.followUpDate) + " (" + txt + ")"}</span>
                     {c.followUpNote ? <p style={{ margin: "2px 0 0", fontSize: 13, color: "#475569" }}>{c.followUpNote}</p> : null}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <button style={{ background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { updContact(c.id, { followUpDate: "", followUpNote: "" }); }}>{"Fait ✓"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Contacté"}</button>
                   </div>
@@ -3411,8 +3473,9 @@ function App() {
               return (
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #F4D6CB" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
                   <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <span style={{ fontSize: 12, color: "#9A3115", fontWeight: 600 }}>{String(daysAwaiting(c)) + "j sans retour"}</span>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
                   </span>
                 </div>
@@ -3428,8 +3491,9 @@ function App() {
               return (
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #C7E0E6" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
                   <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{String(daysRetry(c)) + "j depuis le message"}</span>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
                   </span>
                 </div>
@@ -3460,6 +3524,7 @@ function App() {
                     <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{label}</span>
                     <button style={{ background: "transparent", color: "#9A3115", border: "1px solid #F4D6CB", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); snoozeRencontre(c.id); }} title={"Reporter de " + String((cycleFor(c) || { due: 12 }).due) + " mois"}>{"⏸"}</button>
                     <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); logInteraction(c.id, "", todayStr(), "dejeuner", false, false); }}>{"Déjeuner ✓"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openLogModal(c.id); }}>{"Enregistrer"}</button>
                   </div>
                 </div>

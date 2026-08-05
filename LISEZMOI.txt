@@ -85,6 +85,8 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 ## Vos données
 
+Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
+
 - Les données sont stockées LOCALEMENT dans chaque navigateur
 - Les données du PC et du mobile sont INDÉPENDANTES
 - Faites régulièrement une sauvegarde (Sauvegarder/JSON dans le tableau de bord) ;
