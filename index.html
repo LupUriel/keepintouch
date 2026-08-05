@@ -129,6 +129,15 @@ var KIT_PURE = (function () {
   function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
   function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
   function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
+  function snapshotPlan(existingDates, todayISO, max) {
+    var dates = (existingDates || []).slice();
+    if (dates.indexOf(todayISO) >= 0) return { shouldWrite: false, drop: [] };
+    dates.sort();
+    return { shouldWrite: true, drop: dates.slice(0, Math.max(0, dates.length + 1 - Math.max(0, Number(max) || 0))) };
+  }
+  function exportModeFor(canShareFiles) {
+    return canShareFiles ? "partage" : "telechargement";
+  }
   function isoDateFromUTC(d) {
     return String(d.getUTCFullYear()).padStart(4, "0") + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
@@ -243,7 +252,7 @@ var KIT_PURE = (function () {
     });
     return next;
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -281,6 +290,15 @@ KIT_TESTS.add("migration idempotente des modèles de vœux", function () { var h
 KIT_TESTS.add("sélection invitation exclut les modèles de vœux", function () { var all = [{ canal: "mail", registre: "tu" }, { canal: "mail", registre: "vous" }, { canal: "texte", registre: "tu" }, { canal: "texte", registre: "vous" }].concat(["tu", "vous"].map(function (registre) { return { canal: "voeux", registre: registre }; })); ["mail", "whatsapp", "sms"].forEach(function (canal) { ["tu", "vous"].forEach(function (registre) { var t = KIT_PURE.selectedTemplateFrom(all, canal, registre); kitAssert(t && t.canal !== "voeux"); }); }); kitAssert(KIT_PURE.selectedTemplateFrom([{ canal: "voeux", registre: "tu" }], "mail", "tu") === null); });
 KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
 KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
+KIT_TESTS.add("instantané premier du jour", function () { var p = KIT_PURE.snapshotPlan(["2026-07-19", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"], "2026-08-01", 14); kitAssert(p.shouldWrite === true && p.drop.length === 0); });
+KIT_TESTS.add("instantané déjà présent aujourd'hui", function () { var p = KIT_PURE.snapshotPlan(["2026-07-31", "2026-08-01"], "2026-08-01", 14); kitAssert(p.shouldWrite === false && p.drop.length === 0); });
+KIT_TESTS.add("instantané purge le plus ancien", function () { var dates = []; for (var i = 1; i <= 14; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01"])); });
+KIT_TESTS.add("instantané purge multiple", function () { var dates = []; for (var i = 1; i <= 16; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01", "2026-07-02", "2026-07-03"])); });
+KIT_TESTS.add("instantané trie les dates avant purge", function () { var p = KIT_PURE.snapshotPlan(["2026-07-03", "2026-07-01", "2026-07-02"], "2026-08-01", 3); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01"])); });
+KIT_TESTS.add("instantané respecte le maximum paramétrable", function () { var p = KIT_PURE.snapshotPlan(["2026-07-04", "2026-07-02", "2026-07-03", "2026-07-01"], "2026-08-01", 3); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01", "2026-07-02"])); });
+KIT_TESTS.add("partage natif disponible", function () { kitAssert(KIT_PURE.exportModeFor(true) === "partage"); });
+KIT_TESTS.add("partage indisponible revient au téléchargement", function () { kitAssert(KIT_PURE.exportModeFor(false) === "telechargement"); });
+KIT_TESTS.add("instantané du jour présent n'écrit ni ne purge même au-delà du maximum", function () { var dates = []; for (var i = 1; i <= 16; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); dates.push("2026-08-01"); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(p.shouldWrite === false && p.drop.length === 0); });
 KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
 KIT_TESTS.add("adresse lyonnaise prérègle Province", function () { var c = { address: "69003 Lyon" }; kitAssert(KIT_PURE.extractPostal(c.address) === "69003" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: true }) === false); });
 KIT_TESTS.add("adresse vide utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "", workLocation: "" }, { idfParDefaut: false }) === false); });
@@ -830,6 +848,160 @@ function idbSet(key, val) {
     } catch (e) { res(); }
   });
 }
+function idbGet(key) {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        try {
+          var getRq = rq.result.transaction("kv", "readonly").objectStore("kv").get(key);
+          getRq.onsuccess = function () { res(getRq.result); };
+          getRq.onerror = function () { res(undefined); };
+        } catch (e) { res(undefined); }
+      };
+      rq.onerror = function () { res(undefined); };
+    } catch (e) { res(undefined); }
+  });
+}
+function idbKeys() {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        try {
+          var keysRq = rq.result.transaction("kv", "readonly").objectStore("kv").getAllKeys();
+          keysRq.onsuccess = function () { res(keysRq.result || []); };
+          keysRq.onerror = function () { res([]); };
+        } catch (e) { res([]); }
+      };
+      rq.onerror = function () { res([]); };
+    } catch (e) { res([]); }
+  });
+}
+function idbDelete(key) {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        try {
+          var tx = rq.result.transaction("kv", "readwrite");
+          tx.objectStore("kv").delete(key);
+          tx.oncomplete = function () { res(); };
+          tx.onerror = function () { res(); };
+        } catch (e) { res(); }
+      };
+      rq.onerror = function () { res(); };
+    } catch (e) { res(); }
+  });
+}
+var KIT_SAVE_STATUS = (function () {
+  var ok = true;
+  var listeners = [];
+  function notify(nextOk) { ok = !!nextOk; listeners.slice().forEach(function (cb) { cb(ok); }); }
+  function subscribe(cb) {
+    listeners.push(cb); cb(ok);
+    return function () { listeners = listeners.filter(function (item) { return item !== cb; }); };
+  }
+  return { notify: notify, subscribe: subscribe };
+}());
+function localDateISO(date) {
+  return String(date.getFullYear()).padStart(4, "0") + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+}
+function saveDailySnapshot(serialized) {
+  var today = localDateISO(new Date());
+  return idbKeys().then(function (keys) {
+    var dates = keys.filter(function (key) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(key)); }).map(function (key) { return String(key).slice(5); });
+    var plan = KIT_PURE.snapshotPlan(dates, today, 14);
+    if (!plan.shouldWrite) return;
+    return idbSet("snap:" + today, serialized).then(function () {
+      return idbGet("snap:" + today);
+    }).then(function (written) {
+      if (written !== serialized) return;
+      return Promise.all(plan.drop.map(function (date) { return idbDelete("snap:" + date); }));
+    });
+  }).catch(function () {});
+}
+var KIT_TRACKED_FILE = (function () {
+  var handle = null;
+  var active = false;
+  var writing = false;
+  var pending = null;
+  var listeners = [];
+  var state = { supported: typeof window !== "undefined" && "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false };
+  function publish(patch) {
+    state = Object.assign({}, state, patch || {});
+    listeners.slice().forEach(function (cb) { cb(state); });
+  }
+  function subscribe(cb) {
+    listeners.push(cb); cb(state);
+    return function () { listeners = listeners.filter(function (item) { return item !== cb; }); };
+  }
+  function backupJSON(serialized) {
+    return JSON.stringify({ version: "kit-crm-v5", exportDate: localDateISO(new Date()), data: JSON.parse(serialized) }, null, 2);
+  }
+  var retriedOnce = false;
+  var retryTimer = null;
+  function drain() {
+    if (writing || !active || !handle || pending === null) return;
+    var json = pending; pending = null; writing = true;
+    handle.createWritable().then(function (writable) {
+      return writable.write(json).then(function () { return writable.close(); });
+    }).then(function () {
+      writing = false; retriedOnce = false;
+      publish({ lastWrite: new Date().toISOString(), failed: false });
+      drain();
+    }).catch(function () {
+      writing = false;
+      /* Verrou passager possible (rafale de synchronisation OneDrive, antivirus) : une nouvelle tentative avant de désactiver le suivi */
+      if (!retriedOnce) {
+        retriedOnce = true;
+        if (pending === null) pending = json;
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(function () { retryTimer = null; drain(); }, 4000);
+        return;
+      }
+      retriedOnce = false; pending = null; active = false;
+      publish({ lastWrite: "", failed: true });
+    });
+  }
+  function queue(serialized) {
+    if (!active || !handle) return;
+    try { pending = backupJSON(serialized); drain(); } catch (e) {}
+  }
+  function load() {
+    if (!state.supported) return;
+    idbGet("backupHandle").then(function (stored) {
+      if (!stored) return;
+      handle = stored; active = true;
+      publish({ name: stored.name || "fichier de sauvegarde", failed: false });
+    });
+  }
+  function choose(serialized) {
+    if (!state.supported) return Promise.resolve(false);
+    return window.showSaveFilePicker({ suggestedName: "keepintouch-sauvegarde-" + localDateISO(new Date()) + ".json", types: [{ description: "Sauvegarde JSON", accept: { "application/json": [".json"] } }] }).then(function (chosen) {
+      var permission = typeof chosen.queryPermission === "function" ? chosen.queryPermission({ mode: "readwrite" }) : Promise.resolve("granted");
+      return permission.then(function (result) {
+        if (result === "granted" || typeof chosen.requestPermission !== "function") return result;
+        return chosen.requestPermission({ mode: "readwrite" });
+      }).then(function (result) {
+        if (result !== "granted") throw new Error("permission refusée");
+        handle = chosen; active = true; retriedOnce = false;
+        if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+        return idbSet("backupHandle", chosen).then(function () {
+          publish({ name: chosen.name || "fichier de sauvegarde", lastWrite: "", failed: false });
+          queue(serialized); return true;
+        });
+      });
+    }).catch(function (error) {
+      if (error && error.name === "AbortError") return false;
+      active = false; publish({ failed: true }); return false;
+    });
+  }
+  return { subscribe: subscribe, load: load, choose: choose, queue: queue };
+}());
 // Ensemble « à suivre » actionnable maintenant — mêmes règles que la vue À suivre
 function computeDue(contacts) {
   contacts = (contacts || []).filter(function (c) { return !c.archived; });
@@ -1256,6 +1428,9 @@ function App() {
   var [updReady, setUpdReady] = useState(false);
   var [swBuild, setSwBuild] = useState("");
   var [mergePrev, setMergePrev] = useState(null);
+  var [saveOk, setSaveOk] = useState(true);
+  var [trackedFile, setTrackedFile] = useState({ supported: "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false });
+  var [snapshots, setSnapshots] = useState([]);
   var [logCmt, setLogCmt] = useState("");
   var [logDate, setLogDate] = useState("");
   var [logType, setLogType] = useState("appel_echange");
@@ -1357,6 +1532,36 @@ function App() {
     return function () { window.removeEventListener("kit-sw-updated", hUpd); };
   }, []);
 
+  useEffect(function () { return KIT_SAVE_STATUS.subscribe(setSaveOk); }, []);
+
+  useEffect(function () {
+    var unsubscribe = KIT_TRACKED_FILE.subscribe(setTrackedFile);
+    KIT_TRACKED_FILE.load();
+    return unsubscribe;
+  }, []);
+
+  /* Rattrapage : un enregistrement fait avant la fin du chargement du handle serait sinon perdu pour le fichier suivi */
+  useEffect(function () {
+    if (loading || !data || !trackedFile.name || trackedFile.failed) return;
+    try { KIT_TRACKED_FILE.queue(JSON.stringify(data)); } catch (e) {}
+  }, [loading, trackedFile.name]);
+
+  useEffect(function () {
+    if (!showBackup) return;
+    var active = true;
+    idbKeys().then(function (keys) {
+      var snapshotKeys = keys.filter(function (key) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(key)); }).sort().reverse();
+      return Promise.all(snapshotKeys.map(function (key) {
+        return idbGet(key).then(function (raw) {
+          var count = 0;
+          try { count = (JSON.parse(raw).contacts || []).length; } catch (e) {}
+          return { key: String(key), date: String(key).slice(5), contacts: count, raw: raw };
+        });
+      }));
+    }).then(function (items) { if (active) setSnapshots(items); }).catch(function () { if (active) setSnapshots([]); });
+    return function () { active = false; };
+  }, [showBackup]);
+
   useEffect(function () {
     if (!loading && data && !showInvite && !doubleInviteId && KIT_PURE.nextPendingInvite(data.pendingInvites)) setConfirmInviteVisible(true);
   }, [loading]);
@@ -1399,13 +1604,22 @@ function App() {
         var back = localStorage.getItem(STORAGE_KEY) || "";
         var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
         if (!ok) return false;
-      } catch (e) { return false; }
+        KIT_SAVE_STATUS.notify(true);
+        saveDailySnapshot(serialized);
+        KIT_TRACKED_FILE.queue(serialized);
+      } catch (e) { KIT_SAVE_STATUS.notify(false); return false; }
       setData(nd); idbSet("data", nd);
       return true;
     }
     setData(function (prev) {
       var nd = Object.assign({}, prev || {}, partial);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nd)); } catch (e) { /* silent */ }
+      try {
+        var serialized = JSON.stringify(nd);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        KIT_SAVE_STATUS.notify(true);
+        saveDailySnapshot(serialized);
+        KIT_TRACKED_FILE.queue(serialized);
+      } catch (e) { KIT_SAVE_STATUS.notify(false); }
       idbSet("data", nd);
       return nd;
     });
@@ -2065,6 +2279,37 @@ function App() {
     setLastExport(todayStr());
   }
 
+  function shareBackupJSON() {
+    var backup = { version: "kit-crm-v5", exportDate: todayStr(), data: data };
+    var filename = "keepintouch-sauvegarde-" + todayStr() + ".json";
+    var json = JSON.stringify(backup, null, 2);
+    var file = null;
+    try { file = new File([json], filename, { type: "application/json" }); } catch (e) {}
+    var canShareFiles = false;
+    try { canShareFiles = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e2) {}
+    if (KIT_PURE.exportModeFor(canShareFiles) === "partage") {
+      navigator.share({ files: [file], title: "Sauvegarde Keep In Touch" }).then(function () {
+        setLastExport(todayStr());
+      }, function (error) {
+        if (!error || error.name !== "AbortError") { downloadJSON(backup, filename); setLastExport(todayStr()); }
+      });
+      return;
+    }
+    downloadJSON(backup, filename);
+    setLastExport(todayStr());
+  }
+
+  function chooseTrackedFile() {
+    var serialized;
+    try { serialized = JSON.stringify(data); } catch (e) { KIT_SAVE_STATUS.notify(false); return; }
+    KIT_TRACKED_FILE.choose(serialized);
+  }
+
+  function trackedWriteLabel() {
+    if (!trackedFile.lastWrite) return "";
+    try { return new Date(trackedFile.lastWrite).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
+  }
+
     function handleRestoreJSON(e) {
     var file = e.target.files && e.target.files[0]; if (!file) return;
     var reader = new FileReader();
@@ -2089,20 +2334,22 @@ function App() {
     reader.readAsText(file); e.target.value = "";
   }
 
+  function importJSONText(text) {
+    try {
+      var parsed = JSON.parse(text);
+      var imported = parsed.data || parsed;
+      if (!imported.contacts || !Array.isArray(imported.contacts)) { alert("Fichier invalide."); return; }
+      var res = mergeData(data, imported);
+      var checked = {};
+      res.report.pending.forEach(function (p) { checked[p.id] = true; });
+      setMergePrev({ res: res, checked: checked });
+    } catch (err) { alert("Erreur: " + err.message); }
+  }
+
   function handleImportJSON(e) {
     var file = e.target.files && e.target.files[0]; if (!file) return;
     var reader = new FileReader();
-    reader.onload = function (ev) {
-      try {
-        var parsed = JSON.parse(ev.target.result);
-        var imported = parsed.data || parsed;
-        if (!imported.contacts || !Array.isArray(imported.contacts)) { alert("Fichier invalide."); return; }
-        var res = mergeData(data, imported);
-        var checked = {};
-        res.report.pending.forEach(function (p) { checked[p.id] = true; });
-        setMergePrev({ res: res, checked: checked });
-      } catch (err) { alert("Erreur: " + err.message); }
-    };
+    reader.onload = function (ev) { importJSONText(ev.target.result); };
     reader.readAsText(file); e.target.value = "";
   }
 
@@ -3601,12 +3848,31 @@ function App() {
             <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#235C68" }}>Sauvegarde et restauration</p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
               <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={backupJSON}>{"Sauvegarder tout (JSON)"}</button>
+              <button style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={shareBackupJSON}>{"Partager la sauvegarde"}</button>
               <p style={{ margin: "auto 0", fontSize: 12, color: "#235C68" }}>{"Exporte toutes vos données."}</p>
+            </div>
+            {trackedFile.supported ? <div style={{ borderTop: "1px solid #9FCAD3", padding: "12px 0" }}>
+              <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={chooseTrackedFile}>{trackedFile.name ? "Re-choisir le fichier suivi" : "Suivre un fichier de sauvegarde"}</button>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#235C68" }}>{trackedFile.name && !trackedFile.failed ? "Fichier suivi : " + trackedFile.name + (trackedWriteLabel() ? " — dernière écriture " + trackedWriteLabel() : "") : "Aucun fichier suivi"}</p>
+              <p style={{ margin: "5px 0 0", fontSize: 11.5, color: "#2F7C8C" }}>Choisissez de préférence un fichier dans votre dossier OneDrive.</p>
+            </div> : null}
+            <div style={{ borderTop: "1px solid #9FCAD3", padding: "12px 0" }}>
+              <p style={{ margin: "0 0 5px", fontSize: 13, fontWeight: 700, color: "#235C68" }}>Synchroniser mes deux appareils</p>
+              <p style={{ margin: 0, fontSize: 12, color: "#2F7C8C", lineHeight: 1.5 }}>Sur PC, suivez un fichier placé dans OneDrive. Sur Android, partagez la sauvegarde, puis importez-la sur l'autre appareil avec « Importer / fusionner ».</p>
             </div>
             <div style={{ borderTop: "1px solid #9FCAD3", paddingTop: 12 }}>
               <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>{"Importer / fusionner (JSON)"}</p>
               <p style={{ margin: "0 0 8px", fontSize: 12, color: "#2F7C8C" }}>{"Fusionne un fichier exporté depuis un autre appareil : rien n'est écrasé, un rapport est présenté avant application."}</p>
               <input type="file" accept=".json" onChange={handleImportJSON} style={{ fontSize: 13 }} />
+              <div style={{ borderTop: "1px solid #9FCAD3", marginTop: 14, paddingTop: 12 }}>
+                <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>Restaurer une version</p>
+                {snapshots.length ? snapshots.map(function (snapshot) { return (
+                  <div key={snapshot.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 0", borderTop: "1px solid rgba(159,202,211,0.55)" }}>
+                    <span style={{ fontSize: 12.5, color: "#235C68" }}>{fmtDate(snapshot.date) + " · " + String(snapshot.contacts) + " contact(s)"}</span>
+                    <button disabled={!snapshot.raw} onClick={function () { importJSONText(snapshot.raw); }} style={{ border: "1px solid #235C68", borderRadius: 7, background: "#fff", color: "#235C68", padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: snapshot.raw ? "pointer" : "default", fontFamily: ff }}>Restaurer</button>
+                  </div>
+                ); }) : <p style={{ margin: 0, fontSize: 12, color: "#64748B" }}>Aucune version quotidienne disponible.</p>}
+              </div>
               <p style={{ margin: "16px 0 6px", fontSize: 12.5, fontWeight: 600, color: "#9A3115" }}>{"Remplacer tout (avancé)"}</p>
               <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9A3115" }}>{"⚠ Écrase toutes les données de cet appareil par le fichier."}</p>
               <input type="file" accept=".json" onChange={handleRestoreJSON} style={{ fontSize: 12 }} />
@@ -3795,8 +4061,10 @@ function App() {
   }
 
   return (
-    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: "16px 16px 80px" }}>
+    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: (saveOk && !trackedFile.failed ? "16px" : "64px") + " 16px 80px" }}>
       <style>{KIT_CSS}</style>
+      {!saveOk ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Vos dernières modifications n'ont pas pu être enregistrées — exportez une sauvegarde</div> : null}
+      {saveOk && trackedFile.failed ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Le fichier suivi n'est plus accessible — re-choisissez-le</div> : null}
       {renderLogModal()}
       {renderVoeuxModal()}
       {renderInviteModal()}

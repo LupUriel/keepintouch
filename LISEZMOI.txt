@@ -93,6 +93,17 @@ Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre im
   la fusion permet de rapprocher deux appareils
 - Les sauvegardes ne contiennent JAMAIS de données d'authentification Microsoft
 
+## Protéger ses données
+
+- Sur PC avec Chrome ou Edge, ouvrez ⋯ > Sauvegarde / Restauration, cliquez « Suivre un
+  fichier de sauvegarde » et choisissez de préférence un fichier dans OneDrive. L'app le
+  met ensuite à jour automatiquement après chaque enregistrement.
+- Sur Android, utilisez « Partager la sauvegarde », puis importez le fichier sur l'autre
+  appareil avec « Importer / fusionner ».
+- « Restaurer une version » permet de repartir d'un instantané quotidien récent.
+- Si une écriture locale ou celle du fichier suivi échoue, une bannière rouge vous avertit :
+  exportez une sauvegarde ou re-choisissez le fichier selon le message affiché.
+
 ## Mot de passe
 
 - À la première ouverture, l'app vous demande de créer un mot de passe
