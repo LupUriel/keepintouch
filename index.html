@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com https://recherche-entreprises.api.gouv.fr; base-uri 'self'; object-src 'none'; form-action 'self'; frame-ancestors 'none'">
   <meta name="theme-color" content="#1B1B24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -32,7 +32,7 @@ var KIT_PURE = (function () {
   var MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
   var TYPE_NAMES = { petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre", formation_repas: "formation avec repas", conference_repas: "conférence avec repas" };
   function renderTemplate(corps, valeurs) {
-    return String(corps || "").replace(/\{(prenom|accroche|dates|type|entreprise)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
+    return String(corps || "").replace(/\{(prenom|accroche|dates|type|entreprise|occasion)\}/g, function (_, key) { return valeurs[key] == null ? "" : String(valeurs[key]); });
   }
   function cleanSubject(objet) {
     return String(objet || "").replace(/\s+/g, " ").replace(/^[\s\-–—]+/, "").replace(/[\s\-–—]+$/, "").trim();
@@ -40,6 +40,26 @@ var KIT_PURE = (function () {
   function dateParts(isoDate) {
     var p = String(isoDate || "").split("-");
     return p.length === 3 ? new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])) : null;
+  }
+  function nextAnnualOccurrence(dateISO, todayISO) {
+    function validParts(value) {
+      var p = String(value || "").split("-");
+      if (p.length !== 3 || !/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return null;
+      var year = Number(p[0]);
+      var month = Number(p[1]);
+      var day = Number(p[2]);
+      var stamp = new Date(Date.UTC(year, month - 1, day));
+      if (stamp.getUTCFullYear() !== year || stamp.getUTCMonth() !== month - 1 || stamp.getUTCDate() !== day) return null;
+      return { year: year, month: month, day: day };
+    }
+    var source = validParts(dateISO);
+    var today = validParts(todayISO);
+    if (!source || !today) return null;
+    var todayTime = Date.UTC(today.year, today.month - 1, today.day);
+    var occurrenceTime = Date.UTC(today.year, source.month - 1, source.day);
+    if (occurrenceTime < todayTime) occurrenceTime = Date.UTC(today.year + 1, source.month - 1, source.day);
+    var occurrence = new Date(occurrenceTime);
+    return { date: isoDateFromUTC(occurrence), daysLeft: Math.round((occurrenceTime - todayTime) / 86400000) };
   }
   function formatDateFr(isoDate) {
     var d = dateParts(isoDate);
@@ -76,6 +96,16 @@ var KIT_PURE = (function () {
   function buildWa(numNational, texte) { return "https://wa.me/" + toIntlDigits(numNational) + "?text=" + encodeURIComponent(texte || ""); }
   function buildSms(numNational, corps, isIOS) { return "sms:" + toE164(numNational) + (isIOS ? "&body=" : "?body=") + encodeURIComponent(corps || ""); }
   function isMobileFr(num) { var n = cleanPhone(num).replace(/^\+33/, "0"); return /^0[67]\d{8}$/.test(n); }
+  function voeuxCanalFor(email, mobile) { return String(email || "").trim() ? "mail" : (String(mobile || "").trim() ? "whatsapp" : "aucun"); }
+  function mergeVoeuxTemplates(templates, voeuxDefaults) {
+    var current = Array.isArray(templates) ? templates : [];
+    if (current.some(function (t) { return t && t.canal === "voeux"; })) return { templates: current, changed: false };
+    return { templates: current.concat(voeuxDefaults || []), changed: true };
+  }
+  function selectedTemplateFrom(templates, canal, registre) {
+    var wanted = canal === "mail" ? "mail" : "texte";
+    return (templates || []).find(function (t) { return t && t.canal === wanted && t.registre === registre; }) || null;
+  }
   function extractPostal(texteLibre) {
     var match = String(texteLibre || "").match(/(?:^|[^\d])((?:0[1-9]|[1-8]\d|9[0-8])\d{3})(?=$|[^\d])/);
     return match ? match[1] : null;
@@ -100,6 +130,15 @@ var KIT_PURE = (function () {
   function canalToInteractionType(canal) { return canal === "mail" ? "email" : "sms"; }
   function nextPendingInvite(entries) { return (entries || []).find(function (x) { return x && x.statut === "lien-ouvert"; }) || null; }
   function pendingInviteRoundTrip(entry) { return JSON.parse(JSON.stringify(entry)); }
+  function snapshotPlan(existingDates, todayISO, max) {
+    var dates = (existingDates || []).slice();
+    if (dates.indexOf(todayISO) >= 0) return { shouldWrite: false, drop: [] };
+    dates.sort();
+    return { shouldWrite: true, drop: dates.slice(0, Math.max(0, dates.length + 1 - Math.max(0, Number(max) || 0))) };
+  }
+  function exportModeFor(canShareFiles) {
+    return canShareFiles ? "partage" : "telechargement";
+  }
   function isoDateFromUTC(d) {
     return String(d.getUTCFullYear()).padStart(4, "0") + "-" + String(d.getUTCMonth() + 1).padStart(2, "0") + "-" + String(d.getUTCDate()).padStart(2, "0");
   }
@@ -285,7 +324,65 @@ var KIT_PURE = (function () {
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
   function agendaScopeSets() { return { lecture: ["Calendars.ReadBasic"], ecriture: ["Calendars.ReadWrite", "Mail.Send"] }; }
   function writeStateFor(hasToken, error) { return hasToken ? "accordee" : error && classifyMsalError(error) === "consentement-requis" ? "consentement-requis" : "absente"; }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, addDaysISO: addDaysISO, addMonthsISO: addMonthsISO, nextDueDate: nextDueDate, quietDay: quietDay, resumeDay: resumeDay, projectionDays: projectionDays, deferredSendUTC: deferredSendUTC, silenceValide: silenceValide, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, agendaScopeSets: agendaScopeSets, writeStateFor: writeStateFor };
+  function digitsOf(value) { return String(value || "").replace(/\D/g, ""); }
+  function contactHaystack(contact) {
+    var c = contact || {};
+    var values = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes, c.email, c.phonePro, c.phonePerso, c.phone, c.address, c.workLocation, c.metAt, c.origin, c.nextAction, c.followUpNote];
+    values.push((c.keyDates || []).map(function (entry) { return entry && entry.label; }).filter(Boolean).join(" "));
+    return values.filter(function (value) { return value != null && String(value); }).map(String).join(" ");
+  }
+  function matchesPhoneDigits(query, phones) {
+    /* Branche téléphone : uniquement pour une requête qui EST un numéro (chiffres et séparateurs), jamais pour une requête mixte texte+chiffres */
+    var stripped = String(query || "").replace(/[\s.\-()\/+]/g, "");
+    if (stripped.length < 3 || /\D/.test(stripped)) return false;
+    return (phones || []).some(function (phone) { var d = String(phone || "").replace(/\D/g, ""); return d && d.indexOf(stripped) >= 0; });
+  }
+  function patchInteraction(entry, patch) {
+    var next = Object.assign({}, entry || {});
+    ["comment", "date", "type", "awaitingResponse", "retryPending"].forEach(function (key) {
+      if (patch && Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
+    });
+    return next;
+  }
+  var TRANCHE_CODES = ["00", "01", "02", "03", "11", "12", "21", "22", "31", "32", "41", "42", "51", "52", "53"];
+  var TRANCHE_LABELS = { "00": "0 sal.", "01": "1-2 sal.", "02": "3-5 sal.", "03": "6-9 sal.", "11": "10-19 sal.", "12": "20-49 sal.", "21": "50-99 sal.", "22": "100-199 sal.", "31": "200-249 sal.", "32": "250-499 sal.", "41": "500-999 sal.", "42": "1000-1999 sal.", "51": "2000-4999 sal.", "52": "5000-9999 sal.", "53": "10000+ sal." };
+  function trancheRank(code) { return TRANCHE_CODES.indexOf(String(code == null ? "" : code)); }
+  function trancheLabel(code) { return TRANCHE_LABELS[String(code == null ? "" : code)] || ""; }
+  function trancheFromCount(n) {
+    var value = Number(n);
+    if (!isFinite(value) || value < 0 || Math.floor(value) !== value) return "NN";
+    var bounds = [0, 2, 5, 9, 19, 49, 99, 199, 249, 499, 999, 1999, 4999, 9999];
+    for (var i = 0; i < bounds.length; i += 1) { if (value <= bounds[i]) return TRANCHE_CODES[i]; }
+    return "53";
+  }
+  function effectifTieBreak(a, b) { return trancheRank(b && b.effectifTranche) - trancheRank(a && a.effectifTranche); }
+  function effectifSearchUrl(denomination) { return "https://recherche-entreprises.api.gouv.fr/search?q=" + encodeURIComponent(String(denomination || "")) + "&per_page=10"; }
+  function cspAllowsApi(htmlText) {
+    var meta = String(htmlText || "").match(/<meta\b[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/i);
+    if (!meta) return true;
+    var content = meta[0].match(/content\s*=\s*(["'])([\s\S]*?)\1/i);
+    if (!content) return false;
+    var connect = content[2].match(/(?:^|;)\s*connect-src\s+([^;]+)/i);
+    return !!connect && /(?:^|\s)https:\/\/recherche-entreprises\.api\.gouv\.fr(?:\s|$)/i.test(connect[1].trim());
+  }
+  function denominationMatch(a, b) {
+    function normalized(value) {
+      var text = String(value || "").toLowerCase();
+      if (text.normalize) text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return text.replace(/-/g, " ").replace(/\s+/g, " ").trim();
+    }
+    return normalized(a) === normalized(b);
+  }
+  function bulkEffectifTargets(contacts, includeManual, lotStartISO) {
+    return (contacts || []).filter(function (contact) {
+      if (!contact || !(contact.company || "").trim()) return false;
+      if (!includeManual && contact.effectifSource === "manuel") return false;
+      return !(lotStartISO && contact.effectifDate && String(contact.effectifDate).slice(0, 10) >= String(lotStartISO).slice(0, 10));
+    }).map(function (contact) {
+      return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim() };
+    });
+  }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, addMonthsISO: addMonthsISO, nextDueDate: nextDueDate, quietDay: quietDay, resumeDay: resumeDay, projectionDays: projectionDays, deferredSendUTC: deferredSendUTC, silenceValide: silenceValide, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, agendaScopeSets: agendaScopeSets, writeStateFor: writeStateFor, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -297,6 +394,17 @@ var KIT_TESTS = {
   }
 };
 function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
+KIT_TESTS.add("effectifs ordre complet et inconnus", function () { var codes = ["00", "01", "02", "03", "11", "12", "21", "22", "31", "32", "41", "42", "51", "52", "53"]; codes.forEach(function (code, i) { kitAssert(KIT_PURE.trancheRank(code) === i, code); }); kitAssert(KIT_PURE.trancheRank("NN") === -1 && KIT_PURE.trancheRank() === -1 && KIT_PURE.trancheRank("XX") === -1); });
+KIT_TESTS.add("effectifs libellés exacts", function () { var expected = { "00": "0 sal.", "01": "1-2 sal.", "02": "3-5 sal.", "03": "6-9 sal.", "11": "10-19 sal.", "12": "20-49 sal.", "21": "50-99 sal.", "22": "100-199 sal.", "31": "200-249 sal.", "32": "250-499 sal.", "41": "500-999 sal.", "42": "1000-1999 sal.", "51": "2000-4999 sal.", "52": "5000-9999 sal.", "53": "10000+ sal." }; Object.keys(expected).forEach(function (code) { kitAssert(KIT_PURE.trancheLabel(code) === expected[code], code); }); kitAssert(KIT_PURE.trancheLabel("NN") === ""); });
+KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,"00"],[1,"01"],[2,"01"],[3,"02"],[5,"02"],[6,"03"],[9,"03"],[10,"11"],[19,"11"],[20,"12"],[49,"12"],[50,"21"],[99,"21"],[100,"22"],[199,"22"],[200,"31"],[249,"31"],[250,"32"],[499,"32"],[500,"41"],[999,"41"],[1000,"42"],[1999,"42"],[2000,"51"],[4999,"51"],[5000,"52"],[9999,"52"],[10000,"53"]]; pairs.forEach(function (pair) { kitAssert(KIT_PURE.trancheFromCount(pair[0]) === pair[1], String(pair[0])); }); });
+KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
+KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # C+D France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20C%2BD%20France&per_page=10") > 0, url); });
+KIT_TESTS.add("effectifs dérivation rejette les entrées invalides", function () { kitAssert(KIT_PURE.trancheFromCount(-1) === "NN"); kitAssert(KIT_PURE.trancheFromCount(2.5) === "NN"); kitAssert(KIT_PURE.trancheFromCount(NaN) === "NN"); kitAssert(KIT_PURE.trancheFromCount("abc") === "NN"); });
+KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr; script-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' http://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' https://evilrecherche-entreprises.api.gouv.fr\">")); });
+KIT_TESTS.add("effectifs garde CSP sur le document réel", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || KIT_PURE.cspAllowsApi(KIT_SOURCE_HTML), "la CSP du document bloque l'API Recherche d'entreprises — ajouter le domaine au connect-src"); });
+KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123" }, { id: "libre", company: "C" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "libre", mode: "denomination", cle: "C" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
+KIT_TESTS.add("effectifs égalité de dénomination", function () { kitAssert(KIT_PURE.denominationMatch("  Société   Été ", "SOCIETE ETE")); kitAssert(!KIT_PURE.denominationMatch("CABINET MARTIN", "CABINET MARTIN & ASSOCIES")); kitAssert(KIT_PURE.denominationMatch("SAINT-GOBAIN", "SAINT GOBAIN")); kitAssert(KIT_PURE.trancheFromCount(50) === "21"); });
+KIT_TESTS.add("effectifs reprise inclut les dates antérieures au lot", function () { var contacts = [{ id: "ancien", company: "A", effectifSiren: "111", effectifDate: "2026-08-01" }, { id: "recent", company: "B", effectifSiren: "222", effectifDate: "2026-08-06" }]; var cibles = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(cibles.length === 1 && cibles[0].id === "ancien", JSON.stringify(cibles)); var sansReprise = KIT_PURE.bulkEffectifTargets(contacts, false, null); kitAssert(sansReprise.length === 2); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -310,8 +418,28 @@ KIT_TESTS.add("garde-fou mailto détectable", function () { kitAssert(KIT_PURE.b
 KIT_TESTS.add("format date français", function () { kitAssert(KIT_PURE.formatDateFr("2026-06-17") === "Mercredi 17 juin 2026"); });
 KIT_TESTS.add("détection mobile français", function () { kitAssert(KIT_PURE.isMobileFr("06 12 34 56 78") && KIT_PURE.isMobileFr("07 12 34 56 78") && !KIT_PURE.isMobileFr("01 12 34 56 78") && !KIT_PURE.isMobileFr("09 12 34 56 78")); });
 KIT_TESTS.add("canaux invitation vers types non-rencontre", function () { var types = ["mail", "whatsapp", "sms"].map(KIT_PURE.canalToInteractionType); kitAssert(types[0] === "email" && types[1] === "sms" && types[2] === "sms"); kitAssert(types.every(function (x) { return ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"].indexOf(x) < 0; })); });
+KIT_TESTS.add("occurrence annuelle aujourd'hui", function () { var o = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); kitAssert(o.daysLeft === 0 && o.date === "2025-06-15"); });
+KIT_TESTS.add("occurrence annuelle demain", function () { var o = KIT_PURE.nextAnnualOccurrence("1980-06-16", "2025-06-15"); kitAssert(o.daysLeft === 1 && o.date === "2025-06-16"); });
+KIT_TESTS.add("occurrence annuelle hier bascule l'année suivante", function () { var o = KIT_PURE.nextAnnualOccurrence("1980-06-14", "2025-06-15"); kitAssert(o.daysLeft === 364 && o.date === "2026-06-14"); });
+KIT_TESTS.add("occurrence du 29 février en année non bissextile", function () { var o = KIT_PURE.nextAnnualOccurrence("2000-02-29", "2025-01-01"); kitAssert(o.date === "2025-03-01" && o.daysLeft === 59); });
+KIT_TESTS.add("occurrence annuelle indépendante de l'heure", function () { var a = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); var b = KIT_PURE.nextAnnualOccurrence("1980-06-15", "2025-06-15"); kitAssert(JSON.stringify(a) === JSON.stringify(b)); });
+KIT_TESTS.add("occurrence annuelle rejette une entrée invalide", function () { kitAssert(KIT_PURE.nextAnnualOccurrence("", "2025-06-15") === null); kitAssert(KIT_PURE.nextAnnualOccurrence("pas-une-date", "2025-06-15") === null); });
+KIT_TESTS.add("canal de vœux selon les coordonnées", function () { kitAssert(KIT_PURE.voeuxCanalFor("a@b.fr", "06 12 34 56 78") === "mail"); kitAssert(KIT_PURE.voeuxCanalFor("", "06 12 34 56 78") === "whatsapp"); kitAssert(KIT_PURE.voeuxCanalFor("", "") === "aucun"); });
+KIT_TESTS.add("rendu des variables de vœux", function () { var s = KIT_PURE.renderTemplate("Bonjour {prenom}, {occasion} — {inconnue}", { prenom: "Léa", occasion: "votre anniversaire" }); kitAssert(s === "Bonjour Léa, votre anniversaire — {inconnue}", s); });
+KIT_TESTS.add("occasion anniversaire selon le registre", function () { var tu = "Salut {prenom}, ton occasion est {occasion}"; var vous = "Chère/Cher {prenom}, votre occasion est {occasion}"; kitAssert(KIT_PURE.renderTemplate(tu, { prenom: "Léa", occasion: "ton anniversaire" }) === "Salut Léa, ton occasion est ton anniversaire"); kitAssert(KIT_PURE.renderTemplate(vous, { prenom: "Léa", occasion: "votre anniversaire" }) === "Chère/Cher Léa, votre occasion est votre anniversaire"); });
+KIT_TESTS.add("migration idempotente des modèles de vœux", function () { var historiques = ["mail-tu", "mail-vous", "texte-tu", "texte-vous"].map(function (id) { return { id: id, canal: id.indexOf("mail") === 0 ? "mail" : "texte" }; }); var voeux = ["voeux-anniv-tu", "voeux-anniv-vous", "voeux-datecle-tu", "voeux-datecle-vous"].map(function (id) { return { id: id, canal: "voeux" }; }); var first = KIT_PURE.mergeVoeuxTemplates(historiques, voeux); kitAssert(first.changed && first.templates.filter(function (t) { return t.canal === "voeux"; }).length === 4); var second = KIT_PURE.mergeVoeuxTemplates(first.templates, voeux); kitAssert(!second.changed && second.templates.filter(function (t) { return t.canal === "voeux"; }).length === 4); kitAssert(KIT_PURE.mergeVoeuxTemplates(null, voeux).templates.length === 4); });
+KIT_TESTS.add("sélection invitation exclut les modèles de vœux", function () { var all = [{ canal: "mail", registre: "tu" }, { canal: "mail", registre: "vous" }, { canal: "texte", registre: "tu" }, { canal: "texte", registre: "vous" }].concat(["tu", "vous"].map(function (registre) { return { canal: "voeux", registre: registre }; })); ["mail", "whatsapp", "sms"].forEach(function (canal) { ["tu", "vous"].forEach(function (registre) { var t = KIT_PURE.selectedTemplateFrom(all, canal, registre); kitAssert(t && t.canal !== "voeux"); }); }); kitAssert(KIT_PURE.selectedTemplateFrom([{ canal: "voeux", registre: "tu" }], "mail", "tu") === null); });
 KIT_TESTS.add("prochaine confirmation filtre lien-ouvert", function () { var p = KIT_PURE.nextPendingInvite([{ id: "a", statut: "checkpoint-composition" }, { id: "b", statut: "lien-ouvert" }, { id: "c", statut: "lien-ouvert" }]); kitAssert(p && p.id === "b"); kitAssert(KIT_PURE.nextPendingInvite([{ statut: "checkpoint-composition" }]) === null); });
 KIT_TESTS.add("sérialisation et relecture pendingInvite", function () { var p = { id: "p1", contactId: "c1", statut: "lien-ouvert", meal: "dejeuner", canal: "mail", registre: "tu", templateId: "mail-tu", dates: ["2026-08-04"], objet: "Déjeuner ?", corps: "Bonjour", createdAt: "2026-07-30T12:00:00.000Z" }; var q = KIT_PURE.pendingInviteRoundTrip(p); kitAssert(JSON.stringify(q) === JSON.stringify(p) && q !== p && q.dates !== p.dates); });
+KIT_TESTS.add("instantané premier du jour", function () { var p = KIT_PURE.snapshotPlan(["2026-07-19", "2026-07-20", "2026-07-21", "2026-07-22", "2026-07-23", "2026-07-24", "2026-07-25", "2026-07-26", "2026-07-27", "2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31"], "2026-08-01", 14); kitAssert(p.shouldWrite === true && p.drop.length === 0); });
+KIT_TESTS.add("instantané déjà présent aujourd'hui", function () { var p = KIT_PURE.snapshotPlan(["2026-07-31", "2026-08-01"], "2026-08-01", 14); kitAssert(p.shouldWrite === false && p.drop.length === 0); });
+KIT_TESTS.add("instantané purge le plus ancien", function () { var dates = []; for (var i = 1; i <= 14; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01"])); });
+KIT_TESTS.add("instantané purge multiple", function () { var dates = []; for (var i = 1; i <= 16; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01", "2026-07-02", "2026-07-03"])); });
+KIT_TESTS.add("instantané trie les dates avant purge", function () { var p = KIT_PURE.snapshotPlan(["2026-07-03", "2026-07-01", "2026-07-02"], "2026-08-01", 3); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01"])); });
+KIT_TESTS.add("instantané respecte le maximum paramétrable", function () { var p = KIT_PURE.snapshotPlan(["2026-07-04", "2026-07-02", "2026-07-03", "2026-07-01"], "2026-08-01", 3); kitAssert(JSON.stringify(p.drop) === JSON.stringify(["2026-07-01", "2026-07-02"])); });
+KIT_TESTS.add("partage natif disponible", function () { kitAssert(KIT_PURE.exportModeFor(true) === "partage"); });
+KIT_TESTS.add("partage indisponible revient au téléchargement", function () { kitAssert(KIT_PURE.exportModeFor(false) === "telechargement"); });
+KIT_TESTS.add("instantané du jour présent n'écrit ni ne purge même au-delà du maximum", function () { var dates = []; for (var i = 1; i <= 16; i += 1) dates.push("2026-07-" + String(i).padStart(2, "0")); dates.push("2026-08-01"); var p = KIT_PURE.snapshotPlan(dates, "2026-08-01", 14); kitAssert(p.shouldWrite === false && p.drop.length === 0); });
 KIT_TESTS.add("adresse parisienne prérègle Île-de-France", function () { var c = { address: "12 rue X 75008 Paris" }; kitAssert(KIT_PURE.extractPostal(c.address) === "75008" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: false }) === true); });
 KIT_TESTS.add("adresse lyonnaise prérègle Province", function () { var c = { address: "69003 Lyon" }; kitAssert(KIT_PURE.extractPostal(c.address) === "69003" && KIT_PURE.idfDefaultFor(c, { idfParDefaut: true }) === false); });
 KIT_TESTS.add("adresse vide utilise le défaut réglages", function () { kitAssert(KIT_PURE.idfDefaultFor({ address: "", workLocation: "" }, { idfParDefaut: false }) === false); });
@@ -329,6 +457,15 @@ KIT_TESTS.add("classification interaction MSAL", function () { kitAssert(KIT_PUR
 KIT_TESTS.add("prédicat purge cache MSAL", function () { kitAssert(KIT_PURE.shouldPurgeMsalKey("msal.xxx")); kitAssert(!KIT_PURE.shouldPurgeMsalKey("kit-crm-data")); });
 KIT_TESTS.add("scopes lecture et écriture séparés et complets", function () { var sets = KIT_PURE.agendaScopeSets(); kitAssert(JSON.stringify(sets.lecture) === JSON.stringify(["Calendars.ReadBasic"])); kitAssert(JSON.stringify(sets.ecriture) === JSON.stringify(["Calendars.ReadWrite", "Mail.Send"])); kitAssert(sets.lecture.every(function (scope) { return sets.ecriture.indexOf(scope) < 0; }) && sets.ecriture.every(function (scope) { return sets.lecture.indexOf(scope) < 0; })); });
 KIT_TESTS.add("état écriture pur", function () { kitAssert(KIT_PURE.writeStateFor(true, null) === "accordee"); kitAssert(KIT_PURE.writeStateFor(false, { message: "AADSTS65001: consent_required" }) === "consentement-requis"); kitAssert(KIT_PURE.writeStateFor(false, null) === "absente"); });
+KIT_TESTS.add("recherche contact couvre les champs étendus", function () { var hay = KIT_PURE.contactHaystack({ name: "Dupont", firstName: "Léa", lastName: "Martin", company: "Acme", jobTitle: "Associée", sector: "Droit", tags: ["réseau", "alumni"], notes: "Note libre", email: "lea@example.fr", phonePro: "01 23 45 67 89", phonePerso: "06 12 34 56 78", phone: "07 98 76 54 32", address: "12 rue Victor Hugo", workLocation: "La Défense", metAt: "Conférence IA", origin: "Recommandation", nextAction: "Envoyer le dossier", followUpNote: "Rappeler jeudi", keyDates: [{ label: "Anniversaire", date: "2026-09-12" }, { label: "Renouvellement", date: "2027-01-01" }] }); ["Dupont", "Léa", "Martin", "Acme", "Associée", "Droit", "réseau alumni", "Note libre", "lea@example.fr", "01 23 45 67 89", "06 12 34 56 78", "07 98 76 54 32", "12 rue Victor Hugo", "La Défense", "Conférence IA", "Recommandation", "Envoyer le dossier", "Rappeler jeudi", "Anniversaire Renouvellement"].forEach(function (value) { kitAssert(hay.indexOf(value) >= 0, value); }); });
+KIT_TESTS.add("recherche téléphone ignore le formatage", function () { kitAssert(KIT_PURE.matchesPhoneDigits("0612", ["06 12 34 56 78"])); kitAssert(KIT_PURE.matchesPhoneDigits("06.12.34", ["06 12 34 56 78"])); });
+KIT_TESTS.add("requête mixte texte et chiffres ne matche pas un téléphone", function () { kitAssert(!KIT_PURE.matchesPhoneDigits("dupont 0612", ["06 12 34 56 78"])); kitAssert(!KIT_PURE.matchesPhoneDigits("12b", ["06 12 34 56 78"])); });
+KIT_TESTS.add("recherche contact tolère les champs absents", function () { kitAssert(KIT_PURE.contactHaystack({}) === "" && KIT_PURE.contactHaystack(null) === ""); });
+KIT_TESTS.add("contact sans coordonnées ne matche pas des chiffres", function () { kitAssert(!KIT_PURE.matchesPhoneDigits("123", [undefined, null, ""])); kitAssert(!KIT_PURE.matchesPhoneDigits("12", ["06 12 34 56 78"])); });
+KIT_TESTS.add("patch interaction tolère un patch absent", function () { var e = { iid: "i1", comment: "x" }; var p = KIT_PURE.patchInteraction(e, null); kitAssert(p !== e && p.iid === "i1" && p.comment === "x"); var q = KIT_PURE.patchInteraction(e, undefined); kitAssert(q.iid === "i1" && q.comment === "x"); });
+KIT_TESTS.add("patch interaction préserve iid et métadonnées", function () { var e = { iid: "i1", date: "2026-01-01", invitation: true, meal: "dejeuner", datesProposees: ["2026-02-01"], canal: "mail" }; var p = KIT_PURE.patchInteraction(e, { comment: "Corrigé" }); kitAssert(p !== e && p.iid === "i1" && p.invitation && p.meal === "dejeuner" && p.datesProposees === e.datesProposees && p.canal === "mail"); });
+KIT_TESTS.add("patch interaction applique les champs éditables", function () { var p = KIT_PURE.patchInteraction({ iid: "i1" }, { comment: "Note", date: "2026-08-04", type: "dejeuner", awaitingResponse: true, retryPending: false }); kitAssert(p.comment === "Note" && p.date === "2026-08-04" && p.type === "dejeuner" && p.awaitingResponse === true && p.retryPending === false); });
+KIT_TESTS.add("patch interaction partiel conserve les autres champs", function () { var p = KIT_PURE.patchInteraction({ iid: "i1", comment: "Avant", date: "2026-01-01", type: "email", awaitingResponse: true }, { comment: "Après" }); kitAssert(p.comment === "Après" && p.date === "2026-01-01" && p.type === "email" && p.awaitingResponse === true); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -726,11 +863,11 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.4.1";
+var APP_VERSION = "1.4.5";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
@@ -744,6 +881,14 @@ function defaultTemplates() {
     { id: "mail-vous", nom: "Mail — vouvoiement", canal: "mail", registre: "vous", objet: MAIL_SUBJECT, corps: "Chère/Cher {prenom},\n\nNous espérons que vous allez bien. {accroche}Nous aurions plaisir à vous inviter à {type}.\n\nNos disponibilités sont à ce jour les suivantes :\n\n{dates}\n\nAvez-vous une préférence ?\n\nDans l'attente de votre retour,\n\nBien cordialement,", nbDates: 8, updatedAt: TS_BASE },
     { id: "texte-tu", nom: "WhatsApp/SMS — tutoiement", canal: "texte", registre: "tu", corps: "Salut {prenom} ! Tu vas bien ? {accroche}Serais-tu disponible pour un {type} la semaine prochaine ? A très bientôt !", nbDates: 0, updatedAt: TS_BASE },
     { id: "texte-vous", nom: "WhatsApp/SMS — vouvoiement", canal: "texte", registre: "vous", corps: "Bonjour {prenom}, j'espère que vous allez bien. {accroche}Seriez-vous disponible pour un {type} la semaine prochaine ? Bien à vous,", nbDates: 0, updatedAt: TS_BASE }
+  ];
+}
+function defaultVoeuxTemplates() {
+  return [
+    { id: "voeux-anniv-tu", nom: "Vœux anniversaire — tutoiement", canal: "voeux", famille: "anniversaire", registre: "tu", objet: "Joyeux anniversaire !", corps: "Salut {prenom},\n\nJe pense bien à toi aujourd'hui : très joyeux anniversaire !\n\nAu plaisir de se voir bientôt,\n\nÀ très vite,", nbDates: 0, updatedAt: TS_BASE },
+    { id: "voeux-anniv-vous", nom: "Vœux anniversaire — vouvoiement", canal: "voeux", famille: "anniversaire", registre: "vous", objet: "Joyeux anniversaire !", corps: "Chère/Cher {prenom},\n\nJe tenais à vous souhaiter un très joyeux anniversaire.\n\nAu plaisir de vous revoir prochainement,\n\nBien cordialement,", nbDates: 0, updatedAt: TS_BASE },
+    { id: "voeux-datecle-tu", nom: "Vœux date clé — tutoiement", canal: "voeux", famille: "datecle", registre: "tu", objet: "{occasion}", corps: "Salut {prenom},\n\nJe pense bien à toi pour {occasion} !\n\nÀ très vite,", nbDates: 0, updatedAt: TS_BASE },
+    { id: "voeux-datecle-vous", nom: "Vœux date clé — vouvoiement", canal: "voeux", famille: "datecle", registre: "vous", objet: "{occasion}", corps: "Chère/Cher {prenom},\n\nJe tenais à vous adresser mes meilleures pensées à l'occasion de {occasion}.\n\nBien cordialement,", nbDates: 0, updatedAt: TS_BASE }
   ];
 }
 function downloadJSON(obj, filename) {
@@ -765,6 +910,8 @@ function migrateData(d) {
   d.templates.forEach(function (t) {
     if (t.canal === "mail" && LEGACY_MAIL_SUBJECTS.indexOf(t.objet) >= 0) { t.objet = MAIL_SUBJECT; changed = true; }
   });
+  var voeuxMig = KIT_PURE.mergeVoeuxTemplates(d.templates, defaultVoeuxTemplates());
+  if (voeuxMig.changed) { d.templates = voeuxMig.templates; changed = true; }
   d.contacts.forEach(function (c) {
     if (!c.updatedAt) { c.updatedAt = TS_BASE; changed = true; }
     if (!c.fieldsUpdatedAt) { c.fieldsUpdatedAt = {}; changed = true; }
@@ -920,6 +1067,160 @@ function idbSet(key, val) {
     } catch (e) { res(); }
   });
 }
+function idbGet(key) {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        try {
+          var getRq = rq.result.transaction("kv", "readonly").objectStore("kv").get(key);
+          getRq.onsuccess = function () { res(getRq.result); };
+          getRq.onerror = function () { res(undefined); };
+        } catch (e) { res(undefined); }
+      };
+      rq.onerror = function () { res(undefined); };
+    } catch (e) { res(undefined); }
+  });
+}
+function idbKeys() {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        try {
+          var keysRq = rq.result.transaction("kv", "readonly").objectStore("kv").getAllKeys();
+          keysRq.onsuccess = function () { res(keysRq.result || []); };
+          keysRq.onerror = function () { res([]); };
+        } catch (e) { res([]); }
+      };
+      rq.onerror = function () { res([]); };
+    } catch (e) { res([]); }
+  });
+}
+function idbDelete(key) {
+  return new Promise(function (res) {
+    try {
+      var rq = indexedDB.open("kit-crm-db", 1);
+      rq.onupgradeneeded = function () { try { rq.result.createObjectStore("kv"); } catch (e) {} };
+      rq.onsuccess = function () {
+        try {
+          var tx = rq.result.transaction("kv", "readwrite");
+          tx.objectStore("kv").delete(key);
+          tx.oncomplete = function () { res(); };
+          tx.onerror = function () { res(); };
+        } catch (e) { res(); }
+      };
+      rq.onerror = function () { res(); };
+    } catch (e) { res(); }
+  });
+}
+var KIT_SAVE_STATUS = (function () {
+  var ok = true;
+  var listeners = [];
+  function notify(nextOk) { ok = !!nextOk; listeners.slice().forEach(function (cb) { cb(ok); }); }
+  function subscribe(cb) {
+    listeners.push(cb); cb(ok);
+    return function () { listeners = listeners.filter(function (item) { return item !== cb; }); };
+  }
+  return { notify: notify, subscribe: subscribe };
+}());
+function localDateISO(date) {
+  return String(date.getFullYear()).padStart(4, "0") + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+}
+function saveDailySnapshot(serialized) {
+  var today = localDateISO(new Date());
+  return idbKeys().then(function (keys) {
+    var dates = keys.filter(function (key) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(key)); }).map(function (key) { return String(key).slice(5); });
+    var plan = KIT_PURE.snapshotPlan(dates, today, 14);
+    if (!plan.shouldWrite) return;
+    return idbSet("snap:" + today, serialized).then(function () {
+      return idbGet("snap:" + today);
+    }).then(function (written) {
+      if (written !== serialized) return;
+      return Promise.all(plan.drop.map(function (date) { return idbDelete("snap:" + date); }));
+    });
+  }).catch(function () {});
+}
+var KIT_TRACKED_FILE = (function () {
+  var handle = null;
+  var active = false;
+  var writing = false;
+  var pending = null;
+  var listeners = [];
+  var state = { supported: typeof window !== "undefined" && "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false };
+  function publish(patch) {
+    state = Object.assign({}, state, patch || {});
+    listeners.slice().forEach(function (cb) { cb(state); });
+  }
+  function subscribe(cb) {
+    listeners.push(cb); cb(state);
+    return function () { listeners = listeners.filter(function (item) { return item !== cb; }); };
+  }
+  function backupJSON(serialized) {
+    return JSON.stringify({ version: "kit-crm-v5", exportDate: localDateISO(new Date()), data: JSON.parse(serialized) }, null, 2);
+  }
+  var retriedOnce = false;
+  var retryTimer = null;
+  function drain() {
+    if (writing || !active || !handle || pending === null) return;
+    var json = pending; pending = null; writing = true;
+    handle.createWritable().then(function (writable) {
+      return writable.write(json).then(function () { return writable.close(); });
+    }).then(function () {
+      writing = false; retriedOnce = false;
+      publish({ lastWrite: new Date().toISOString(), failed: false });
+      drain();
+    }).catch(function () {
+      writing = false;
+      /* Verrou passager possible (rafale de synchronisation OneDrive, antivirus) : une nouvelle tentative avant de désactiver le suivi */
+      if (!retriedOnce) {
+        retriedOnce = true;
+        if (pending === null) pending = json;
+        if (retryTimer) clearTimeout(retryTimer);
+        retryTimer = setTimeout(function () { retryTimer = null; drain(); }, 4000);
+        return;
+      }
+      retriedOnce = false; pending = null; active = false;
+      publish({ lastWrite: "", failed: true });
+    });
+  }
+  function queue(serialized) {
+    if (!active || !handle) return;
+    try { pending = backupJSON(serialized); drain(); } catch (e) {}
+  }
+  function load() {
+    if (!state.supported) return;
+    idbGet("backupHandle").then(function (stored) {
+      if (!stored) return;
+      handle = stored; active = true;
+      publish({ name: stored.name || "fichier de sauvegarde", failed: false });
+    });
+  }
+  function choose(serialized) {
+    if (!state.supported) return Promise.resolve(false);
+    return window.showSaveFilePicker({ suggestedName: "keepintouch-sauvegarde-" + localDateISO(new Date()) + ".json", types: [{ description: "Sauvegarde JSON", accept: { "application/json": [".json"] } }] }).then(function (chosen) {
+      var permission = typeof chosen.queryPermission === "function" ? chosen.queryPermission({ mode: "readwrite" }) : Promise.resolve("granted");
+      return permission.then(function (result) {
+        if (result === "granted" || typeof chosen.requestPermission !== "function") return result;
+        return chosen.requestPermission({ mode: "readwrite" });
+      }).then(function (result) {
+        if (result !== "granted") throw new Error("permission refusée");
+        handle = chosen; active = true; retriedOnce = false;
+        if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+        return idbSet("backupHandle", chosen).then(function () {
+          publish({ name: chosen.name || "fichier de sauvegarde", lastWrite: "", failed: false });
+          queue(serialized); return true;
+        });
+      });
+    }).catch(function (error) {
+      if (error && error.name === "AbortError") return false;
+      active = false; publish({ failed: true }); return false;
+    });
+  }
+  return { subscribe: subscribe, load: load, choose: choose, queue: queue };
+}());
 // Ensemble « à suivre » actionnable maintenant — mêmes règles que la vue À suivre
 function computeDue(contacts) {
   contacts = (contacts || []).filter(function (c) { return !c.archived; });
@@ -1346,6 +1647,9 @@ function App() {
   var [updReady, setUpdReady] = useState(false);
   var [swBuild, setSwBuild] = useState("");
   var [mergePrev, setMergePrev] = useState(null);
+  var [saveOk, setSaveOk] = useState(true);
+  var [trackedFile, setTrackedFile] = useState({ supported: "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false });
+  var [snapshots, setSnapshots] = useState([]);
   var [logCmt, setLogCmt] = useState("");
   var [logDate, setLogDate] = useState("");
   var [logType, setLogType] = useState("appel_echange");
@@ -1353,6 +1657,7 @@ function App() {
   var [logRetry, setLogRetry] = useState(false);
   var [showLog, setShowLog] = useState(false);
   var [logId, setLogId] = useState(null);
+  var [editIid, setEditIid] = useState(null);
   var [showImp, setShowImp] = useState(false);
   var [showMenu, setShowMenu] = useState(false);
   var [showBackup, setShowBackup] = useState(false);
@@ -1381,8 +1686,25 @@ function App() {
   var [confirmInviteVisible, setConfirmInviteVisible] = useState(false);
   var [replayInvite, setReplayInvite] = useState(null);
   var [doubleInviteId, setDoubleInviteId] = useState(null);
+  var [voeuxTarget, setVoeuxTarget] = useState(null);
+  var [voeuxObjet, setVoeuxObjet] = useState("");
+  var [voeuxCorps, setVoeuxCorps] = useState("");
+  var [voeuxCanal, setVoeuxCanal] = useState("aucun");
   var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
   var candidateReqSeq = useRef(0);
+  var effectifReqSeq = useRef(0);
+  var [effectifModal, setEffectifModal] = useState(null);
+  var [effectifResults, setEffectifResults] = useState([]);
+  var [effectifMessage, setEffectifMessage] = useState("");
+  var [effectifLoading, setEffectifLoading] = useState(false);
+  var [manualEffectif, setManualEffectif] = useState(null);
+  var [manualEffectifPrecis, setManualEffectifPrecis] = useState("");
+  var [manualEffectifTranche, setManualEffectifTranche] = useState("21");
+  var [bulkIncludeManual, setBulkIncludeManual] = useState(false);
+  var [bulkPreview, setBulkPreview] = useState(null);
+  var [bulkProgress, setBulkProgress] = useState(null);
+  var [bulkReport, setBulkReport] = useState(null);
+  var [bulkResume, setBulkResume] = useState(null);
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -1442,6 +1764,36 @@ function App() {
     return function () { window.removeEventListener("kit-sw-updated", hUpd); };
   }, []);
 
+  useEffect(function () { return KIT_SAVE_STATUS.subscribe(setSaveOk); }, []);
+
+  useEffect(function () {
+    var unsubscribe = KIT_TRACKED_FILE.subscribe(setTrackedFile);
+    KIT_TRACKED_FILE.load();
+    return unsubscribe;
+  }, []);
+
+  /* Rattrapage : un enregistrement fait avant la fin du chargement du handle serait sinon perdu pour le fichier suivi */
+  useEffect(function () {
+    if (loading || !data || !trackedFile.name || trackedFile.failed) return;
+    try { KIT_TRACKED_FILE.queue(JSON.stringify(data)); } catch (e) {}
+  }, [loading, trackedFile.name]);
+
+  useEffect(function () {
+    if (!showBackup) return;
+    var active = true;
+    idbKeys().then(function (keys) {
+      var snapshotKeys = keys.filter(function (key) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(key)); }).sort().reverse();
+      return Promise.all(snapshotKeys.map(function (key) {
+        return idbGet(key).then(function (raw) {
+          var count = 0;
+          try { count = (JSON.parse(raw).contacts || []).length; } catch (e) {}
+          return { key: String(key), date: String(key).slice(5), contacts: count, raw: raw };
+        });
+      }));
+    }).then(function (items) { if (active) setSnapshots(items); }).catch(function () { if (active) setSnapshots([]); });
+    return function () { active = false; };
+  }, [showBackup]);
+
   useEffect(function () {
     if (!loading && data && !showInvite && !doubleInviteId && KIT_PURE.nextPendingInvite(data.pendingInvites)) setConfirmInviteVisible(true);
   }, [loading]);
@@ -1484,13 +1836,22 @@ function App() {
         var back = localStorage.getItem(STORAGE_KEY) || "";
         var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
         if (!ok) return false;
-      } catch (e) { return false; }
+        KIT_SAVE_STATUS.notify(true);
+        saveDailySnapshot(serialized);
+        KIT_TRACKED_FILE.queue(serialized);
+      } catch (e) { KIT_SAVE_STATUS.notify(false); return false; }
       setData(nd); idbSet("data", nd);
       return true;
     }
     setData(function (prev) {
       var nd = Object.assign({}, prev || {}, partial);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(nd)); } catch (e) { /* silent */ }
+      try {
+        var serialized = JSON.stringify(nd);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        KIT_SAVE_STATUS.notify(true);
+        saveDailySnapshot(serialized);
+        KIT_TRACKED_FILE.queue(serialized);
+      } catch (e) { KIT_SAVE_STATUS.notify(false); }
       idbSet("data", nd);
       return nd;
     });
@@ -1641,21 +2002,187 @@ function App() {
     setSelId(id);
   }
 
-  function updContact(id, updates, rootUpdates) {
-    var newContacts = contacts.map(function (c) {
+  function updContact(id, updates, rootUpdates, baseContacts) {
+    var newContacts = (baseContacts || contacts).map(function (c) {
       if (c.id !== id) return c;
       var copy = {};
       Object.keys(c).forEach(function (k) { copy[k] = c[k]; });
       var now = nowTS(); var fu = Object.assign({}, c.fieldsUpdatedAt || {}); var touched = false;
+      var effectifFields = ["effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis"];
+      var effectifWrite = effectifFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
       Object.keys(updates).forEach(function (k) {
         var oldV = c[k], newV = updates[k];
         copy[k] = newV;
         if (JSON.stringify(oldV === undefined ? null : oldV) !== JSON.stringify(newV === undefined ? null : newV)) { fu[k] = now; touched = true; }
       });
+      if (effectifWrite) { effectifFields.forEach(function (key) { fu[key] = now; }); touched = true; }
       if (touched) { copy.updatedAt = now; copy.fieldsUpdatedAt = fu; }
       return copy;
     });
     save(Object.assign({ contacts: newContacts, categories: categories }, rootUpdates || {}));
+    return newContacts;
+  }
+
+  function effectifPatch(candidate) {
+    return {
+      effectifTranche: candidate.tranche_effectif_salarie || "NN",
+      effectifAnnee: candidate.annee_tranche_effectif_salarie || "",
+      effectifSiren: candidate.siren || "",
+      effectifSource: "api",
+      effectifDate: todayStr(),
+      effectifPrecis: null
+    };
+  }
+
+  function openEffectifSearch(c) {
+    if (!c || !(c.company || "").trim()) return;
+    setEffectifModal({ id: c.id, company: c.company });
+    setEffectifResults([]);
+    setEffectifMessage("");
+    if (!navigator.onLine) { setEffectifMessage("Recherche indisponible hors ligne."); return; }
+    setEffectifLoading(true);
+    /* Garde de séquence : une réponse tardive d'une recherche précédente ne doit jamais remplir le modal d'un autre contact */
+    var seq = ++effectifReqSeq.current;
+    var started = Date.now();
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
+    var options = { referrerPolicy: "no-referrer", credentials: "omit" };
+    if (controller) options.signal = controller.signal;
+    fetch(KIT_PURE.effectifSearchUrl(c.company), options).then(function (response) {
+      if (response.status === 429) {
+        var retry = response.headers.get("Retry-After");
+        throw new Error("LIMIT:" + (retry || "quelques instants"));
+      }
+      if (!response.ok) throw new Error("HTTP:" + String(response.status));
+      return response.json();
+    }).then(function (body) {
+      if (seq !== effectifReqSeq.current) return;
+      setEffectifResults(body && body.results || []);
+      if (!(body && body.results && body.results.length)) setEffectifMessage("Aucune entreprise trouvée.");
+    }).catch(function (error) {
+      if (seq !== effectifReqSeq.current) return;
+      var message = String(error && error.message || "");
+      if (message.indexOf("LIMIT:") === 0) setEffectifMessage("Trop de requêtes — réessayer après " + message.slice(6) + ".");
+      else if (error && error.name === "AbortError") setEffectifMessage("La recherche a dépassé le délai de 15 secondes.");
+      else if (navigator.onLine && Date.now() - started < 1500) setEffectifMessage("Requête bloquée — vérifier la politique de sécurité.");
+      else setEffectifMessage("Panne réseau — impossible de rechercher l'entreprise.");
+    }).then(function () { clearTimeout(timer); if (seq === effectifReqSeq.current) setEffectifLoading(false); });
+  }
+
+  function chooseEffectif(candidate) {
+    if (!effectifModal) return;
+    updContact(effectifModal.id, effectifPatch(candidate));
+    setEffectifModal(null);
+  }
+
+  function openManualEffectif(c) {
+    setManualEffectif(c);
+    setManualEffectifPrecis(c.effectifPrecis == null ? "" : String(c.effectifPrecis));
+    setManualEffectifTranche(c.effectifTranche && c.effectifTranche !== "NN" ? c.effectifTranche : "21");
+  }
+
+  function saveManualEffectif() {
+    if (!manualEffectif) return;
+    var hasCount = manualEffectifPrecis !== "";
+    var count = Number(manualEffectifPrecis);
+    if (hasCount && (!isFinite(count) || count < 0 || Math.floor(count) !== count)) return;
+    updContact(manualEffectif.id, {
+      effectifTranche: hasCount ? KIT_PURE.trancheFromCount(count) : manualEffectifTranche,
+      effectifAnnee: "",
+      effectifSiren: manualEffectif.effectifSiren || "",
+      effectifSource: "manuel",
+      effectifDate: todayStr(),
+      effectifPrecis: hasCount ? count : null
+    });
+    setManualEffectif(null);
+  }
+
+  function refreshEffectif(c) {
+    if (!c.effectifSiren) { openEffectifSearch(c); return; }
+    if (c.effectifSource === "manuel" && !confirm("Cette actualisation remplacera la valeur saisie manuellement. Continuer ?")) return;
+    if (!navigator.onLine) return;
+    setEffectifModal({ id: c.id, company: c.company, refresh: true });
+    setEffectifResults([]); setEffectifMessage(""); setEffectifLoading(true);
+    var seq = ++effectifReqSeq.current;
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
+    var options = { referrerPolicy: "no-referrer", credentials: "omit" };
+    if (controller) options.signal = controller.signal;
+    fetch(KIT_PURE.effectifSearchUrl(c.effectifSiren), options).then(function (response) {
+      if (response.status === 429) throw new Error("LIMIT:" + (response.headers.get("Retry-After") || "quelques instants"));
+      if (!response.ok) throw new Error("HTTP:" + String(response.status));
+      return response.json();
+    }).then(function (body) {
+      if (seq !== effectifReqSeq.current) return;
+      var candidate = (body.results || []).filter(function (x) { return x.siren === c.effectifSiren; })[0];
+      if (!candidate || candidate.etat_administratif !== "A") { setEffectifMessage("Entreprise introuvable ou cessée : l'ancien effectif est conservé."); return; }
+      updContact(c.id, effectifPatch(candidate)); setEffectifModal(null);
+    }).catch(function (error) {
+      if (seq !== effectifReqSeq.current) return;
+      var msg = String(error && error.message || "");
+      if (msg.indexOf("LIMIT:") === 0) setEffectifMessage("Trop de requêtes — réessayer après " + msg.slice(6) + ".");
+      else if (error && error.name === "AbortError") setEffectifMessage("L'actualisation a dépassé le délai de 15 secondes.");
+      else setEffectifMessage("Impossible d'actualiser l'effectif.");
+    }).then(function () { clearTimeout(timer); if (seq === effectifReqSeq.current) setEffectifLoading(false); });
+  }
+
+  function prepareBulkEffectifs(kind) {
+    if (!navigator.onLine) return;
+    /* Le filtre de reprise (effectifDate >= debut du lot) ne s'applique QUE sur reprise apres 429 — un lot frais couvre tout */
+    var resuming = !!(bulkResume && bulkResume.kind === kind);
+    var started = resuming ? bulkResume.started : nowTS();
+    var targets = KIT_PURE.bulkEffectifTargets(contacts, bulkIncludeManual, resuming ? started : null).filter(function (target) { return kind === "complete" ? target.mode === "denomination" : target.mode === "siren"; });
+    targets = targets.map(function (target) { var contact = contacts.filter(function (c) { return c.id === target.id; })[0]; return Object.assign({}, target, { label: contact && contact.company || target.cle }); });
+    setBulkReport(null);
+    setBulkPreview({ kind: kind, started: started, targets: targets });
+  }
+
+  function runBulkEffectifs() {
+    if (!bulkPreview || !navigator.onLine) return;
+    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], stopped: "" };
+    setBulkPreview(null); setBulkProgress({ done: 0, total: lot.targets.length });
+    function next(index) {
+      if (index >= lot.targets.length) { setBulkProgress(null); setBulkReport(report); setBulkResume(null); return; }
+      var target = lot.targets[index];
+      var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
+      var options = { referrerPolicy: "no-referrer", credentials: "omit" };
+      if (controller) options.signal = controller.signal;
+      fetch(KIT_PURE.effectifSearchUrl(target.cle), options).then(function (response) {
+        if (response.status === 429) { var error = new Error("LIMIT"); error.retryAfter = response.headers.get("Retry-After") || "quelques instants"; throw error; }
+        if (!response.ok) throw new Error("HTTP " + String(response.status));
+        return response.json();
+      }).then(function (body) {
+        var results = body && body.results || [];
+        if (target.mode === "denomination") {
+          var candidate = results.length === 1 && KIT_PURE.denominationMatch(results[0].nom_complet, target.cle) ? results[0] : null;
+          if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label); }
+          else report.ambiguous.push({ id: target.id, company: target.cle, results: results });
+        } else {
+          var match = results.filter(function (x) { return x.siren === target.cle; })[0];
+          if (!match || match.etat_administratif !== "A") report.preserved.push(target.label);
+          else { working = updContact(target.id, effectifPatch(match), null, working); report.updated.push(target.label); }
+        }
+        clearTimeout(timer);
+        setBulkProgress({ done: index + 1, total: lot.targets.length });
+        setTimeout(function () { next(index + 1); }, 250);
+      }).catch(function (error) {
+        clearTimeout(timer);
+        if (error && error.name === "AbortError") report.stopped = "Lot arrêté : une requête a dépassé le délai de 15 secondes. Relancer pour reprendre.";
+        else if (error && error.message === "LIMIT") report.stopped = "Limite atteinte. Réessayer après " + error.retryAfter + ".";
+        else report.stopped = "Lot arrêté : " + String(error && error.message || error);
+        setBulkResume({ kind: lot.kind, started: lot.started });
+        setBulkProgress(null); setBulkReport(report);
+      });
+    }
+    next(0);
+  }
+
+  function openBulkAmbiguous(item) {
+    setEffectifModal({ id: item.id, company: item.company });
+    setEffectifResults(item.results || []);
+    setEffectifMessage(item.results && item.results.length ? "" : "Aucune entreprise trouvée pour cette dénomination.");
+    setEffectifLoading(false);
   }
 
   function delContact(id) {
@@ -1680,6 +2207,20 @@ function App() {
     if (c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
     if (c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
     updContact(id, patch, rootUpdates);
+  }
+
+  function updateInteraction(contactId, iid, patch) {
+    var c = contacts.find(function (x) { return x.id === contactId; });
+    if (!c) return;
+    var found = false;
+    var interactions = (c.interactions || []).map(function (entry) {
+      if (entry.iid !== iid) return entry;
+      found = true;
+      return KIT_PURE.patchInteraction(entry, patch);
+    });
+    if (!found) return;
+    interactions.sort(function (a, b) { return String(b.date || "").localeCompare(String(a.date || "")); });
+    updContact(contactId, { interactions: interactions });
   }
 
   function deleteInteraction(id, idx) {
@@ -1711,12 +2252,53 @@ function App() {
   function archiveContact(id) { updContact(id, { archived: true }); }
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
-  function openLogModal(id) { setLogId(id); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setEditIid(null); }
+  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+  function openEditInteraction(id, entry) {
+    var iid = entry.iid;
+    /* Entrée sans iid (données créées avant la migration de la session) : rétro-remplir avant d'éditer, sinon la confirmation créerait un doublon */
+    if (!iid) {
+      iid = makeId();
+      var c = contacts.find(function (x) { return x.id === id; });
+      if (!c) return;
+      updContact(id, { interactions: (c.interactions || []).map(function (e) { return e === entry ? Object.assign({}, e, { iid: iid }) : e; }) });
+    }
+    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setShowLog(true);
+  }
 
   function inviteMobile(c) {
     var nums = [c.phonePerso, c.phonePro, c.phone];
     for (var i = 0; i < nums.length; i++) { if (KIT_PURE.isMobileFr(nums[i])) return nums[i]; }
     return "";
+  }
+  function openVoeuxModal(contactId, famille, occasion) {
+    var c = contacts.find(function (x) { return x.id === contactId; });
+    if (!c) return;
+    var registre = c.registre === "tu" ? "tu" : "vous";
+    var renderedOccasion = famille === "anniversaire" ? (registre === "tu" ? "ton anniversaire" : "votre anniversaire") : occasion;
+    var t = (data.templates || []).find(function (x) { return x.canal === "voeux" && x.famille === famille && x.registre === registre; });
+    if (!t) return;
+    var vals = { prenom: c.firstName || displayName(c), occasion: renderedOccasion };
+    setVoeuxTarget({ contactId: contactId, famille: famille, occasion: renderedOccasion });
+    setVoeuxObjet(KIT_PURE.renderTemplate(t.objet || "", vals));
+    setVoeuxCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
+    setVoeuxCanal(KIT_PURE.voeuxCanalFor(c.email, inviteMobile(c)));
+  }
+  function closeVoeuxModal() { setVoeuxTarget(null); setVoeuxObjet(""); setVoeuxCorps(""); setVoeuxCanal("aucun"); }
+  function launchVoeux(canal) {
+    var c = contacts.find(function (x) { return voeuxTarget && x.id === voeuxTarget.contactId; });
+    if (!c) return;
+    var mobile = inviteMobile(c);
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    setVoeuxCanal(canal);
+    if (canal === "mail") {
+      var mailtoVoeux = KIT_PURE.buildMailto(c.email, voeuxObjet, voeuxCorps);
+      if (mailtoVoeux.length > 1800) navigator.clipboard.writeText(voeuxCorps).then(function () { alert("Message trop long pour un lien mail : il a été copié — collez-le dans votre message."); }, function () { alert("Impossible de copier le message — copiez-le depuis l'aperçu."); });
+      else location.href = mailtoVoeux;
+    }
+    else if (canal === "whatsapp") window.open(KIT_PURE.buildWa(mobile, voeuxCorps), "_blank", "noopener");
+    else if (canal === "sms") location.href = KIT_PURE.buildSms(mobile, voeuxCorps, isIOS);
+    else navigator.clipboard.writeText(voeuxCorps).catch(function () { alert("Impossible de copier le message — copiez-le depuis l'aperçu."); });
   }
   function resetInvite() {
     setShowInvite(false); setInviteId(null); setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteCoord(""); setInviteObjet(""); setInviteCorps("");
@@ -1775,8 +2357,7 @@ function App() {
     requestCandidateDates(meal, inviteIdf);
   }
   function selectedTemplate(canal, registre) {
-    var wanted = canal === "mail" ? "mail" : "texte";
-    return (data.templates || defaultTemplates()).find(function (t) { return t.canal === wanted && t.registre === registre; }) || null;
+    return KIT_PURE.selectedTemplateFrom(data.templates || defaultTemplates(), canal, registre);
   }
   function prepareInvitePreview() {
     var c = contacts.find(function (x) { return x.id === inviteId; });
@@ -2098,6 +2679,37 @@ function App() {
     setLastExport(todayStr());
   }
 
+  function shareBackupJSON() {
+    var backup = { version: "kit-crm-v5", exportDate: todayStr(), data: data };
+    var filename = "keepintouch-sauvegarde-" + todayStr() + ".json";
+    var json = JSON.stringify(backup, null, 2);
+    var file = null;
+    try { file = new File([json], filename, { type: "application/json" }); } catch (e) {}
+    var canShareFiles = false;
+    try { canShareFiles = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e2) {}
+    if (KIT_PURE.exportModeFor(canShareFiles) === "partage") {
+      navigator.share({ files: [file], title: "Sauvegarde Keep In Touch" }).then(function () {
+        setLastExport(todayStr());
+      }, function (error) {
+        if (!error || error.name !== "AbortError") { downloadJSON(backup, filename); setLastExport(todayStr()); }
+      });
+      return;
+    }
+    downloadJSON(backup, filename);
+    setLastExport(todayStr());
+  }
+
+  function chooseTrackedFile() {
+    var serialized;
+    try { serialized = JSON.stringify(data); } catch (e) { KIT_SAVE_STATUS.notify(false); return; }
+    KIT_TRACKED_FILE.choose(serialized);
+  }
+
+  function trackedWriteLabel() {
+    if (!trackedFile.lastWrite) return "";
+    try { return new Date(trackedFile.lastWrite).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; }
+  }
+
     function handleRestoreJSON(e) {
     var file = e.target.files && e.target.files[0]; if (!file) return;
     var reader = new FileReader();
@@ -2122,20 +2734,22 @@ function App() {
     reader.readAsText(file); e.target.value = "";
   }
 
+  function importJSONText(text) {
+    try {
+      var parsed = JSON.parse(text);
+      var imported = parsed.data || parsed;
+      if (!imported.contacts || !Array.isArray(imported.contacts)) { alert("Fichier invalide."); return; }
+      var res = mergeData(data, imported);
+      var checked = {};
+      res.report.pending.forEach(function (p) { checked[p.id] = true; });
+      setMergePrev({ res: res, checked: checked });
+    } catch (err) { alert("Erreur: " + err.message); }
+  }
+
   function handleImportJSON(e) {
     var file = e.target.files && e.target.files[0]; if (!file) return;
     var reader = new FileReader();
-    reader.onload = function (ev) {
-      try {
-        var parsed = JSON.parse(ev.target.result);
-        var imported = parsed.data || parsed;
-        if (!imported.contacts || !Array.isArray(imported.contacts)) { alert("Fichier invalide."); return; }
-        var res = mergeData(data, imported);
-        var checked = {};
-        res.report.pending.forEach(function (p) { checked[p.id] = true; });
-        setMergePrev({ res: res, checked: checked });
-      } catch (err) { alert("Erreur: " + err.message); }
-    };
+    reader.onload = function (ev) { importJSONText(ev.target.result); };
     reader.readAsText(file); e.target.value = "";
   }
 
@@ -2366,10 +2980,10 @@ function App() {
 
       var interactions = [];
       if (rdvVal) {
-        interactions.push({ date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
+        interactions.push({ iid: makeId(), date: rdvVal, comment: "Importé depuis Excel", type: rdvType });
       }
       if (contactVal && contactVal !== rdvVal) {
-        interactions.push({ date: contactVal, comment: "Importé depuis Excel", type: contactType });
+        interactions.push({ iid: makeId(), date: contactVal, comment: "Importé depuis Excel", type: contactType });
       }
       interactions.sort(function (a, b) { return b.date.localeCompare(a.date); });
 
@@ -2483,8 +3097,9 @@ function App() {
     if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return false;
     if (search) {
       var q = norm(search);
-      var hay = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes];
-      var hit = hay.some(function (v) { return v && norm(String(v)).indexOf(q) >= 0; });
+      var hay = KIT_PURE.contactHaystack(c);
+      var hit = norm(hay).indexOf(q) >= 0;
+      if (!hit) hit = KIT_PURE.matchesPhoneDigits(search, [c.phonePro, c.phonePerso, c.phone]);
       if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
       if (!hit) return false;
     }
@@ -2511,40 +3126,38 @@ function App() {
     return monthsSince(lastRencontre(c)) >= cyc.warn;
   }).sort(function (a, b) {
     var rel = function (c) { var cy = cycleFor(c); var m = monthsSince(lastRencontre(c)); return (m === Infinity ? 999 : m) - (cy ? cy.due : 12); };
-    return rel(b) - rel(a);
+    return rel(b) - rel(a) || KIT_PURE.effectifTieBreak(a, b);
   });
 
   // Relances en attente : dernière interaction marquée "en attente" depuis >= seuil
   var awaitingList = activeContacts.filter(function (c) {
     return awaitStale(c);
   }).sort(function (a, b) {
-    return daysAwaiting(b) - daysAwaiting(a);
+    return daysAwaiting(b) - daysAwaiting(a) || KIT_PURE.effectifTieBreak(a, b);
   });
 
   // À recontacter : dernière interaction marquée "nouvel échange" depuis >= seuil
   var retryList = activeContacts.filter(function (c) {
     return retryStale(c);
   }).sort(function (a, b) {
-    return daysRetry(b) - daysRetry(a);
+    return daysRetry(b) - daysRetry(a) || KIT_PURE.effectifTieBreak(a, b);
   });
 
   // Relances planifiées : rappels datés dus ou à venir sous 30 jours
   var followUpList = activeContacts.filter(function (c) {
     return c.followUpDate && daysUntil(c.followUpDate) <= 30;
   }).sort(function (a, b) {
-    return daysUntil(a.followUpDate) - daysUntil(b.followUpDate);
+    return daysUntil(a.followUpDate) - daysUntil(b.followUpDate) || KIT_PURE.effectifTieBreak(a, b);
   });
 
+  var upcomingNow = new Date();
+  var upcomingToday = String(upcomingNow.getFullYear()) + "-" + String(upcomingNow.getMonth() + 1).padStart(2, "0") + "-" + String(upcomingNow.getDate()).padStart(2, "0");
   var upcomingKDs = [];
   activeContacts.forEach(function (c) {
     (c.keyDates || []).forEach(function (kd) {
-      var now = new Date();
-      var d = new Date(kd.date);
-      d.setFullYear(now.getFullYear());
-      if (d < now) d.setFullYear(now.getFullYear() + 1);
-      var diff = Math.floor((d.getTime() - now.getTime()) / 86400000);
-      if (diff >= 0 && diff <= 30) {
-        upcomingKDs.push({ label: kd.label, contactName: displayName(c), daysLeft: diff });
+      var occ = KIT_PURE.nextAnnualOccurrence(kd.date, upcomingToday);
+      if (occ && occ.daysLeft <= 30) {
+        upcomingKDs.push({ label: kd.label, contactName: displayName(c), contactId: c.id, daysLeft: occ.daysLeft, date: occ.date });
       }
     });
   });
@@ -2553,13 +3166,9 @@ function App() {
   var upcomingBdays = [];
   activeContacts.forEach(function (c) {
     if (!c.birthday) return;
-    var now = new Date();
-    var bd = new Date(c.birthday);
-    bd.setFullYear(now.getFullYear());
-    if (bd < now) bd.setFullYear(now.getFullYear() + 1);
-    var diff = Math.floor((bd.getTime() - now.getTime()) / 86400000);
-    if (diff >= 0 && diff <= 30) {
-      upcomingBdays.push({ contactName: displayName(c), contactId: c.id, daysLeft: diff, date: bd.toISOString().split("T")[0] });
+    var occ = KIT_PURE.nextAnnualOccurrence(c.birthday, upcomingToday);
+    if (occ && occ.daysLeft <= 30) {
+      upcomingBdays.push({ contactName: displayName(c), contactId: c.id, daysLeft: occ.daysLeft, date: occ.date });
     }
   });
   upcomingBdays.sort(function (a, b) { return a.daysLeft - b.daysLeft; });
@@ -2655,15 +3264,65 @@ function App() {
   /* ════ VIEWS ════ */
 
   // ─── LOG MODAL ───
+  function renderEffectifBadge(c) {
+    var label = KIT_PURE.trancheLabel(c && c.effectifTranche);
+    return label ? <span style={{ marginLeft: 6, display: "inline-block", padding: "2px 7px", borderRadius: 9, background: "#F1EFEB", color: "#5C5852", fontSize: 10.5, fontWeight: 600 }}>{label}</span> : null;
+  }
+
+  function renderEffectifModal() {
+    if (!effectifModal) return null;
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.48)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={function () { setEffectifModal(null); }}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 620, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 16px 45px rgba(0,0,0,0.22)" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 4px", color: ac }}>Rattacher l'entreprise</h3>
+          <p style={{ margin: "0 0 14px", color: "#64748B", fontSize: 13 }}>{"Résultats pour « " + effectifModal.company + " » — choisis l'entité correspondante."}</p>
+          {effectifLoading ? <p style={{ fontSize: 13 }}>Recherche en cours…</p> : null}
+          {effectifMessage ? <p role="alert" style={{ padding: 10, background: "#FBEAE5", borderRadius: 8, color: "#9A3115", fontSize: 13 }}>{effectifMessage}</p> : null}
+          {effectifResults.map(function (candidate, index) {
+            var siege = candidate.siege || {};
+            var effectif = KIT_PURE.trancheLabel(candidate.tranche_effectif_salarie) || "effectif non renseigné";
+            var place = [siege.code_postal, siege.libelle_commune].filter(Boolean).join(" ");
+            return <button key={(candidate.siren || "resultat") + String(index)} onClick={function () { chooseEffectif(candidate); }} style={{ display: "block", width: "100%", textAlign: "left", marginTop: 8, padding: 12, borderRadius: 9, border: "1px solid " + bd, background: "#fff", cursor: "pointer", fontFamily: ff }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontWeight: 700, color: ac }}>{candidate.nom_complet || "Entreprise sans nom"}{candidate.etat_administratif !== "A" ? <span style={{ padding: "2px 7px", borderRadius: 9, background: "#FBEAE5", color: "#9A3115", fontSize: 10.5 }}>cessée</span> : null}</span>
+              <span style={{ display: "block", marginTop: 4, color: "#64748B", fontSize: 12 }}>{"SIREN " + (candidate.siren || "non renseigné") + (place ? " · " + place : "")}</span>
+              <span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 12 }}>{effectif + (candidate.annee_tranche_effectif_salarie ? " · " + String(candidate.annee_tranche_effectif_salarie) : "")}</span>
+            </button>;
+          })}
+          <button onClick={function () { setEffectifModal(null); }} style={{ marginTop: 16, background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderManualEffectifModal() {
+    if (!manualEffectif) return null;
+    var trancheCodes = ["00", "01", "02", "03", "11", "12", "21", "22", "31", "32", "41", "42", "51", "52", "53"];
+    var countValid = manualEffectifPrecis === "" || (isFinite(Number(manualEffectifPrecis)) && Number(manualEffectifPrecis) >= 0 && Math.floor(Number(manualEffectifPrecis)) === Number(manualEffectifPrecis));
+    return <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.48)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={function () { setManualEffectif(null); }}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 430 }} onClick={function (e) { e.stopPropagation(); }}>
+        <h3 style={{ margin: "0 0 14px", color: ac }}>Saisir l'effectif</h3>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>EFFECTIF PRÉCIS (OPTIONNEL)</label>
+        <input type="number" min="0" step="1" value={manualEffectifPrecis} onChange={function (e) { setManualEffectifPrecis(e.target.value); }} placeholder="Ex. 75" style={{ width: "100%", boxSizing: "border-box", padding: 9, margin: "5px 0 12px", border: "1px solid " + bd, borderRadius: 8 }} />
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>TRANCHE {manualEffectifPrecis !== "" ? "(DÉRIVÉE AUTOMATIQUEMENT)" : ""}</label>
+        <select disabled={manualEffectifPrecis !== ""} value={manualEffectifPrecis !== "" && countValid ? KIT_PURE.trancheFromCount(Number(manualEffectifPrecis)) : manualEffectifTranche} onChange={function (e) { setManualEffectifTranche(e.target.value); }} style={{ width: "100%", padding: 9, margin: "5px 0 16px", border: "1px solid " + bd, borderRadius: 8 }}>
+          {trancheCodes.map(function (code) { return <option key={code} value={code}>{KIT_PURE.trancheLabel(code)}</option>; })}
+        </select>
+        {!countValid ? <p role="alert" style={{ color: "#9A3115", fontSize: 12 }}>Saisissez un nombre entier positif.</p> : null}
+        <div style={{ display: "flex", gap: 8 }}><button disabled={!countValid} onClick={saveManualEffectif} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", cursor: countValid ? "pointer" : "not-allowed", fontFamily: ff }}>Enregistrer</button><button onClick={function () { setManualEffectif(null); }} style={{ background: "#fff", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div>
+      </div>
+    </div>;
+  }
+
   function renderLogModal() {
     if (!showLog) return null;
     var c = null;
     for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === logId) { c = contacts[i]; break; } }
     if (!c) return null;
     return (
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={function () { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
-          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>Enregistrer un contact</h3>
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={closeLogModal}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%", position: "relative" }} onClick={function (e) { e.stopPropagation(); }}>
+          <button title="Fermer" onClick={closeLogModal} style={{ position: "absolute", top: 12, right: 12, background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 6, fontFamily: ff }}>{"✕"}</button>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>{editIid ? "Modifier l'interaction" : "Enregistrer un contact"}</h3>
           <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TYPE D'INTERACTION</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
@@ -2689,8 +3348,37 @@ function App() {
             {"🔁 Tentative de nouvel échange (relance conseillée après " + String(FOLLOWUP_RETRY_DAYS) + " jours)"}
           </label>
           <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
-            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>Annuler</button>
-            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); }}>Confirmer</button>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeLogModal}>Annuler</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { if (editIid) updateInteraction(logId, editIid, { comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: !!logAwait, retryPending: !!logRetry }); else logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderVoeuxModal() {
+    if (!voeuxTarget) return null;
+    var c = contacts.find(function (x) { return x.id === voeuxTarget.contactId; });
+    if (!c) return null;
+    var mobile = inviteMobile(c);
+    var isPC = !/Android|iPad|iPhone|iPod/.test(navigator.userAgent);
+    var actionStyle = { background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "8px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff };
+    return (
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={closeVoeuxModal}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 520, width: "100%" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>Envoyer des vœux</h3>
+          <p style={{ margin: "0 0 16px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
+          {c.email ? <input value={voeuxObjet} onChange={function (e) { setVoeuxObjet(e.target.value); }} placeholder="Objet" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", marginBottom: 10 }} /> : null}
+          <textarea value={voeuxCorps} onChange={function (e) { setVoeuxCorps(e.target.value); }} rows={9} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", resize: "vertical" }} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+            {c.email ? <button style={actionStyle} onClick={function () { launchVoeux("mail"); }}>Mail</button> : null}
+            {mobile ? <button style={actionStyle} onClick={function () { launchVoeux("whatsapp"); }}>WhatsApp</button> : null}
+            {mobile && !isPC ? <button style={actionStyle} onClick={function () { launchVoeux("sms"); }}>SMS</button> : null}
+            {isPC || (!c.email && !mobile) ? <button style={actionStyle} onClick={function () { launchVoeux("copie"); }}>Copier</button> : null}
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
+            <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeVoeuxModal}>Fermer</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(c.id, "Vœux — " + voeuxTarget.occasion, todayStr(), KIT_PURE.canalToInteractionType(voeuxCanal), false, false); closeVoeuxModal(); }}>C'est envoyé ✓</button>
           </div>
         </div>
       </div>
@@ -3062,6 +3750,7 @@ function App() {
             {c.metAt ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>LIEU DE RENCONTRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.metAt}</p></div> : null}
             {c.sector ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>CCN DE BRANCHE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.sector}</p></div> : null}
             {c.birthday ? <div style={{ padding: 14, background: "#FDF2F8", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#9D174D", fontWeight: 600 }}>ANNIVERSAIRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{fmtDate(c.birthday)}</p></div> : null}
+            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p><p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(c.effectifTranche) ? (c.effectifPrecis != null ? String(c.effectifPrecis) + " sal. · " : "") + KIT_PURE.trancheLabel(c.effectifTranche) + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button disabled={!navigator.onLine} title={!navigator.onLine ? "Recherche indisponible hors ligne" : ""} onClick={function () { c.effectifSiren ? refreshEffectif(c) : openEffectifSearch(c); }} style={{ background: "transparent", color: navigator.onLine ? ac : "#94A3B8", border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>{c.effectifSiren ? "Actualiser" : "Rechercher l'effectif"}</button><button onClick={function () { openManualEffectif(c); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Saisir l'effectif</button></div></div> : null}
           </div>
 
           {c.followUpDate ? (
@@ -3149,6 +3838,7 @@ function App() {
         <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>Enregistrer :</span>
           <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Je l'ai contacté"}</button>
+          <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { logInteraction(c.id, "", todayStr(), "dejeuner", false, false); }}>{"Déjeuner ✓"}</button>
         </div>
 
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
@@ -3179,7 +3869,10 @@ function App() {
                       </p>
                       {x.comment ? <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#475569" }}>{x.comment}</p> : null}
                     </div>
-                    <button title="Supprimer cette interaction" className="kit-btn" onClick={function () { deleteInteraction(c.id, idx); }} style={{ alignSelf: "flex-start", background: "transparent", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff, flexShrink: 0 }}>{"✕"}</button>
+                    <div style={{ display: "flex", alignItems: "flex-start", flexShrink: 0 }}>
+                      <button title="Modifier cette interaction" className="kit-btn" onClick={function () { openEditInteraction(c.id, x); }} style={{ background: "transparent", border: "none", color: "#64748B", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff }}>{"✏"}</button>
+                      <button title="Supprimer cette interaction" className="kit-btn" onClick={function () { deleteInteraction(c.id, idx); }} style={{ background: "transparent", border: "none", color: "#CBD5E1", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 6px", fontFamily: ff }}>{"✕"}</button>
+                    </div>
                   </div>
                 );
               })}
@@ -3210,10 +3903,11 @@ function App() {
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "8px 0", borderTop: idx > 0 ? "1px solid #C7E0E6" : "none" }}>
                   <div style={{ flex: 1, minWidth: 0, cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
                     <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>{displayName(c)}</span>
+                    {renderEffectifBadge(c)}
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{" — " + fmtDate(c.followUpDate) + " (" + txt + ")"}</span>
                     {c.followUpNote ? <p style={{ margin: "2px 0 0", fontSize: 13, color: "#475569" }}>{c.followUpNote}</p> : null}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <button style={{ background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { updContact(c.id, { followUpDate: "", followUpNote: "" }); }}>{"Fait ✓"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { openLogModal(c.id); }}>{"Contacté"}</button>
                   </div>
@@ -3229,9 +3923,10 @@ function App() {
             {awaitingList.map(function (c, idx) {
               return (
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #F4D6CB" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
-                  <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}{renderEffectifBadge(c)}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <span style={{ fontSize: 12, color: "#9A3115", fontWeight: 600 }}>{String(daysAwaiting(c)) + "j sans retour"}</span>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
                   </span>
                 </div>
@@ -3246,9 +3941,10 @@ function App() {
             {retryList.map(function (c, idx) {
               return (
                 <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: idx > 0 ? "1px solid #C7E0E6" : "none", cursor: "pointer" }} onClick={function () { setSelId(c.id); setView("contact"); }}>
-                  <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                  <span style={{ fontSize: 13 }}><strong>{displayName(c)}</strong>{c.company ? " — " + c.company : ""}{renderEffectifBadge(c)}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     <span style={{ fontSize: 12, color: "#235C68", fontWeight: 600 }}>{String(daysRetry(c)) + "j depuis le message"}</span>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
                     <button onClick={function (e) { e.stopPropagation(); reAwait(c.id); }} title="Patienter encore 14 jours" style={{ background: "transparent", color: "#235C68", border: "1px solid #9FCAD3", borderRadius: 8, padding: "3px 8px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>{"+14 j"}</button>
                   </span>
                 </div>
@@ -3272,6 +3968,7 @@ function App() {
                   <div>
                     <span style={{ fontSize: 14, fontWeight: 600, color: ac }}>{displayName(c)}</span>
                     {c.company ? <span style={{ fontSize: 12, color: "#475569" }}>{" — " + c.company}</span> : null}
+                    {renderEffectifBadge(c)}
                     {!isClient(c) ? <span style={{ marginLeft: 6 }}>{renderPrioBadge(c.priority)}</span> : null}
                     {invitationAwaiting(c) ? <span style={{ display: "block", marginTop: 3, fontSize: 11.5, color: "#235C68", fontWeight: 600 }}>{"invitation envoyée le " + fmtDate(invitationAwaiting(c).date)}</span> : null}
                   </div>
@@ -3279,6 +3976,7 @@ function App() {
                     <span style={{ fontSize: 12, color: col, fontWeight: 600 }}>{label}</span>
                     <button style={{ background: "transparent", color: "#9A3115", border: "1px solid #F4D6CB", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); snoozeRencontre(c.id); }} title={"Reporter de " + String((cycleFor(c) || { due: 12 }).due) + " mois"}>{"⏸"}</button>
                     <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openInviteModal(c.id); }}>{"Proposer une rencontre"}</button>
+                    <button style={{ background: "#EAF3F5", color: ac, border: "1px solid #9FCAD3", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); logInteraction(c.id, "", todayStr(), "dejeuner", false, false); }}>{"Déjeuner ✓"}</button>
                     <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function (e) { e.stopPropagation(); openLogModal(c.id); }}>{"Enregistrer"}</button>
                   </div>
                 </div>
@@ -3296,7 +3994,7 @@ function App() {
               return (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid #FBCFE8" : "none" }}>
                   <span style={{ fontSize: 13 }}><strong>{b.contactName}</strong>{" — " + fmtDate(b.date)}</span>
-                  <span style={{ fontSize: 12, color: isSoon ? "#BE185D" : "#9D174D", fontWeight: 600, background: isSoon ? "#FCE7F3" : "none", padding: isSoon ? "2px 8px" : 0, borderRadius: 4 }}>{text}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 12, color: isSoon ? "#BE185D" : "#9D174D", fontWeight: 600, background: isSoon ? "#FCE7F3" : "none", padding: isSoon ? "2px 8px" : 0, borderRadius: 4 }}>{text}</span><button onClick={function (e) { e.stopPropagation(); openVoeuxModal(b.contactId, "anniversaire", ""); }} style={{ background: "#fff", color: "#9D174D", border: "1px solid #F9A8D4", borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>🎂 Vœux</button></span>
                 </div>
               );
             })}
@@ -3307,10 +4005,11 @@ function App() {
           <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
             <h3 style={{ margin: "0 0 10px", fontSize: 14, color: ac }}>{"Dates clés à venir (30j)"}</h3>
             {upcomingKDs.map(function (k, idx) {
+              var text = k.daysLeft === 0 ? "Aujourd'hui !" : "dans " + String(k.daysLeft) + "j";
               return (
                 <div key={idx} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderTop: idx > 0 ? "1px solid " + bd : "none" }}>
                   <span style={{ fontSize: 13 }}><strong>{k.contactName}</strong>{" — " + k.label}</span>
-                  <span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{"dans " + String(k.daysLeft) + "j"}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 12, color: "#475569", fontWeight: 600 }}>{text}</span><button onClick={function (e) { e.stopPropagation(); openVoeuxModal(k.contactId, "datecle", k.label); }} style={{ background: "#fff", color: ac, border: "1px solid " + bd, borderRadius: 8, padding: "5px 9px", fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>✉ Vœux</button></span>
                 </div>
               );
             })}
@@ -3497,7 +4196,7 @@ function App() {
     save({ templates: next });
   }
   function resetTemplate(id) {
-    var original = defaultTemplates().find(function (t) { return t.id === id; });
+    var original = defaultTemplates().concat(defaultVoeuxTemplates()).find(function (t) { return t.id === id; });
     var next = (data.templates || defaultTemplates()).map(function (t) {
       return t.id === id ? Object.assign({}, original, { updatedAt: nowTS() }) : t;
     });
@@ -3535,6 +4234,17 @@ function App() {
               </div>
             ) : null}
           </div>
+        </div>
+
+        <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
+          <p style={{ margin: "0 0 5px", fontSize: 14, fontWeight: 700, color: "#235C68" }}>Taille des entreprises</p>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#2F7C8C" }}>Toutes les dénominations ci-dessous sont toujours affichées avant tout envoi.</p>
+          <label style={{ display: "block", marginBottom: 10, fontSize: 12.5, color: "#235C68" }}><input type="checkbox" checked={bulkIncludeManual} onChange={function (e) { setBulkIncludeManual(e.target.checked); }} /> Inclure les valeurs saisies manuellement</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("complete"); }} style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Compléter les effectifs</button><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("update"); }} style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Mettre à jour les effectifs</button></div>
+          {!navigator.onLine ? <p role="alert" style={{ margin: "9px 0 0", fontSize: 12, color: "#9A3115" }}>Actions indisponibles hors ligne.</p> : null}
+          {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id}>{target.label}{target.mode === "siren" ? " · SIREN " + target.cle : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
+          {bulkProgress ? <p role="status" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#235C68" }}>Progression : {bulkProgress.done} / {bulkProgress.total}</p> : null}
+          {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
         </div>
 
         {showMeetingSettings ? (
@@ -3589,9 +4299,9 @@ function App() {
             <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: ac }}>MODÈLES DE MESSAGE</p>
             {(data.templates || []).map(function (t) { return <div key={t.id} style={{ borderTop: "1px solid " + bd, padding: "12px 0" }}>
               <input value={t.nom} onChange={function (e) { updateTemplate(t.id, "nom", e.target.value); }} style={{ width: "100%", padding: 7, fontWeight: 600, boxSizing: "border-box", marginBottom: 6 }} />
-              {t.canal === "mail" ? <input value={t.objet || ""} placeholder="Objet" onChange={function (e) { updateTemplate(t.id, "objet", e.target.value); }} style={{ width: "100%", padding: 7, boxSizing: "border-box", marginBottom: 6 }} /> : null}
+              {t.canal === "mail" || t.canal === "voeux" ? <input value={t.objet || ""} placeholder="Objet" onChange={function (e) { updateTemplate(t.id, "objet", e.target.value); }} style={{ width: "100%", padding: 7, boxSizing: "border-box", marginBottom: 6 }} /> : null}
               <textarea value={t.corps} rows={6} onChange={function (e) { updateTemplate(t.id, "corps", e.target.value); }} style={{ width: "100%", padding: 8, boxSizing: "border-box", fontFamily: ff, resize: "vertical" }} />
-              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}><label style={{ fontSize: 12 }}>Nombre de dates <input type="number" min="0" value={t.nbDates} onChange={function (e) { updateTemplate(t.id, "nbDates", Number(e.target.value)); }} style={{ width: 55, padding: 5 }} /></label><button onClick={function () { resetTemplate(t.id); }} style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", cursor: "pointer" }}>Réinitialiser ce modèle</button></div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 6 }}>{t.canal !== "voeux" ? <label style={{ fontSize: 12 }}>Nombre de dates <input type="number" min="0" value={t.nbDates} onChange={function (e) { updateTemplate(t.id, "nbDates", Number(e.target.value)); }} style={{ width: 55, padding: 5 }} /></label> : null}<button onClick={function () { resetTemplate(t.id); }} style={{ padding: "6px 10px", borderRadius: 7, border: "1px solid " + bd, background: "#fff", cursor: "pointer" }}>Réinitialiser ce modèle</button></div>
             </div>; })}
           </div>
         ) : null}
@@ -3609,12 +4319,31 @@ function App() {
             <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#235C68" }}>Sauvegarde et restauration</p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
               <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={backupJSON}>{"Sauvegarder tout (JSON)"}</button>
+              <button style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={shareBackupJSON}>{"Partager la sauvegarde"}</button>
               <p style={{ margin: "auto 0", fontSize: 12, color: "#235C68" }}>{"Exporte toutes vos données."}</p>
+            </div>
+            {trackedFile.supported ? <div style={{ borderTop: "1px solid #9FCAD3", padding: "12px 0" }}>
+              <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={chooseTrackedFile}>{trackedFile.name ? "Re-choisir le fichier suivi" : "Suivre un fichier de sauvegarde"}</button>
+              <p style={{ margin: "8px 0 0", fontSize: 12, color: "#235C68" }}>{trackedFile.name && !trackedFile.failed ? "Fichier suivi : " + trackedFile.name + (trackedWriteLabel() ? " — dernière écriture " + trackedWriteLabel() : "") : "Aucun fichier suivi"}</p>
+              <p style={{ margin: "5px 0 0", fontSize: 11.5, color: "#2F7C8C" }}>Choisissez de préférence un fichier dans votre dossier OneDrive.</p>
+            </div> : null}
+            <div style={{ borderTop: "1px solid #9FCAD3", padding: "12px 0" }}>
+              <p style={{ margin: "0 0 5px", fontSize: 13, fontWeight: 700, color: "#235C68" }}>Synchroniser mes deux appareils</p>
+              <p style={{ margin: 0, fontSize: 12, color: "#2F7C8C", lineHeight: 1.5 }}>Sur PC, suivez un fichier placé dans OneDrive. Sur Android, partagez la sauvegarde, puis importez-la sur l'autre appareil avec « Importer / fusionner ».</p>
             </div>
             <div style={{ borderTop: "1px solid #9FCAD3", paddingTop: 12 }}>
               <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>{"Importer / fusionner (JSON)"}</p>
               <p style={{ margin: "0 0 8px", fontSize: 12, color: "#2F7C8C" }}>{"Fusionne un fichier exporté depuis un autre appareil : rien n'est écrasé, un rapport est présenté avant application."}</p>
               <input type="file" accept=".json" onChange={handleImportJSON} style={{ fontSize: 13 }} />
+              <div style={{ borderTop: "1px solid #9FCAD3", marginTop: 14, paddingTop: 12 }}>
+                <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>Restaurer une version</p>
+                {snapshots.length ? snapshots.map(function (snapshot) { return (
+                  <div key={snapshot.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 0", borderTop: "1px solid rgba(159,202,211,0.55)" }}>
+                    <span style={{ fontSize: 12.5, color: "#235C68" }}>{fmtDate(snapshot.date) + " · " + String(snapshot.contacts) + " contact(s)"}</span>
+                    <button disabled={!snapshot.raw} onClick={function () { importJSONText(snapshot.raw); }} style={{ border: "1px solid #235C68", borderRadius: 7, background: "#fff", color: "#235C68", padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: snapshot.raw ? "pointer" : "default", fontFamily: ff }}>Restaurer</button>
+                  </div>
+                ); }) : <p style={{ margin: 0, fontSize: 12, color: "#64748B" }}>Aucune version quotidienne disponible.</p>}
+              </div>
               <p style={{ margin: "16px 0 6px", fontSize: 12.5, fontWeight: 600, color: "#9A3115" }}>{"Remplacer tout (avancé)"}</p>
               <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9A3115" }}>{"⚠ Écrase toutes les données de cet appareil par le fichier."}</p>
               <input type="file" accept=".json" onChange={handleRestoreJSON} style={{ fontSize: 12 }} />
@@ -3803,9 +4532,15 @@ function App() {
   }
 
   return (
-    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: "16px 16px 80px" }}>
+    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: (saveOk && !trackedFile.failed ? "16px" : "64px") + " 16px 80px" }}>
       <style>{KIT_CSS}</style>
+      {!saveOk ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Vos dernières modifications n'ont pas pu être enregistrées — exportez une sauvegarde</div> : null}
+      {saveOk && trackedFile.failed ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Le fichier suivi n'est plus accessible — re-choisissez-le</div> : null}
+      {bulkProgress ? <div role="alert" style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.55)", zIndex: 1300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, textAlign: "center" }}><p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: ac }}>Mise à jour des effectifs…</p><p style={{ margin: 0, fontSize: 13, color: "#475569" }}>{String(bulkProgress.done) + " / " + String(bulkProgress.total) + " — les fiches sont verrouillées pendant le lot pour éviter tout conflit."}</p></div></div> : null}
       {renderLogModal()}
+      {renderEffectifModal()}
+      {renderManualEffectifModal()}
+      {renderVoeuxModal()}
       {renderInviteModal()}
       {renderDoubleInviteModal()}
       {renderPendingInviteModal()}
