@@ -87,6 +87,23 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
 
+## Taille des entreprises
+
+Trois gestes permettent de renseigner la taille d'une entreprise : « Rechercher l'effectif »
+sur une fiche non rattachée, « Compléter les effectifs » pour les entreprises à rattacher et
+« Mettre à jour les effectifs » pour actualiser les entreprises déjà rattachées par leur SIREN.
+Les actions groupées montrent toujours la liste complète des dénominations ou SIREN avant
+leur lancement.
+
+La source publique est SIRENE, via l'API Recherche d'entreprises de l'État. Une recherche
+n'envoie que la dénomination de l'entreprise (ou son SIREN), jamais le nom du contact ni ses
+coordonnées. La saisie manuelle reste possible ; elle est exclue par défaut des mises à jour
+groupées et une actualisation depuis la fiche demande une confirmation avant de la remplacer.
+
+Limite résiduelle entre appareils : lors d'une fusion, la donnée la plus récente gagne champ
+par champ. Une actualisation API plus récente réalisée sur l'autre appareil peut donc
+supplanter une saisie manuelle ; le rapport de fusion signale ce conflit.
+
 - Les données sont stockées LOCALEMENT dans chaque navigateur
 - Les données du PC et du mobile sont INDÉPENDANTES
 - Faites régulièrement une sauvegarde (Sauvegarder/JSON dans le tableau de bord) ;
