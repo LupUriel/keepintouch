@@ -12,7 +12,7 @@ while ((match = re.exec(html))) {
   scripts.push(match[2]);
 }
 var storage = { getItem: function () { return null; }, setItem: function () {}, removeItem: function () {}, key: function () { return null; }, length: 0 };
-var sandbox = { console: console, localStorage: storage, location: { hostname: "localhost" }, navigator: { onLine: true }, window: {}, setTimeout: setTimeout, clearTimeout: clearTimeout, Promise: Promise };
+var sandbox = { console: console, localStorage: storage, location: { hostname: "localhost" }, navigator: { onLine: true }, window: {}, setTimeout: setTimeout, clearTimeout: clearTimeout, Promise: Promise, KIT_SOURCE_HTML: html };
 vm.createContext(sandbox);
 try {
   scripts.forEach(function (source, index) { vm.runInContext(source, sandbox, { filename: "index-inline-" + String(index + 1) + ".js" }); });
