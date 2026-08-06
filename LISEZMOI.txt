@@ -85,6 +85,12 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 ## Vos données
 
+## Récapitulatif hebdomadaire
+
+À la première ouverture de chaque semaine, un récapitulatif présente les actions prioritaires
+et les vœux à prévoir. Il s'affiche une fois par semaine et par appareil après sa fermeture.
+La case « Récapitulatif hebdomadaire à l'ouverture » des réglages permet de le désactiver.
+
 Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
 
 ## Taille des entreprises

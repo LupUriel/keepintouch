@@ -345,6 +345,9 @@ KIT_TESTS.add("clé de semaine ISO avec numéro rembourré", function () { kitAs
 KIT_TESTS.add("clé de semaine rejette les entrées invalides", function () { kitAssert(KIT_PURE.weekKey() === null); kitAssert(KIT_PURE.weekKey("2026-13-01") === null); kitAssert(KIT_PURE.weekKey("abc") === null); });
 KIT_TESTS.add("décision du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapDue("2026-W32", "2026-W32", 5) === false); kitAssert(KIT_PURE.recapDue("2026-W31", "2026-W32", 0) === false); kitAssert(KIT_PURE.recapDue("2026-W31", "2026-W32", 3) === true); kitAssert(KIT_PURE.recapDue(null, "2026-W32", 1) === true); kitAssert(KIT_PURE.recapDue(null, null, 1) === false); });
 KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function () { var items = ["A", "B", "C", "D", "E", "F", "G"]; var sections = [{ titre: "Relances", items: items }, { titre: "Vide", items: [] }, { titre: "Vœux", items: ["H", "I", "J"] }]; var result = KIT_PURE.recapSections(sections, 5); kitAssert(result.length === 2); kitAssert(result[0].titre === "Relances" && result[0].items.length === 5 && result[0].reste === 2); kitAssert(result[1].titre === "Vœux" && result[1].items.length === 3 && result[1].reste === 0); kitAssert(items.length === 7 && sections[0].items.length === 7); kitAssert(JSON.stringify(KIT_PURE.recapSections([], 5)) === "[]"); kitAssert(JSON.stringify(KIT_PURE.recapSections(null, 5)) === "[]"); });
+KIT_TESTS.add("migration sème le récapitulatif hebdomadaire", function () { if (typeof migrateData === "function") { var r = migrateData({ settings: { updatedAt: "2026-01-02T03:04:05.000Z" } }); kitAssert(r.d.settings.recapHebdo === true && r.changed === true); kitAssert(r.d.settings.updatedAt === "2026-01-02T03:04:05.000Z"); } else { kitAssert(/if \(typeof d\.settings\.recapHebdo !== ["']boolean["']\) \{ d\.settings\.recapHebdo = true; changed = true; \}/.test(KIT_SOURCE_HTML)); } });
+KIT_TESTS.add("migration préserve le récapitulatif désactivé", function () { if (typeof migrateData === "function") { var r = migrateData({ settings: { recapHebdo: false } }); kitAssert(r.d.settings.recapHebdo === false); } else { kitAssert(/typeof d\.settings\.recapHebdo !== ["']boolean["']/.test(KIT_SOURCE_HTML)); } });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.0["']/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -689,7 +692,7 @@ function ProtectedApp() {
   var [authed, setAuthed] = useState(false);
   useEffect(function () { if (sessionStorage.getItem(AUTH_KEY) === "1") setAuthed(true); }, []);
   if (!authed) return React.createElement(AuthScreen, { onAuth: function () { setAuthed(true); } });
-  return React.createElement(App);
+  return React.createElement(App, { authed: authed });
 }
 
 var { useState, useEffect, useCallback, useMemo, useRef } = React;
@@ -725,7 +728,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.4.5";
+var APP_VERSION = "1.5.0";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -735,7 +738,7 @@ function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
 var LEGACY_MAIL_SUBJECTS = ["Déjeuner ?", "Invitation à déjeuner"];
 function defaultSettings() {
-  return { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 28, plafond: 10 }, exclusions: { aoutPlein: true, fetesFinAnnee: true }, idfParDefaut: true, updatedAt: TS_BASE };
+  return { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 28, plafond: 10 }, exclusions: { aoutPlein: true, fetesFinAnnee: true }, idfParDefaut: true, recapHebdo: true, updatedAt: TS_BASE };
 }
 function defaultTemplates() {
   return [
@@ -766,6 +769,7 @@ function migrateData(d) {
   if (!Array.isArray(d.deletedContacts)) { d.deletedContacts = []; changed = true; }
   if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
   if (!d.settings) { d.settings = defaultSettings(); changed = true; }
+  if (typeof d.settings.recapHebdo !== "boolean") { d.settings.recapHebdo = true; changed = true; }
   if (!Array.isArray(d.templates)) { d.templates = defaultTemplates(); changed = true; }
   /* Objets de mail historiques remplacés par le libellé « Entreprise - Proposition de … ».
      Un objet personnalisé par l'utilisateur n'est jamais écrasé. */
@@ -1492,7 +1496,8 @@ function Avatar(props) {
 }
 
 /* ═══════ APP ═══════ */
-function App() {
+function App(props) {
+  var authed = !!(props && props.authed);
   var [data, setData] = useState(null);
   var [loading, setLoading] = useState(true);
   var [view, setView] = useState("dashboard");
@@ -1526,6 +1531,7 @@ function App() {
   var [showChangePwd, setShowChangePwd] = useState(false);
   var [showAbout, setShowAbout] = useState(false);
   var [showMeetingSettings, setShowMeetingSettings] = useState(false);
+  var [recapFerme, setRecapFerme] = useState(false);
   var [oldPwd, setOldPwd] = useState("");
   var [newPwd, setNewPwd] = useState("");
   var [newPwd2, setNewPwd2] = useState("");
@@ -3033,6 +3039,40 @@ function App() {
   });
   upcomingBdays.sort(function (a, b) { return a.daysLeft - b.daysLeft; });
 
+  var cleSemaineCourante = KIT_PURE.weekKey(upcomingToday);
+  var voeuxImminents = upcomingBdays.filter(function (b) { return b.daysLeft <= 6; }).map(function (b) {
+    return b.contactName + " — anniversaire" + (b.daysLeft === 0 ? " aujourd'hui" : " dans " + String(b.daysLeft) + " j");
+  }).concat(upcomingKDs.filter(function (k) { return k.daysLeft <= 6; }).map(function (k) {
+    return k.contactName + " — " + k.label + (k.daysLeft === 0 ? " aujourd'hui" : " dans " + String(k.daysLeft) + " j");
+  }));
+  var recapTotal = followUpList.length + awaitingList.length + retryList.length + rencontreList.length + voeuxImminents.length;
+  var recapVisible = authed && data.settings.recapHebdo !== false && !recapFerme && KIT_PURE.recapDue(localStorage.getItem("kitRecapSemaine"), cleSemaineCourante, recapTotal);
+  var recapSections = KIT_PURE.recapSections([
+    { titre: "Relances planifiées", items: followUpList.map(function (c) { return displayName(c) + " — échéance " + (daysUntil(c.followUpDate) <= 0 ? "aujourd'hui" : KIT_PURE.formatDateFr(c.followUpDate)); }) },
+    { titre: "Relances en attente", items: awaitingList.map(function (c) { return displayName(c) + " — en attente depuis " + String(daysAwaiting(c)) + " j"; }) },
+    { titre: "À recontacter", items: retryList.map(function (c) { return displayName(c) + " — dernier échange il y a " + String(daysRetry(c)) + " j"; }) },
+    { titre: "Rencontres à programmer", items: rencontreList.map(function (c) { return displayName(c); }) },
+    { titre: "Vœux à prévoir", items: voeuxImminents }
+  ], 5);
+
+  function fermerRecap() {
+    localStorage.setItem("kitRecapSemaine", cleSemaineCourante);
+    setRecapFerme(true);
+  }
+
+  function renderRecapModal() {
+    if (!recapVisible) return null;
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1250, padding: 16 }} onClick={fermerRecap}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 520, width: "100%", maxHeight: "80vh", overflowY: "auto", boxShadow: "0 16px 45px rgba(0,0,0,0.22)" }} onClick={function (e) { e.stopPropagation(); }}>
+          <h3 style={{ margin: "0 0 18px", fontSize: 18, color: ac }}>Votre semaine — actions prioritaires</h3>
+          {recapSections.map(function (section) { return <div key={section.titre} style={{ marginBottom: 16 }}><p style={{ margin: "0 0 6px", fontWeight: 700, color: ac }}>{section.titre}</p><ul style={{ margin: 0, paddingLeft: 20, color: "#475569", fontSize: 13.5 }}>{section.items.map(function (item, index) { return <li key={String(index)} style={{ marginBottom: 4 }}>{item}</li>; })}</ul>{section.reste > 0 ? <p style={{ margin: "5px 0 0 20px", color: "#94A3B8", fontSize: 12 }}>… et {section.reste} autres</p> : null}</div>; })}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}><button onClick={function () { setView("week"); fermerRecap(); }} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Voir À suivre</button><button onClick={fermerRecap} style={{ background: "#fff", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "9px 16px", fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Fermer</button></div>
+        </div>
+      </div>
+    );
+  }
+
   var stTotal = activeContacts.length;
   var stOverdue = activeContacts.filter(function (c) { return getStatus(c) === "overdue"; }).length;
   var stAwaiting = activeContacts.filter(function (c) { return getStatus(c) === "awaiting"; }).length;
@@ -4147,6 +4187,7 @@ function App() {
               <label><input type="checkbox" checked={data.settings.exclusions.aoutPlein} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.exclusions.aoutPlein = v; }); }} /> Exclure les semaines entièrement en août</label>
               <label><input type="checkbox" checked={data.settings.exclusions.fetesFinAnnee} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.exclusions.fetesFinAnnee = v; }); }} /> Exclure du 24/12 au 02/01</label>
               <label><input type="checkbox" checked={data.settings.idfParDefaut} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.idfParDefaut = v; }); }} /> Île-de-France par défaut</label>
+              <label><input type="checkbox" checked={data.settings.recapHebdo !== false} onChange={function (e) { var v = e.target.checked; updateMeetingSettings(function (s) { s.recapHebdo = v; }); }} /> Récapitulatif hebdomadaire à l'ouverture</label>
             </div>
             <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: ac }}>MODÈLES DE MESSAGE</p>
             {(data.templates || []).map(function (t) { return <div key={t.id} style={{ borderTop: "1px solid " + bd, padding: "12px 0" }}>
@@ -4389,6 +4430,7 @@ function App() {
       {!saveOk ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Vos dernières modifications n'ont pas pu être enregistrées — exportez une sauvegarde</div> : null}
       {saveOk && trackedFile.failed ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Le fichier suivi n'est plus accessible — re-choisissez-le</div> : null}
       {bulkProgress ? <div role="alert" style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.55)", zIndex: 1300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, textAlign: "center" }}><p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: ac }}>Mise à jour des effectifs…</p><p style={{ margin: 0, fontSize: 13, color: "#475569" }}>{String(bulkProgress.done) + " / " + String(bulkProgress.total) + " — les fiches sont verrouillées pendant le lot pour éviter tout conflit."}</p></div></div> : null}
+      {renderRecapModal()}
       {renderLogModal()}
       {renderEffectifModal()}
       {renderManualEffectifModal()}
