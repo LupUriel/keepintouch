@@ -273,7 +273,24 @@ var KIT_PURE = (function () {
     var connect = content[2].match(/(?:^|;)\s*connect-src\s+([^;]+)/i);
     return !!connect && /(?:https:\/\/)?recherche-entreprises\.api\.gouv\.fr(?:\s|$)/i.test(connect[1]);
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi };
+  function denominationMatch(a, b) {
+    function normalized(value) {
+      var text = String(value || "").toLowerCase();
+      if (text.normalize) text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return text.replace(/\s+/g, " ").trim();
+    }
+    return normalized(a) === normalized(b);
+  }
+  function bulkEffectifTargets(contacts, includeManual, lotStartISO) {
+    return (contacts || []).filter(function (contact) {
+      if (!contact || !(contact.company || "").trim()) return false;
+      if (!includeManual && contact.effectifSource === "manuel") return false;
+      return !(lotStartISO && contact.effectifDate && String(contact.effectifDate).slice(0, 10) >= String(lotStartISO).slice(0, 10));
+    }).map(function (contact) {
+      return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim() };
+    });
+  }
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -291,6 +308,8 @@ KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,
 KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
 KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20France&per_page=10") > 0, url); });
 KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); });
+KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123" }, { id: "libre", company: "C" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "libre", mode: "denomination", cle: "C" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
+KIT_TESTS.add("effectifs égalité de dénomination", function () { kitAssert(KIT_PURE.denominationMatch("  Société   Été ", "SOCIETE ETE")); kitAssert(!KIT_PURE.denominationMatch("CABINET MARTIN", "CABINET MARTIN & ASSOCIES")); kitAssert(KIT_PURE.trancheFromCount(50) === "21"); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -671,7 +690,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.4.4";
+var APP_VERSION = "1.4.5";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -1504,6 +1523,14 @@ function App() {
   var [effectifResults, setEffectifResults] = useState([]);
   var [effectifMessage, setEffectifMessage] = useState("");
   var [effectifLoading, setEffectifLoading] = useState(false);
+  var [manualEffectif, setManualEffectif] = useState(null);
+  var [manualEffectifPrecis, setManualEffectifPrecis] = useState("");
+  var [manualEffectifTranche, setManualEffectifTranche] = useState("21");
+  var [bulkIncludeManual, setBulkIncludeManual] = useState(false);
+  var [bulkPreview, setBulkPreview] = useState(null);
+  var [bulkProgress, setBulkProgress] = useState(null);
+  var [bulkReport, setBulkReport] = useState(null);
+  var [bulkResume, setBulkResume] = useState(null);
 
   // Form state
   var [fLastName, setFLastName] = useState("");
@@ -1799,8 +1826,8 @@ function App() {
     setSelId(id);
   }
 
-  function updContact(id, updates, rootUpdates) {
-    var newContacts = contacts.map(function (c) {
+  function updContact(id, updates, rootUpdates, baseContacts) {
+    var newContacts = (baseContacts || contacts).map(function (c) {
       if (c.id !== id) return c;
       var copy = {};
       Object.keys(c).forEach(function (k) { copy[k] = c[k]; });
@@ -1817,6 +1844,18 @@ function App() {
       return copy;
     });
     save(Object.assign({ contacts: newContacts, categories: categories }, rootUpdates || {}));
+    return newContacts;
+  }
+
+  function effectifPatch(candidate) {
+    return {
+      effectifTranche: candidate.tranche_effectif_salarie || "NN",
+      effectifAnnee: candidate.annee_tranche_effectif_salarie || "",
+      effectifSiren: candidate.siren || "",
+      effectifSource: "api",
+      effectifDate: todayStr(),
+      effectifPrecis: null
+    };
   }
 
   function openEffectifSearch(c) {
@@ -1852,15 +1891,97 @@ function App() {
 
   function chooseEffectif(candidate) {
     if (!effectifModal) return;
-    updContact(effectifModal.id, {
-      effectifTranche: candidate.tranche_effectif_salarie || "NN",
-      effectifAnnee: candidate.annee_tranche_effectif_salarie || "",
-      effectifSiren: candidate.siren || "",
-      effectifSource: "api",
-      effectifDate: todayStr(),
-      effectifPrecis: null
-    });
+    updContact(effectifModal.id, effectifPatch(candidate));
     setEffectifModal(null);
+  }
+
+  function openManualEffectif(c) {
+    setManualEffectif(c);
+    setManualEffectifPrecis(c.effectifPrecis == null ? "" : String(c.effectifPrecis));
+    setManualEffectifTranche(c.effectifTranche && c.effectifTranche !== "NN" ? c.effectifTranche : "21");
+  }
+
+  function saveManualEffectif() {
+    if (!manualEffectif) return;
+    var hasCount = manualEffectifPrecis !== "";
+    var count = Number(manualEffectifPrecis);
+    if (hasCount && (!isFinite(count) || count < 0 || Math.floor(count) !== count)) return;
+    updContact(manualEffectif.id, {
+      effectifTranche: hasCount ? KIT_PURE.trancheFromCount(count) : manualEffectifTranche,
+      effectifAnnee: "",
+      effectifSiren: manualEffectif.effectifSiren || "",
+      effectifSource: "manuel",
+      effectifDate: todayStr(),
+      effectifPrecis: hasCount ? count : null
+    });
+    setManualEffectif(null);
+  }
+
+  function refreshEffectif(c) {
+    if (!c.effectifSiren) { openEffectifSearch(c); return; }
+    if (c.effectifSource === "manuel" && !confirm("Cette actualisation remplacera la valeur saisie manuellement. Continuer ?")) return;
+    if (!navigator.onLine) return;
+    setEffectifModal({ id: c.id, company: c.company, refresh: true });
+    setEffectifResults([]); setEffectifMessage(""); setEffectifLoading(true);
+    fetch(KIT_PURE.effectifSearchUrl(c.effectifSiren), { referrerPolicy: "no-referrer", credentials: "omit" }).then(function (response) {
+      if (response.status === 429) throw new Error("LIMIT:" + (response.headers.get("Retry-After") || "quelques instants"));
+      if (!response.ok) throw new Error("HTTP:" + String(response.status));
+      return response.json();
+    }).then(function (body) {
+      var candidate = (body.results || []).filter(function (x) { return x.siren === c.effectifSiren; })[0];
+      if (!candidate || candidate.etat_administratif !== "A") { setEffectifMessage("Entreprise introuvable ou cessée : l'ancien effectif est conservé."); return; }
+      updContact(c.id, effectifPatch(candidate)); setEffectifModal(null);
+    }).catch(function (error) {
+      var msg = String(error && error.message || "");
+      setEffectifMessage(msg.indexOf("LIMIT:") === 0 ? "Trop de requêtes — réessayer après " + msg.slice(6) + "." : "Impossible d'actualiser l'effectif.");
+    }).then(function () { setEffectifLoading(false); });
+  }
+
+  function prepareBulkEffectifs(kind) {
+    if (!navigator.onLine) return;
+    var started = bulkResume && bulkResume.kind === kind ? bulkResume.started : nowTS();
+    var targets = KIT_PURE.bulkEffectifTargets(contacts, bulkIncludeManual, started).filter(function (target) { return kind === "complete" ? target.mode === "denomination" : target.mode === "siren"; });
+    targets = targets.map(function (target) { var contact = contacts.filter(function (c) { return c.id === target.id; })[0]; return Object.assign({}, target, { label: contact && contact.company || target.cle }); });
+    setBulkReport(null);
+    setBulkPreview({ kind: kind, started: started, targets: targets });
+  }
+
+  function runBulkEffectifs() {
+    if (!bulkPreview || !navigator.onLine) return;
+    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], stopped: "" };
+    setBulkPreview(null); setBulkProgress({ done: 0, total: lot.targets.length });
+    function next(index) {
+      if (index >= lot.targets.length) { setBulkProgress(null); setBulkReport(report); setBulkResume(null); return; }
+      var target = lot.targets[index];
+      fetch(KIT_PURE.effectifSearchUrl(target.cle), { referrerPolicy: "no-referrer", credentials: "omit" }).then(function (response) {
+        if (response.status === 429) { var error = new Error("LIMIT"); error.retryAfter = response.headers.get("Retry-After") || "quelques instants"; throw error; }
+        if (!response.ok) throw new Error("HTTP " + String(response.status));
+        return response.json();
+      }).then(function (body) {
+        var results = body && body.results || [];
+        if (target.mode === "denomination") {
+          var candidate = results.length === 1 && KIT_PURE.denominationMatch(results[0].nom_complet, target.cle) ? results[0] : null;
+          if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label); }
+          else report.ambiguous.push({ id: target.id, company: target.cle, results: results });
+        } else {
+          var match = results.filter(function (x) { return x.siren === target.cle; })[0];
+          if (!match || match.etat_administratif !== "A") report.preserved.push(target.label);
+          else { working = updContact(target.id, effectifPatch(match), null, working); report.updated.push(target.label); }
+        }
+        setBulkProgress({ done: index + 1, total: lot.targets.length });
+        setTimeout(function () { next(index + 1); }, 250);
+      }).catch(function (error) {
+        report.stopped = error && error.message === "LIMIT" ? "Limite atteinte. Réessayer après " + error.retryAfter + "." : "Lot arrêté : " + String(error && error.message || error);
+        setBulkResume({ kind: lot.kind, started: lot.started });
+        setBulkProgress(null); setBulkReport(report);
+      });
+    }
+    next(0);
+  }
+
+  function openBulkAmbiguous(item) {
+    setEffectifModal({ id: item.id, company: item.company });
+    setEffectifResults(item.results || []); setEffectifMessage(""); setEffectifLoading(false);
   }
 
   function delContact(id) {
@@ -2972,6 +3093,25 @@ function App() {
     );
   }
 
+  function renderManualEffectifModal() {
+    if (!manualEffectif) return null;
+    var trancheCodes = ["00", "01", "02", "03", "11", "12", "21", "22", "31", "32", "41", "42", "51", "52", "53"];
+    var countValid = manualEffectifPrecis === "" || (isFinite(Number(manualEffectifPrecis)) && Number(manualEffectifPrecis) >= 0 && Math.floor(Number(manualEffectifPrecis)) === Number(manualEffectifPrecis));
+    return <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.48)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={function () { setManualEffectif(null); }}>
+      <div style={{ background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 430 }} onClick={function (e) { e.stopPropagation(); }}>
+        <h3 style={{ margin: "0 0 14px", color: ac }}>Saisir l'effectif</h3>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>EFFECTIF PRÉCIS (OPTIONNEL)</label>
+        <input type="number" min="0" step="1" value={manualEffectifPrecis} onChange={function (e) { setManualEffectifPrecis(e.target.value); }} placeholder="Ex. 75" style={{ width: "100%", boxSizing: "border-box", padding: 9, margin: "5px 0 12px", border: "1px solid " + bd, borderRadius: 8 }} />
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>TRANCHE {manualEffectifPrecis !== "" ? "(DÉRIVÉE AUTOMATIQUEMENT)" : ""}</label>
+        <select disabled={manualEffectifPrecis !== ""} value={manualEffectifPrecis !== "" && countValid ? KIT_PURE.trancheFromCount(Number(manualEffectifPrecis)) : manualEffectifTranche} onChange={function (e) { setManualEffectifTranche(e.target.value); }} style={{ width: "100%", padding: 9, margin: "5px 0 16px", border: "1px solid " + bd, borderRadius: 8 }}>
+          {trancheCodes.map(function (code) { return <option key={code} value={code}>{KIT_PURE.trancheLabel(code)}</option>; })}
+        </select>
+        {!countValid ? <p role="alert" style={{ color: "#9A3115", fontSize: 12 }}>Saisissez un nombre entier positif.</p> : null}
+        <div style={{ display: "flex", gap: 8 }}><button disabled={!countValid} onClick={saveManualEffectif} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", cursor: countValid ? "pointer" : "not-allowed", fontFamily: ff }}>Enregistrer</button><button onClick={function () { setManualEffectif(null); }} style={{ background: "#fff", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div>
+      </div>
+    </div>;
+  }
+
   function renderLogModal() {
     if (!showLog) return null;
     var c = null;
@@ -3409,7 +3549,7 @@ function App() {
             {c.metAt ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>LIEU DE RENCONTRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.metAt}</p></div> : null}
             {c.sector ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>CCN DE BRANCHE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.sector}</p></div> : null}
             {c.birthday ? <div style={{ padding: 14, background: "#FDF2F8", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#9D174D", fontWeight: 600 }}>ANNIVERSAIRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{fmtDate(c.birthday)}</p></div> : null}
-            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p><p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(c.effectifTranche) ? KIT_PURE.trancheLabel(c.effectifTranche) + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p><button disabled={!navigator.onLine} title={!navigator.onLine ? "Recherche indisponible hors ligne" : ""} onClick={function () { openEffectifSearch(c); }} style={{ background: "transparent", color: navigator.onLine ? ac : "#94A3B8", border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Rechercher l'effectif</button></div> : null}
+            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p><p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(c.effectifTranche) ? (c.effectifPrecis != null ? String(c.effectifPrecis) + " sal. · " : "") + KIT_PURE.trancheLabel(c.effectifTranche) + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button disabled={!navigator.onLine} title={!navigator.onLine ? "Recherche indisponible hors ligne" : ""} onClick={function () { c.effectifSiren ? refreshEffectif(c) : openEffectifSearch(c); }} style={{ background: "transparent", color: navigator.onLine ? ac : "#94A3B8", border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>{c.effectifSiren ? "Actualiser" : "Rechercher l'effectif"}</button><button onClick={function () { openManualEffectif(c); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Saisir l'effectif</button></div></div> : null}
           </div>
 
           {c.followUpDate ? (
@@ -3895,6 +4035,17 @@ function App() {
           </div>
         </div>
 
+        <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
+          <p style={{ margin: "0 0 5px", fontSize: 14, fontWeight: 700, color: "#235C68" }}>Taille des entreprises</p>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#2F7C8C" }}>Toutes les dénominations ci-dessous sont toujours affichées avant tout envoi.</p>
+          <label style={{ display: "block", marginBottom: 10, fontSize: 12.5, color: "#235C68" }}><input type="checkbox" checked={bulkIncludeManual} onChange={function (e) { setBulkIncludeManual(e.target.checked); }} /> Inclure les valeurs saisies manuellement</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("complete"); }} style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Compléter les effectifs</button><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("update"); }} style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Mettre à jour les effectifs</button></div>
+          {!navigator.onLine ? <p role="alert" style={{ margin: "9px 0 0", fontSize: 12, color: "#9A3115" }}>Actions indisponibles hors ligne.</p> : null}
+          {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id}>{target.label}{target.mode === "siren" ? " · SIREN " + target.cle : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
+          {bulkProgress ? <p role="status" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#235C68" }}>Progression : {bulkProgress.done} / {bulkProgress.total}</p> : null}
+          {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
+        </div>
+
         {showMeetingSettings ? (
           <div style={{ background: "#F6F5F2", borderRadius: 12, border: "1px solid " + bd, padding: 16, marginBottom: 12 }}>
             <p style={{ margin: "0 0 14px", fontSize: 16, fontWeight: 700, color: ac }}>{"Rencontres & agenda"}</p>
@@ -4178,6 +4329,7 @@ function App() {
       {saveOk && trackedFile.failed ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Le fichier suivi n'est plus accessible — re-choisissez-le</div> : null}
       {renderLogModal()}
       {renderEffectifModal()}
+      {renderManualEffectifModal()}
       {renderVoeuxModal()}
       {renderInviteModal()}
       {renderDoubleInviteModal()}
