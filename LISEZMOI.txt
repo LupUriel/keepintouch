@@ -101,6 +101,10 @@ sur une fiche non rattachée, « Compléter les effectifs » pour les entreprise
 Les actions groupées montrent toujours la liste complète des dénominations ou SIREN avant
 leur lancement.
 
+Les recherches par dénomination sont affinées avec le code postal trouvé dans l'adresse, puis
+les résultats sont classés localement selon leur proximité avec l'adresse de la fiche. Le bouton
+« Élargir la recherche » permet de retirer ce filtre quand il est appliqué.
+
 La source publique est SIRENE, via l'API Recherche d'entreprises de l'État. Une recherche
 n'envoie que la dénomination de l'entreprise (ou son SIREN), jamais le nom du contact ni ses
 coordonnées. La saisie manuelle reste possible ; elle est exclue par défaut des mises à jour
