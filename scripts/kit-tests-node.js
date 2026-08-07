@@ -1,30 +1,25 @@
 #!/usr/bin/env node
+"use strict";
+
 var fs = require("fs");
 var vm = require("vm");
-
-var html = fs.readFileSync("index.html", "utf8");
+var html = fs.readFileSync(require("path").join(__dirname, "..", "index.html"), "utf8");
+var sw = fs.readFileSync(require("path").join(__dirname, "..", "sw.js"), "utf8");
 var scripts = [];
-html.replace(/<script([^>]*)>([\s\S]*?)<\/script>/gi, function (_, attrs, source) {
-  if (!/\bsrc\s*=/.test(attrs) && !/text\/babel/.test(attrs)) scripts.push(source);
-  return _;
-});
-var storage = {};
-var sandbox = {
-  console: console,
-  location: { hostname: "localhost" },
-  navigator: { onLine: true },
-  localStorage: {
-    getItem: function (key) { return Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null; },
-    setItem: function (key, value) { storage[key] = String(value); },
-    removeItem: function (key) { delete storage[key]; },
-    key: function (index) { return Object.keys(storage)[index] || null; },
-    get length() { return Object.keys(storage).length; }
-  },
-  msal: { PublicClientApplication: function () { return { initialize: function () { return Promise.resolve(); }, handleRedirectPromise: function () { return Promise.resolve(null); }, getAllAccounts: function () { return []; } }; } },
-  alert: function () {},
-  setTimeout: function () { return 0; },
-  clearTimeout: function () {}
-};
+var re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+var match;
+while ((match = re.exec(html))) {
+  if (/\bsrc\s*=/.test(match[1]) || /\btype\s*=\s*["']text\/babel["']/.test(match[1])) continue;
+  scripts.push(match[2]);
+}
+var storage = { getItem: function () { return null; }, setItem: function () {}, removeItem: function () {}, key: function () { return null; }, length: 0 };
+var sandbox = { console: console, localStorage: storage, location: { hostname: "localhost" }, navigator: { onLine: true }, window: {}, setTimeout: setTimeout, clearTimeout: clearTimeout, Promise: Promise, KIT_SOURCE_HTML: html, KIT_SOURCE_SW: sw };
 vm.createContext(sandbox);
-scripts.forEach(function (source) { vm.runInContext(source, sandbox); });
-Promise.resolve().then(function () { process.exitCode = sandbox.KIT_TESTS.run() ? 1 : 0; });
+try {
+  scripts.forEach(function (source, index) { vm.runInContext(source, sandbox, { filename: "index-inline-" + String(index + 1) + ".js" }); });
+  var failures = sandbox.KIT_TESTS.run();
+  process.exitCode = failures ? 1 : 0;
+} catch (error) {
+  console.error(error && error.stack || error);
+  process.exitCode = 1;
+}

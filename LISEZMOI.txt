@@ -28,6 +28,14 @@
 1. Ouvrez Chrome et allez sur https://lupuriel.github.io/keepintouch/
 2. Dans la barre d'adresse, cliquez la petite icône « Installer » (ou ⋮ > « Installer Keep In Touch »)
 
+## Envoyer des vœux en un geste
+
+Dans « À suivre », le bouton « Vœux » d'un anniversaire ou d'une date clé ouvre un message
+prérempli que vous pouvez modifier avant de l'envoyer par mail, WhatsApp ou SMS (ou de le
+copier). Les quatre modèles de vœux sont modifiables dans ⋯ > ⚙ Rencontres & agenda >
+« MODÈLES DE MESSAGE ». Après l'envoi, cliquez « C'est envoyé ✓ » pour le journaliser dans
+la fiche ; fermer l'aperçu ne journalise rien.
+
 ## Connexion de l'agenda Outlook (proposition automatique de dates)
 
 L'app peut lire votre agenda Outlook (Microsoft 365) pour proposer d'elle-même des dates de
@@ -77,11 +85,47 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 ## Vos données
 
+Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
+
+## Récapitulatif hebdomadaire
+
+À la première ouverture de chaque semaine, un récapitulatif présente les actions prioritaires
+et les vœux à prévoir. Il s'affiche une fois par semaine et par appareil après sa fermeture.
+La case « Récapitulatif hebdomadaire à l'ouverture » des réglages permet de le désactiver.
+
+## Taille des entreprises
+
+Trois gestes permettent de renseigner la taille d'une entreprise : « Rechercher l'effectif »
+sur une fiche non rattachée, « Compléter les effectifs » pour les entreprises à rattacher et
+« Mettre à jour les effectifs » pour actualiser les entreprises déjà rattachées par leur SIREN.
+Les actions groupées montrent toujours la liste complète des dénominations ou SIREN avant
+leur lancement.
+
+La source publique est SIRENE, via l'API Recherche d'entreprises de l'État. Une recherche
+n'envoie que la dénomination de l'entreprise (ou son SIREN), jamais le nom du contact ni ses
+coordonnées. La saisie manuelle reste possible ; elle est exclue par défaut des mises à jour
+groupées et une actualisation depuis la fiche demande une confirmation avant de la remplacer.
+
+Limite résiduelle entre appareils : lors d'une fusion, la donnée la plus récente gagne champ
+par champ. Une actualisation API plus récente réalisée sur l'autre appareil peut donc
+supplanter une saisie manuelle ; le rapport de fusion signale ce conflit.
+
 - Les données sont stockées LOCALEMENT dans chaque navigateur
 - Les données du PC et du mobile sont INDÉPENDANTES
 - Faites régulièrement une sauvegarde (Sauvegarder/JSON dans le tableau de bord) ;
   la fusion permet de rapprocher deux appareils
 - Les sauvegardes ne contiennent JAMAIS de données d'authentification Microsoft
+
+## Protéger ses données
+
+- Sur PC avec Chrome ou Edge, ouvrez ⋯ > Sauvegarde / Restauration, cliquez « Suivre un
+  fichier de sauvegarde » et choisissez de préférence un fichier dans OneDrive. L'app le
+  met ensuite à jour automatiquement après chaque enregistrement.
+- Sur Android, utilisez « Partager la sauvegarde », puis importez le fichier sur l'autre
+  appareil avec « Importer / fusionner ».
+- « Restaurer une version » permet de repartir d'un instantané quotidien récent.
+- Si une écriture locale ou celle du fichier suivi échoue, une bannière rouge vous avertit :
+  exportez une sauvegarde ou re-choisissez le fichier selon le message affiché.
 
 ## Mot de passe
 
