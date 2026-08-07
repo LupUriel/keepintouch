@@ -309,7 +309,10 @@ var KIT_PURE = (function () {
     return "53";
   }
   function effectifTieBreak(a, b) { return trancheRank(b && b.effectifTranche) - trancheRank(a && a.effectifTranche); }
-  function effectifSearchUrl(denomination) { return "https://recherche-entreprises.api.gouv.fr/search?q=" + encodeURIComponent(String(denomination || "")) + "&per_page=10"; }
+  function effectifSearchUrl(denomination, codePostal) {
+    var url = "https://recherche-entreprises.api.gouv.fr/search?q=" + encodeURIComponent(String(denomination || "")) + "&per_page=10";
+    return typeof codePostal === "string" && /^\d{5}$/.test(codePostal) ? url + "&code_postal=" + codePostal : url;
+  }
   function cspAllowsApi(htmlText) {
     var meta = String(htmlText || "").match(/<meta\b[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/i);
     if (!meta) return true;
@@ -328,13 +331,54 @@ var KIT_PURE = (function () {
     var escaped = String(origin || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp("(?:^|\\s)" + escaped + "(?:\\s|$)", "i").test(section[1].trim());
   }
+  function normalizedText(value) {
+    var text = String(value || "").toLowerCase();
+    if (text.normalize) text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return text.replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  }
   function denominationMatch(a, b) {
-    function normalized(value) {
-      var text = String(value || "").toLowerCase();
-      if (text.normalize) text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      return text.replace(/-/g, " ").replace(/\s+/g, " ").trim();
+    return normalizedText(a) === normalizedText(b);
+  }
+  function adresseSimilarity(adresseKit, adresseApi) {
+    if (typeof adresseKit !== "string" || typeof adresseApi !== "string") return 0;
+    var kit = normalizedText(adresseKit);
+    var api = normalizedText(adresseApi);
+    if (!kit || !api) return 0;
+    var kitTokens = {};
+    var apiTokens = {};
+    kit.split(" ").forEach(function (token) { if (token.length >= 2) kitTokens[token] = true; });
+    api.split(" ").forEach(function (token) { if (token.length >= 2) apiTokens[token] = true; });
+    var score = 0;
+    var numeroCommun = false;
+    Object.keys(kitTokens).forEach(function (token) {
+      if (!apiTokens[token]) return;
+      score += 1;
+      if (/^\d+$/.test(token)) numeroCommun = true;
+    });
+    return score + (numeroCommun ? 2 : 0);
+  }
+  function rankEffectifCandidates(results, adresseKit) {
+    var source = Array.isArray(results) ? results : [];
+    if (typeof adresseKit !== "string" || !normalizedText(adresseKit)) return source.slice();
+    var ranked = source.map(function (candidate, index) {
+      var score = 0;
+      var addresses = [];
+      if (candidate && candidate.siege && candidate.siege.adresse != null) addresses.push(candidate.siege.adresse);
+      if (candidate && Array.isArray(candidate.matching_etablissements)) {
+        candidate.matching_etablissements.forEach(function (etablissement) {
+          if (etablissement && etablissement.adresse != null) addresses.push(etablissement.adresse);
+        });
+      }
+      addresses.forEach(function (adresse) { score = Math.max(score, adresseSimilarity(adresseKit, adresse)); });
+      return { candidate: candidate, index: index, score: score };
+    });
+    for (var i = 1; i < ranked.length; i += 1) {
+      var current = ranked[i];
+      var j = i - 1;
+      while (j >= 0 && ranked[j].score < current.score) { ranked[j + 1] = ranked[j]; j -= 1; }
+      ranked[j + 1] = current;
     }
-    return normalized(a) === normalized(b);
+    return ranked.map(function (entry) { return entry.candidate; });
   }
   function bulkEffectifTargets(contacts, includeManual, lotStartISO) {
     return (contacts || []).filter(function (contact) {
@@ -342,10 +386,10 @@ var KIT_PURE = (function () {
       if (!includeManual && contact.effectifSource === "manuel") return false;
       return !(lotStartISO && contact.effectifDate && String(contact.effectifDate).slice(0, 10) >= String(lotStartISO).slice(0, 10));
     }).map(function (contact) {
-      return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim() };
+      return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null };
     });
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -362,10 +406,21 @@ KIT_TESTS.add("effectifs libellés exacts", function () { var expected = { "00":
 KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,"00"],[1,"01"],[2,"01"],[3,"02"],[5,"02"],[6,"03"],[9,"03"],[10,"11"],[19,"11"],[20,"12"],[49,"12"],[50,"21"],[99,"21"],[100,"22"],[199,"22"],[200,"31"],[249,"31"],[250,"32"],[499,"32"],[500,"41"],[999,"41"],[1000,"42"],[1999,"42"],[2000,"51"],[4999,"51"],[5000,"52"],[9999,"52"],[10000,"53"]]; pairs.forEach(function (pair) { kitAssert(KIT_PURE.trancheFromCount(pair[0]) === pair[1], String(pair[0])); }); });
 KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
 KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # C+D France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20C%2BD%20France&per_page=10") > 0, url); });
+KIT_TESTS.add("effectifs URL ajoute seulement un code postal valide", function () { var url = KIT_PURE.effectifSearchUrl("A & B", "73000"); kitAssert(url.indexOf("q=A%20%26%20B&per_page=10&code_postal=73000") > 0, url); ["7500", "ABCDE", null, undefined].forEach(function (cp) { kitAssert(KIT_PURE.effectifSearchUrl("X", cp).indexOf("code_postal") < 0, String(cp)); }); });
+KIT_TESTS.add("effectifs similarité normalise et bonifie le numéro commun", function () { kitAssert(KIT_PURE.adresseSimilarity("14 faubourg Reclus 73000 Chambéry", "14 FAUBOURG RECLUS 73000 CHAMBERY") === 7); kitAssert(KIT_PURE.adresseSimilarity("12 rue de la Paix", "14 FAUBOURG RECLUS") === 0); kitAssert(KIT_PURE.adresseSimilarity("Chambéry-le-Haut", "CHAMBERY LE HAUT") === 3); kitAssert(KIT_PURE.adresseSimilarity("a b rue", "a b rue") === 1); });
+KIT_TESTS.add("effectifs similarité rejette les adresses vides", function () { kitAssert(KIT_PURE.adresseSimilarity("", "14 rue Reclus") === 0); kitAssert(KIT_PURE.adresseSimilarity("14 rue Reclus", "") === 0); kitAssert(KIT_PURE.adresseSimilarity(null, "14 rue Reclus") === 0); kitAssert(KIT_PURE.adresseSimilarity("14 rue Reclus", {}) === 0); });
+KIT_TESTS.add("effectifs classement remonte le bon homonyme sans mutation", function () { var premier = { id: "paix", siege: { adresse: "12 rue de la Paix 73000 Chambéry" } }; var second = { id: "reclus", siege: { adresse: "14 faubourg Reclus 73000 Chambéry" } }; var results = [premier, second]; var ranked = KIT_PURE.rankEffectifCandidates(results, "14 faubourg Reclus 73000 Chambéry"); kitAssert(ranked !== results && ranked[0] === second && ranked[1] === premier); kitAssert(results.length === 2 && results[0] === premier && results[1] === second); });
+KIT_TESTS.add("effectifs classement est stable et tolère les adresses absentes", function () { var a = { id: "a" }; var b = { id: "b", siege: {} }; var c = { id: "c", matching_etablissements: null }; var ranked = KIT_PURE.rankEffectifCandidates([a, b, c], "14 rue Reclus"); kitAssert(ranked[0] === a && ranked[1] === b && ranked[2] === c); });
+KIT_TESTS.add("effectifs classement utilise les établissements correspondants", function () { var siegeSeul = { id: "siege", siege: { adresse: "12 rue de la Paix" } }; var etablissement = { id: "etablissement", siege: { adresse: "8 avenue Centrale" }, matching_etablissements: [{ adresse: "14 faubourg Reclus 73000 Chambéry" }] }; var ranked = KIT_PURE.rankEffectifCandidates([siegeSeul, etablissement], "14 faubourg Reclus 73000 Chambéry"); kitAssert(ranked[0] === etablissement); });
+KIT_TESTS.add("effectifs classement conserve l'ordre pour une adresse KIT vide", function () { var results = [{ id: "a", siege: { adresse: "14 rue Reclus" } }, { id: "b" }]; var ranked = KIT_PURE.rankEffectifCandidates(results, ""); kitAssert(ranked !== results && ranked[0] === results[0] && ranked[1] === results[1]); });
+KIT_TESTS.add("effectifs classement stable à scores non nuls égaux", function () { var a = { id: "a", siege: { adresse: "14 faubourg Reclus 73000 Chambéry" } }; var b = { id: "b", siege: { adresse: "14 faubourg Reclus 73000 Chambéry" } }; var ranked = KIT_PURE.rankEffectifCandidates([a, b], "14 faubourg Reclus 73000 Chambéry"); kitAssert(ranked[0] === a && ranked[1] === b); });
+KIT_TESTS.add("effectifs similarité : un code postal commun seul donne aussi le bonus (choix figé)", function () { kitAssert(KIT_PURE.adresseSimilarity("14 faubourg Reclus 73000 Chambéry", "9 impasse Voltaire 73000 Chambéry") === 4); });
+KIT_TESTS.add("effectifs URL : liste blanche stricte des paramètres", function () { [KIT_PURE.effectifSearchUrl("A & B"), KIT_PURE.effectifSearchUrl("A & B", "73000"), KIT_PURE.effectifSearchUrl("X", "bad")].forEach(function (url) { var query = url.split("?")[1] || ""; query.split("&").forEach(function (pair) { var key = pair.split("=")[0]; kitAssert(key === "q" || key === "per_page" || key === "code_postal", key); }); }); });
+KIT_TESTS.add("effectifs câblage : l'interface passe le code postal et classe les candidates", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || (/effectifSearchUrl\(c\.company, codePostal\)/.test(KIT_SOURCE_HTML) && /effectifSearchUrl\(target\.cle, codePostal\)/.test(KIT_SOURCE_HTML) && /setEffectifResults\(KIT_PURE\.rankEffectifCandidates\(results \|\| \[\]/.test(KIT_SOURCE_HTML) && /setEffectifResults\(KIT_PURE\.rankEffectifCandidates\(item\.results \|\| \[\]/.test(KIT_SOURCE_HTML))); });
 KIT_TESTS.add("effectifs dérivation rejette les entrées invalides", function () { kitAssert(KIT_PURE.trancheFromCount(-1) === "NN"); kitAssert(KIT_PURE.trancheFromCount(2.5) === "NN"); kitAssert(KIT_PURE.trancheFromCount(NaN) === "NN"); kitAssert(KIT_PURE.trancheFromCount("abc") === "NN"); });
 KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr; script-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' http://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' https://evilrecherche-entreprises.api.gouv.fr\">")); });
 KIT_TESTS.add("effectifs garde CSP sur le document réel", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || KIT_PURE.cspAllowsApi(KIT_SOURCE_HTML), "la CSP du document bloque l'API Recherche d'entreprises — ajouter le domaine au connect-src"); });
-KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123" }, { id: "libre", company: "C" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "libre", mode: "denomination", cle: "C" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
+KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123" }, { id: "libre", company: "C", address: "8 avenue Hoche 75008 Paris" }, { id: "sansAdresse", company: "E" }, { id: "viaLieu", company: "F", address: "sans code postal", workLocation: "12 rue Y 69003 Lyon" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "libre", mode: "denomination", cle: "C", cp: "75008" }, { id: "sansAdresse", mode: "denomination", cle: "E", cp: null }, { id: "viaLieu", mode: "denomination", cle: "F", cp: "69003" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
 KIT_TESTS.add("effectifs égalité de dénomination", function () { kitAssert(KIT_PURE.denominationMatch("  Société   Été ", "SOCIETE ETE")); kitAssert(!KIT_PURE.denominationMatch("CABINET MARTIN", "CABINET MARTIN & ASSOCIES")); kitAssert(KIT_PURE.denominationMatch("SAINT-GOBAIN", "SAINT GOBAIN")); kitAssert(KIT_PURE.trancheFromCount(50) === "21"); });
 KIT_TESTS.add("effectifs reprise inclut les dates antérieures au lot", function () { var contacts = [{ id: "ancien", company: "A", effectifSiren: "111", effectifDate: "2026-08-01" }, { id: "recent", company: "B", effectifSiren: "222", effectifDate: "2026-08-06" }]; var cibles = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(cibles.length === 1 && cibles[0].id === "ancien", JSON.stringify(cibles)); var sansReprise = KIT_PURE.bulkEffectifTargets(contacts, false, null); kitAssert(sansReprise.length === 2); });
 KIT_TESTS.add("clé de semaine ISO du lundi au dimanche", function () { kitAssert(KIT_PURE.weekKey("2026-08-03") === "2026-W32"); kitAssert(KIT_PURE.weekKey("2026-08-09") === "2026-W32"); kitAssert(KIT_PURE.weekKey("2026-08-10") === "2026-W33"); });
@@ -1966,9 +2021,10 @@ function App(props) {
     };
   }
 
-  function openEffectifSearch(c) {
+  function openEffectifSearch(c, sansFiltre) {
     if (!c || !(c.company || "").trim()) return;
-    setEffectifModal({ id: c.id, company: c.company });
+    var cp = sansFiltre ? null : (KIT_PURE.extractPostal(c.address) || KIT_PURE.extractPostal(c.workLocation));
+    setEffectifModal({ id: c.id, company: c.company, cp: cp });
     setEffectifResults([]);
     setEffectifMessage("");
     if (!navigator.onLine) { setEffectifMessage("Recherche indisponible hors ligne."); return; }
@@ -1976,21 +2032,32 @@ function App(props) {
     /* Garde de séquence : une réponse tardive d'une recherche précédente ne doit jamais remplir le modal d'un autre contact */
     var seq = ++effectifReqSeq.current;
     var started = Date.now();
-    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-    var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
-    var options = { referrerPolicy: "no-referrer", credentials: "omit" };
-    if (controller) options.signal = controller.signal;
-    fetch(KIT_PURE.effectifSearchUrl(c.company), options).then(function (response) {
-      if (response.status === 429) {
-        var retry = response.headers.get("Retry-After");
-        throw new Error("LIMIT:" + (retry || "quelques instants"));
+    function request(codePostal) {
+      var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
+      var options = { referrerPolicy: "no-referrer", credentials: "omit" };
+      if (controller) options.signal = controller.signal;
+      return fetch(KIT_PURE.effectifSearchUrl(c.company, codePostal), options).then(function (response) {
+        if (response.status === 429) {
+          var retry = response.headers.get("Retry-After");
+          throw new Error("LIMIT:" + (retry || "quelques instants"));
+        }
+        if (!response.ok) throw new Error("HTTP:" + String(response.status));
+        return response.json();
+      }).then(function (body) { clearTimeout(timer); return body && body.results || []; }, function (error) { clearTimeout(timer); throw error; });
+    }
+    request(cp).then(function (results) {
+      if (seq !== effectifReqSeq.current) return results;
+      if (cp && !results.length) {
+        setEffectifMessage("Aucun résultat avec le code postal " + cp + " — recherche élargie.");
+        setEffectifModal({ id: c.id, company: c.company, cp: null });
+        return request(null);
       }
-      if (!response.ok) throw new Error("HTTP:" + String(response.status));
-      return response.json();
-    }).then(function (body) {
+      return results;
+    }).then(function (results) {
       if (seq !== effectifReqSeq.current) return;
-      setEffectifResults(body && body.results || []);
-      if (!(body && body.results && body.results.length)) setEffectifMessage("Aucune entreprise trouvée.");
+      setEffectifResults(KIT_PURE.rankEffectifCandidates(results || [], [c.address, c.workLocation].filter(Boolean).join(" ")));
+      if (!(results && results.length)) setEffectifMessage(cp ? "Aucun résultat avec le code postal " + cp + ", ni en recherche élargie." : "Aucune entreprise trouvée.");
     }).catch(function (error) {
       if (seq !== effectifReqSeq.current) return;
       var message = String(error && error.message || "");
@@ -1998,13 +2065,19 @@ function App(props) {
       else if (error && error.name === "AbortError") setEffectifMessage("La recherche a dépassé le délai de 15 secondes.");
       else if (navigator.onLine && Date.now() - started < 1500) setEffectifMessage("Requête bloquée — vérifier la politique de sécurité.");
       else setEffectifMessage("Panne réseau — impossible de rechercher l'entreprise.");
-    }).then(function () { clearTimeout(timer); if (seq === effectifReqSeq.current) setEffectifLoading(false); });
+    }).then(function () { if (seq === effectifReqSeq.current) setEffectifLoading(false); });
+  }
+
+  function fermerEffectifModal() {
+    /* Fermer invalide la séquence : une réponse tardive ne doit ni rouvrir le modal ni relancer une requête. */
+    effectifReqSeq.current++;
+    setEffectifModal(null);
   }
 
   function chooseEffectif(candidate) {
     if (!effectifModal) return;
     updContact(effectifModal.id, effectifPatch(candidate));
-    setEffectifModal(null);
+    fermerEffectifModal();
   }
 
   function openManualEffectif(c) {
@@ -2048,7 +2121,7 @@ function App(props) {
       if (seq !== effectifReqSeq.current) return;
       var candidate = (body.results || []).filter(function (x) { return x.siren === c.effectifSiren; })[0];
       if (!candidate || candidate.etat_administratif !== "A") { setEffectifMessage("Entreprise introuvable ou cessée : l'ancien effectif est conservé."); return; }
-      updContact(c.id, effectifPatch(candidate)); setEffectifModal(null);
+      updContact(c.id, effectifPatch(candidate)); fermerEffectifModal();
     }).catch(function (error) {
       if (seq !== effectifReqSeq.current) return;
       var msg = String(error && error.message || "");
@@ -2076,30 +2149,38 @@ function App(props) {
     function next(index) {
       if (index >= lot.targets.length) { setBulkProgress(null); setBulkReport(report); setBulkResume(null); return; }
       var target = lot.targets[index];
-      var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-      var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
-      var options = { referrerPolicy: "no-referrer", credentials: "omit" };
-      if (controller) options.signal = controller.signal;
-      fetch(KIT_PURE.effectifSearchUrl(target.cle), options).then(function (response) {
-        if (response.status === 429) { var error = new Error("LIMIT"); error.retryAfter = response.headers.get("Retry-After") || "quelques instants"; throw error; }
-        if (!response.ok) throw new Error("HTTP " + String(response.status));
-        return response.json();
-      }).then(function (body) {
-        var results = body && body.results || [];
+      function request(codePostal) {
+        var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
+        var options = { referrerPolicy: "no-referrer", credentials: "omit" };
+        if (controller) options.signal = controller.signal;
+        return fetch(KIT_PURE.effectifSearchUrl(target.cle, codePostal), options).then(function (response) {
+          if (response.status === 429) { var error = new Error("LIMIT"); error.retryAfter = response.headers.get("Retry-After") || "quelques instants"; throw error; }
+          if (!response.ok) throw new Error("HTTP " + String(response.status));
+          return response.json();
+        }).then(function (body) { clearTimeout(timer); return body && body.results || []; }, function (error) { clearTimeout(timer); throw error; });
+      }
+      var cpUtilise = target.mode === "denomination" ? (target.cp || null) : null;
+      request(cpUtilise).then(function (results) {
+        if (target.mode === "denomination" && cpUtilise && !results.length) {
+          /* Repli élargi espacé de 250 ms : deux requêtes immédiates par cible frôleraient la limite de 7 req/s de l'API. */
+          cpUtilise = null;
+          return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(function () { return request(null); });
+        }
+        return results;
+      }).then(function (results) {
         if (target.mode === "denomination") {
           var candidate = results.length === 1 && KIT_PURE.denominationMatch(results[0].nom_complet, target.cle) ? results[0] : null;
-          if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label); }
-          else report.ambiguous.push({ id: target.id, company: target.cle, results: results });
+          if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label + (cpUtilise ? " (affiné par " + cpUtilise + ")" : "")); }
+          else report.ambiguous.push({ id: target.id, company: target.cle, results: results, cp: cpUtilise });
         } else {
           var match = results.filter(function (x) { return x.siren === target.cle; })[0];
           if (!match || match.etat_administratif !== "A") report.preserved.push(target.label);
           else { working = updContact(target.id, effectifPatch(match), null, working); report.updated.push(target.label); }
         }
-        clearTimeout(timer);
         setBulkProgress({ done: index + 1, total: lot.targets.length });
         setTimeout(function () { next(index + 1); }, 250);
       }).catch(function (error) {
-        clearTimeout(timer);
         if (error && error.name === "AbortError") report.stopped = "Lot arrêté : une requête a dépassé le délai de 15 secondes. Relancer pour reprendre.";
         else if (error && error.message === "LIMIT") report.stopped = "Limite atteinte. Réessayer après " + error.retryAfter + ".";
         else report.stopped = "Lot arrêté : " + String(error && error.message || error);
@@ -2111,8 +2192,11 @@ function App(props) {
   }
 
   function openBulkAmbiguous(item) {
-    setEffectifModal({ id: item.id, company: item.company });
-    setEffectifResults(item.results || []);
+    /* Invalide toute réponse de fiche encore en vol : elle ne doit pas remplacer ce modal. */
+    effectifReqSeq.current++;
+    var contact = contacts.filter(function (c) { return c.id === item.id; })[0];
+    setEffectifModal({ id: item.id, company: item.company, cp: item.cp || null });
+    setEffectifResults(KIT_PURE.rankEffectifCandidates(item.results || [], contact ? [contact.address, contact.workLocation].filter(Boolean).join(" ") : ""));
     setEffectifMessage(item.results && item.results.length ? "" : "Aucune entreprise trouvée pour cette dénomination.");
     setEffectifLoading(false);
   }
@@ -3239,10 +3323,11 @@ function App(props) {
   function renderEffectifModal() {
     if (!effectifModal) return null;
     return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.48)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={function () { setEffectifModal(null); }}>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.48)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={fermerEffectifModal}>
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 620, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 16px 45px rgba(0,0,0,0.22)" }} onClick={function (e) { e.stopPropagation(); }}>
           <h3 style={{ margin: "0 0 4px", color: ac }}>Rattacher l'entreprise</h3>
           <p style={{ margin: "0 0 14px", color: "#64748B", fontSize: 13 }}>{"Résultats pour « " + effectifModal.company + " » — choisis l'entité correspondante."}</p>
+          {effectifModal.cp ? <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 12px" }}><span style={{ color: "#64748B", fontSize: 12 }}>{"affiné par " + effectifModal.cp}</span><button onClick={function () { var contact = contacts.filter(function (c) { return c.id === effectifModal.id; })[0]; if (contact) openEffectifSearch(contact, true); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "5px 8px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Élargir la recherche</button></div> : null}
           {effectifLoading ? <p style={{ fontSize: 13 }}>Recherche en cours…</p> : null}
           {effectifMessage ? <p role="alert" style={{ padding: 10, background: "#FBEAE5", borderRadius: 8, color: "#9A3115", fontSize: 13 }}>{effectifMessage}</p> : null}
           {effectifResults.map(function (candidate, index) {
@@ -3255,7 +3340,7 @@ function App(props) {
               <span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 12 }}>{effectif + (candidate.annee_tranche_effectif_salarie ? " · " + String(candidate.annee_tranche_effectif_salarie) : "")}</span>
             </button>;
           })}
-          <button onClick={function () { setEffectifModal(null); }} style={{ marginTop: 16, background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button>
+          <button onClick={fermerEffectifModal} style={{ marginTop: 16, background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button>
         </div>
       </div>
     );
