@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com https://recherche-entreprises.api.gouv.fr; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'self' https://login.microsoftonline.com">
   <meta name="theme-color" content="#1B1B24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -257,6 +258,16 @@ var KIT_PURE = (function () {
     return horizon.filter(function (date) { return dateIsFree(date, occupants, meal, idf, settings); }).sort().slice(0, limit);
   }
   function accumulateGraphPage(items, page) { return (items || []).concat(page && page.value || []); }
+  function isGraphUrl(url) { return /^https:\/\/graph\.microsoft\.com\//i.test(String(url || "")); }
+  function graphNextStep(pageCount, nextLink) {
+    if (!nextLink) return "fin";
+    if (pageCount >= 50) return "plafond";
+    if (!isGraphUrl(nextLink)) return "lien-invalide";
+    return "continuer";
+  }
+  function normalizeCandidateResult(result) {
+    return result && result.etat === "chargement" ? { etat: "erreur", candidates: [] } : result;
+  }
   function redirectUriFor(hostname) { return hostname === "localhost" ? "http://localhost:8000" : "https://lupuriel.github.io/keepintouch/"; }
   function classifyMsalError(error) {
     var text = [error && error.errorCode, error && error.errorMessage, error && error.message, error && error.name].filter(Boolean).join(" ");
@@ -309,6 +320,16 @@ var KIT_PURE = (function () {
     if (!content) return false;
     var connect = content[2].match(/(?:^|;)\s*connect-src\s+([^;]+)/i);
     return !!connect && /(?:^|\s)https:\/\/recherche-entreprises\.api\.gouv\.fr(?:\s|$)/i.test(connect[1].trim());
+  }
+  function cspDirectiveAllows(htmlText, directive, origin) {
+    var meta = String(htmlText || "").match(/<meta\b[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/i);
+    if (!meta) return true;
+    var content = meta[0].match(/content\s*=\s*(["'])([\s\S]*?)\1/i);
+    if (!content) return false;
+    var section = content[2].match(new RegExp("(?:^|;)\\s*" + directive + "\\s+([^;]+)", "i"));
+    if (!section) return false;
+    var escaped = String(origin || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp("(?:^|\\s)" + escaped + "(?:\\s|$)", "i").test(section[1].trim());
   }
   function normalizedText(value) {
     var text = String(value || "").toLowerCase();
@@ -368,7 +389,7 @@ var KIT_PURE = (function () {
       return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null };
     });
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -411,7 +432,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.1["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v43["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.2["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v44["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -485,6 +506,17 @@ KIT_TESTS.add("pagination accumule plus de 100 événements", function () { var 
 KIT_TESTS.add("plafond conserve les dix premières dates", function () { var s = candidateSettings({ horizon: { minJours: 0, maxJours: 30, plafond: 10 } }); var dates = KIT_PURE.candidateDates("2026-09-01", [], "dejeuner", true, s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-14"])); });
 KIT_TESTS.add("journée entière occupée bloque toutes les fenêtres", function () { var e = graphEvent("Séminaire", "busy", "2026-08-03T00:00:00.0000000", "2026-08-04T00:00:00.0000000", true); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings()).length === 0); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "diner", true, candidateSettings()).length === 0); });
 KIT_TESTS.add("horizon respecte J+3 et les jours ouvrés", function () { var s = candidateSettings({ horizon: { minJours: 3, maxJours: 6, plafond: 10 } }); var dates = KIT_PURE.generateCandidateHorizon("2026-07-30", s); kitAssert(JSON.stringify(dates) === JSON.stringify(["2026-08-03", "2026-08-04", "2026-08-05"])); });
+KIT_TESTS.add("URL Graph Microsoft acceptée", function () { kitAssert(KIT_PURE.isGraphUrl("https://graph.microsoft.com/v1.0/me/events")); });
+KIT_TESTS.add("autre domaine Graph refusé", function () { kitAssert(!KIT_PURE.isGraphUrl("https://example.com/v1.0/me/events")); });
+KIT_TESTS.add("Graph en HTTP refusé", function () { kitAssert(!KIT_PURE.isGraphUrl("http://graph.microsoft.com/v1.0/me/events")); });
+KIT_TESTS.add("préfixe Graph piégé refusé", function () { kitAssert(!KIT_PURE.isGraphUrl("https://graph.microsoft.com.evil.com/v1.0/me/events")); kitAssert(!KIT_PURE.isGraphUrl("https://evilgraph.microsoft.com/v1.0/me/events")); });
+KIT_TESTS.add("hôte Graph en majuscules accepté (casse d'hôte HTTP)", function () { kitAssert(KIT_PURE.isGraphUrl("https://GRAPH.MICROSOFT.COM/v1.0/me/events")); });
+KIT_TESTS.add("décision de pagination Graph aux frontières", function () { var lien = "https://graph.microsoft.com/v1.0/next"; kitAssert(KIT_PURE.graphNextStep(10, null) === "fin"); kitAssert(KIT_PURE.graphNextStep(50, null) === "fin"); kitAssert(KIT_PURE.graphNextStep(49, lien) === "continuer"); kitAssert(KIT_PURE.graphNextStep(50, lien) === "plafond"); kitAssert(KIT_PURE.graphNextStep(51, lien) === "plafond"); kitAssert(KIT_PURE.graphNextStep(10, "https://evil.com/x") === "lien-invalide"); kitAssert(KIT_PURE.graphNextStep(10, "https://GRAPH.MICROSOFT.COM/v1.0/next") === "continuer"); });
+KIT_TESTS.add("CSP du document réel autorise Microsoft (connexion + agenda + iframe de renouvellement)", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || (KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://graph.microsoft.com") && KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://login.microsoftonline.com") && KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "frame-src", "https://login.microsoftonline.com")), "la CSP du document prive Microsoft — connexion/agenda casseraient"); });
+KIT_TESTS.add("cspDirectiveAllows : directives et refus", function () { var csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://a.example; frame-src 'self' https://b.example\">"; kitAssert(KIT_PURE.cspDirectiveAllows(csp, "connect-src", "https://a.example")); kitAssert(!KIT_PURE.cspDirectiveAllows(csp, "connect-src", "https://b.example")); kitAssert(KIT_PURE.cspDirectiveAllows(csp, "frame-src", "https://b.example")); kitAssert(!KIT_PURE.cspDirectiveAllows(csp, "worker-src", "https://a.example")); kitAssert(KIT_PURE.cspDirectiveAllows("<html></html>", "connect-src", "https://a.example")); });
+KIT_TESTS.add("restauration branche la normalisation du brouillon", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.normalizeCandidateResult\(payload\.candidateResult\)/.test(KIT_SOURCE_HTML)); });
+KIT_TESTS.add("brouillon en chargement normalisé en erreur", function () { var result = KIT_PURE.normalizeCandidateResult({ etat: "chargement", candidates: ["2026-08-03"] }); kitAssert(JSON.stringify(result) === JSON.stringify({ etat: "erreur", candidates: [] })); });
+KIT_TESTS.add("brouillons terminés conservés", function () { ["ok", "erreur", "non-connecte"].forEach(function (etat) { var result = { etat: etat, candidates: ["2026-08-03"] }; kitAssert(KIT_PURE.normalizeCandidateResult(result) === result); }); });
   </script>
   <script>
 var KIT_AGENDA = (function () {
@@ -599,7 +631,7 @@ var KIT_AGENDA = (function () {
       },
       cache: { cacheLocation: "localStorage" }
     });
-    ready = client.initialize().then(function () {
+    var initialization = client.initialize().then(function () {
       return client.handleRedirectPromise().then(function (result) {
         consumeCheckpoint();
         var account = result && result.account || client.getAllAccounts()[0];
@@ -614,6 +646,21 @@ var KIT_AGENDA = (function () {
     }).catch(function (error) {
       publish({ etat: KIT_PURE.classifyMsalError(error), compte: "" });
       consumeCheckpoint();
+      return null;
+    });
+    var initializationTimer = null;
+    var initializationTimeout = new Promise(function (resolve) {
+      initializationTimer = setTimeout(function () {
+        publish({ etat: "indisponible", compte: "" });
+        resolve(null);
+      }, 10000);
+    });
+    ready = Promise.race([initialization, initializationTimeout]).then(function (result) {
+      if (initializationTimer !== null) clearTimeout(initializationTimer);
+      return result;
+    }).catch(function () {
+      if (initializationTimer !== null) clearTimeout(initializationTimer);
+      publish({ etat: "indisponible", compte: "" });
       return null;
     });
   } catch (error) {
@@ -679,7 +726,9 @@ function fetchCandidateDates(ctx, done) {
         var end = graphBoundary(KIT_PURE.addDaysISO(today, maxDays + 1));
         var url = "https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=" + encodeURIComponent(start) + "&endDateTime=" + encodeURIComponent(end) + "&$select=subject,start,end,showAs,isAllDay&$top=100";
         var events = [];
+        var pageCount = 0;
         function loadPage(nextUrl) {
+          pageCount += 1;
           // Délai limite par page : un réseau suspendu ne doit jamais figer « Recherche des disponibilités… »
           var controller = typeof AbortController === "function" ? new AbortController() : null;
           var timer = controller ? setTimeout(function () { try { controller.abort(); } catch (e) {} }, 15000) : null;
@@ -689,7 +738,9 @@ function fetchCandidateDates(ctx, done) {
             return response.json();
           }).then(function (page) {
             events = KIT_PURE.accumulateGraphPage(events, page);
-            if (page && page["@odata.nextLink"]) return loadPage(page["@odata.nextLink"]);
+            var etape = KIT_PURE.graphNextStep(pageCount, page && page["@odata.nextLink"]);
+            if (etape === "continuer") return loadPage(page["@odata.nextLink"]);
+            if (etape !== "fin") { finish({ etat: "erreur", candidates: [] }); return; }
             var candidates = KIT_PURE.candidateDates(today, events, ctx.meal, ctx.idf, ctx.settings || {});
             finish({ etat: "ok", candidates: candidates });
           }).catch(function () { if (timer) clearTimeout(timer); finish({ etat: "erreur", candidates: [] }); });
@@ -792,7 +843,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.5.1";
+var APP_VERSION = "1.5.2";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -2289,7 +2340,7 @@ function App(props) {
   function restoreInvite(payload) {
     setInviteId(payload.contactId); setInviteType(payload.meal); setInviteCanal(payload.canal); setInviteRegister(payload.registre);
     setInviteDates((payload.dates || []).slice()); setInviteObjet(payload.objet || ""); setInviteCorps(payload.corps || "");
-    setInviteCandidateDates((payload.candidateDates || []).slice()); setInviteManualDates((payload.manualDates || payload.dates || []).slice()); setInviteCandidateResult(payload.candidateResult || { etat: "non-connecte", candidates: [] });
+    setInviteCandidateDates((payload.candidateDates || []).slice()); setInviteManualDates((payload.manualDates || payload.dates || []).slice()); setInviteCandidateResult(KIT_PURE.normalizeCandidateResult(payload.candidateResult) || { etat: "non-connecte", candidates: [] });
     setInviteIdf(payload.idf !== false); setInviteStep(payload.step || "preview"); setInviteCoord(payload.coord || ""); setShowInvite(true); setReplayInvite(null);
   }
   function updateComposedDates(candidates, manual) {
