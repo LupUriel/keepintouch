@@ -95,6 +95,8 @@ La case « Récapitulatif hebdomadaire à l'ouverture » des réglages permet de
 
 ## Taille des entreprises
 
+Le rattachement d'une entreprise propage désormais son effectif aux autres fiches de même dénomination, sauf les saisies manuelles protégées et les fiches déjà liées à un autre SIREN. Une fiche rattachée peut aussi réunir plusieurs entreprises du groupe, ajoutées ou retirées individuellement. La couverture affichée cumule prudemment les bornes basses des tranches connues et signale les groupes dans les badges. La vérification BODACC contrôle successivement toutes les entreprises du groupe et conserve un état collectif unique, même lorsque certaines réponses manquent.
+
 Le panneau « Taille des entreprises » s'ouvre à la demande depuis le menu ⋯.
 
 Trois gestes permettent de renseigner la taille d'une entreprise : « Rechercher l'effectif »
@@ -118,7 +120,7 @@ supplanter une saisie manuelle ; le rapport de fusion signale ce conflit.
 
 ## Procédures collectives
 
-La vérification s'appuie sur la source officielle BODACC. Seul le SIREN mémorisé est envoyé ;
+La vérification s'appuie sur la source officielle BODACC. Seuls les SIREN mémorisés sont envoyés ;
 le résultat constitue un signal d'information et ne remplace pas un suivi juridique.
 
 - Les données sont stockées LOCALEMENT dans chaque navigateur
