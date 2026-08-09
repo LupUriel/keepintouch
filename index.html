@@ -313,6 +313,51 @@ var KIT_PURE = (function () {
     var url = "https://recherche-entreprises.api.gouv.fr/search?q=" + encodeURIComponent(String(denomination || "")) + "&per_page=10";
     return typeof codePostal === "string" && /^\d{5}$/.test(codePostal) ? url + "&code_postal=" + codePostal : url;
   }
+  function bodaccSearchUrl(siren) {
+    if (typeof siren !== "string" || !/^\d{9}$/.test(siren)) return null;
+    var base = "https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records";
+    var where = "registre like \"" + siren + "\" and familleavis_lib=\"Procédures collectives\"";
+    return base + "?where=" + encodeURIComponent(where) + "&order_by=" + encodeURIComponent("dateparution desc") + "&limit=" + encodeURIComponent("10");
+  }
+  function parseBodaccProcedures(body) {
+    try {
+      if (!body || !Array.isArray(body.results)) return [];
+      var procedures = [];
+      body.results.forEach(function (record) {
+        try {
+          if (!record || typeof record.jugement !== "string") return;
+          var jugement = JSON.parse(record.jugement);
+          if (!jugement || typeof jugement !== "object" || Array.isArray(jugement)) return;
+          procedures.push({
+            nature: jugement.nature || jugement.famille || "",
+            famille: jugement.famille || "",
+            date: jugement.date || record.dateparution || "",
+            tribunal: record.tribunal || ""
+          });
+        } catch (e) {}
+      });
+      return procedures;
+    } catch (e) {
+      return [];
+    }
+  }
+  function procedureEtatFrom(procedures) {
+    if (!Array.isArray(procedures) || procedures.length === 0) return "aucune";
+    var ouverture = null;
+    procedures.forEach(function (procedure) {
+      if (!procedure) return;
+      var estOuverture = procedure.famille === "Jugement d'ouverture" || /ouverture/i.test(String(procedure.nature || ""));
+      if (estOuverture && (!ouverture || String(procedure.date || "") > String(ouverture.date || ""))) ouverture = procedure;
+    });
+    if (!ouverture) return "cloturee";
+    var dateOuverture = String(ouverture.date || "");
+    var cloturee = procedures.some(function (procedure) {
+      if (!procedure) return false;
+      var cloture = /cl[oô]ture/i.test(String(procedure.nature || "")) || /cl[oô]ture/i.test(String(procedure.famille || ""));
+      return cloture && String(procedure.date || "") >= dateOuverture;
+    });
+    return cloturee ? "cloturee" : "en-cours";
+  }
   function cspAllowsApi(htmlText) {
     var meta = String(htmlText || "").match(/<meta\b[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/i);
     if (!meta) return true;
@@ -389,7 +434,7 @@ var KIT_PURE = (function () {
       return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null };
     });
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -407,6 +452,11 @@ KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,
 KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
 KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # C+D France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20C%2BD%20France&per_page=10") > 0, url); });
 KIT_TESTS.add("effectifs URL ajoute seulement un code postal valide", function () { var url = KIT_PURE.effectifSearchUrl("A & B", "73000"); kitAssert(url.indexOf("q=A%20%26%20B&per_page=10&code_postal=73000") > 0, url); ["7500", "ABCDE", null, undefined].forEach(function (cp) { kitAssert(KIT_PURE.effectifSearchUrl("X", cp).indexOf("code_postal") < 0, String(cp)); }); });
+KIT_TESTS.add("BODACC URL exacte et valeurs encodées", function () { var url = KIT_PURE.bodaccSearchUrl("919948430"); kitAssert(url === "https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records?where=registre%20like%20%22919948430%22%20and%20familleavis_lib%3D%22Proc%C3%A9dures%20collectives%22&order_by=dateparution%20desc&limit=10", url); });
+KIT_TESTS.add("BODACC URL rejette les SIREN invalides", function () { ["12345", "ABCDEFGHI", "9199484301", null].forEach(function (siren) { kitAssert(KIT_PURE.bodaccSearchUrl(siren) === null, String(siren)); }); });
+KIT_TESTS.add("BODACC parse les jugements réalistes", function () { var body = { results: [{ jugement: "{\"famille\":\"Avis de dépôt\",\"nature\":\"Dépôt de l'état des créances\",\"date\":\"2026-08-05\"}", dateparution: "2026-08-07", tribunal: "TAE Marseille" }, { jugement: "{\"famille\":\"Jugement d'ouverture\",\"nature\":\"Jugement d'ouverture d'une procédure de redressement judiciaire\",\"date\":\"2026-01-18\"}", dateparution: "2026-01-20", tribunal: "TAE Lyon" }] }; var parsed = KIT_PURE.parseBodaccProcedures(body); kitAssert(parsed.length === 2); kitAssert(parsed[0].nature === "Dépôt de l'état des créances" && parsed[0].date === "2026-08-05" && parsed[0].tribunal === "TAE Marseille"); kitAssert(parsed[1].nature === "Jugement d'ouverture d'une procédure de redressement judiciaire" && parsed[1].date === "2026-01-18" && parsed[1].tribunal === "TAE Lyon"); });
+KIT_TESTS.add("BODACC parse ignore un jugement malformé sans jeter", function () { var parsed = KIT_PURE.parseBodaccProcedures({ results: [{ jugement: "{pas du json", tribunal: "X" }, { jugement: "{\"famille\":\"Jugement d'ouverture\",\"date\":\"2026-01-18\"}", tribunal: "TAE Paris" }] }); kitAssert(parsed.length === 1 && parsed[0].nature === "Jugement d'ouverture" && parsed[0].famille === "Jugement d'ouverture" && parsed[0].date === "2026-01-18" && parsed[0].tribunal === "TAE Paris"); kitAssert(JSON.stringify(KIT_PURE.parseBodaccProcedures(null)) === "[]" && JSON.stringify(KIT_PURE.parseBodaccProcedures({})) === "[]"); });
+KIT_TESTS.add("BODACC décide l'état de la procédure", function () { var ouverture = { famille: "Jugement d'ouverture", nature: "Redressement judiciaire", date: "2026-01-18" }; var clotureRecente = { famille: "Jugement de clôture", nature: "Clôture pour insuffisance d'actif", date: "2026-06-01" }; var clotureAncienne = { famille: "Jugement de cloture", nature: "Cloture", date: "2020-01-01" }; kitAssert(KIT_PURE.procedureEtatFrom([]) === "aucune"); kitAssert(KIT_PURE.procedureEtatFrom([ouverture]) === "en-cours"); kitAssert(KIT_PURE.procedureEtatFrom([clotureRecente, ouverture]) === "cloturee"); kitAssert(KIT_PURE.procedureEtatFrom([ouverture, clotureAncienne]) === "en-cours"); kitAssert(KIT_PURE.procedureEtatFrom([{ famille: "Avis de dépôt", nature: "Dépôt de l'état des créances", date: "2026-08-05" }]) === "cloturee"); });
 KIT_TESTS.add("effectifs similarité normalise et bonifie le numéro commun", function () { kitAssert(KIT_PURE.adresseSimilarity("14 faubourg Reclus 73000 Chambéry", "14 FAUBOURG RECLUS 73000 CHAMBERY") === 7); kitAssert(KIT_PURE.adresseSimilarity("12 rue de la Paix", "14 FAUBOURG RECLUS") === 0); kitAssert(KIT_PURE.adresseSimilarity("Chambéry-le-Haut", "CHAMBERY LE HAUT") === 3); kitAssert(KIT_PURE.adresseSimilarity("a b rue", "a b rue") === 1); });
 KIT_TESTS.add("effectifs similarité rejette les adresses vides", function () { kitAssert(KIT_PURE.adresseSimilarity("", "14 rue Reclus") === 0); kitAssert(KIT_PURE.adresseSimilarity("14 rue Reclus", "") === 0); kitAssert(KIT_PURE.adresseSimilarity(null, "14 rue Reclus") === 0); kitAssert(KIT_PURE.adresseSimilarity("14 rue Reclus", {}) === 0); });
 KIT_TESTS.add("effectifs classement remonte le bon homonyme sans mutation", function () { var premier = { id: "paix", siege: { adresse: "12 rue de la Paix 73000 Chambéry" } }; var second = { id: "reclus", siege: { adresse: "14 faubourg Reclus 73000 Chambéry" } }; var results = [premier, second]; var ranked = KIT_PURE.rankEffectifCandidates(results, "14 faubourg Reclus 73000 Chambéry"); kitAssert(ranked !== results && ranked[0] === second && ranked[1] === premier); kitAssert(results.length === 2 && results[0] === premier && results[1] === second); });
