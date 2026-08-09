@@ -317,11 +317,20 @@ var KIT_PURE = (function () {
     if (typeof siren !== "string" || !/^\d{9}$/.test(siren)) return null;
     var base = "https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records";
     var where = "registre like \"" + siren + "\" and familleavis_lib=\"Procédures collectives\"";
-    return base + "?where=" + encodeURIComponent(where) + "&order_by=" + encodeURIComponent("dateparution desc") + "&limit=" + encodeURIComponent("10");
+    return base + "?where=" + encodeURIComponent(where) + "&order_by=" + encodeURIComponent("dateparution desc") + "&limit=" + encodeURIComponent("100");
+  }
+  function bodaccEstOuverture(procedure) {
+    if (!procedure) return false;
+    return /jugement d'ouverture/i.test(String(procedure.famille || "")) || /ouverture/i.test(String(procedure.nature || ""));
+  }
+  function bodaccEstCloture(procedure) {
+    if (!procedure) return false;
+    return /cl[oô]ture/i.test(String(procedure.nature || "")) || /cl[oô]ture/i.test(String(procedure.famille || ""));
   }
   function parseBodaccProcedures(body) {
     try {
-      if (!body || !Array.isArray(body.results)) return [];
+      /* Forme invalide = échec (null), jamais « aucune procédure » : une alerte existante ne doit pas être effacée par une réponse cassée. */
+      if (!body || !Array.isArray(body.results)) return null;
       var procedures = [];
       body.results.forEach(function (record) {
         try {
@@ -338,23 +347,20 @@ var KIT_PURE = (function () {
       });
       return procedures;
     } catch (e) {
-      return [];
+      return null;
     }
   }
   function procedureEtatFrom(procedures) {
     if (!Array.isArray(procedures) || procedures.length === 0) return "aucune";
     var ouverture = null;
     procedures.forEach(function (procedure) {
-      if (!procedure) return;
-      var estOuverture = procedure.famille === "Jugement d'ouverture" || /ouverture/i.test(String(procedure.nature || ""));
-      if (estOuverture && (!ouverture || String(procedure.date || "") > String(ouverture.date || ""))) ouverture = procedure;
+      if (bodaccEstOuverture(procedure) && (!ouverture || String(procedure.date || "") > String(ouverture.date || ""))) ouverture = procedure;
     });
     if (!ouverture) return "cloturee";
     var dateOuverture = String(ouverture.date || "");
     var cloturee = procedures.some(function (procedure) {
-      if (!procedure) return false;
-      var cloture = /cl[oô]ture/i.test(String(procedure.nature || "")) || /cl[oô]ture/i.test(String(procedure.famille || ""));
-      return cloture && String(procedure.date || "") >= dateOuverture;
+      /* Chronologie prouvée seulement : sans dates des deux côtés, l'alerte est conservée. */
+      return bodaccEstCloture(procedure) && !!dateOuverture && String(procedure.date || "") !== "" && String(procedure.date) >= dateOuverture;
     });
     return cloturee ? "cloturee" : "en-cours";
   }
@@ -434,7 +440,7 @@ var KIT_PURE = (function () {
       return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null };
     });
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -452,11 +458,16 @@ KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,
 KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
 KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # C+D France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20C%2BD%20France&per_page=10") > 0, url); });
 KIT_TESTS.add("effectifs URL ajoute seulement un code postal valide", function () { var url = KIT_PURE.effectifSearchUrl("A & B", "73000"); kitAssert(url.indexOf("q=A%20%26%20B&per_page=10&code_postal=73000") > 0, url); ["7500", "ABCDE", null, undefined].forEach(function (cp) { kitAssert(KIT_PURE.effectifSearchUrl("X", cp).indexOf("code_postal") < 0, String(cp)); }); });
-KIT_TESTS.add("BODACC URL exacte et valeurs encodées", function () { var url = KIT_PURE.bodaccSearchUrl("919948430"); kitAssert(url === "https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records?where=registre%20like%20%22919948430%22%20and%20familleavis_lib%3D%22Proc%C3%A9dures%20collectives%22&order_by=dateparution%20desc&limit=10", url); });
+KIT_TESTS.add("BODACC URL exacte et valeurs encodées", function () { var url = KIT_PURE.bodaccSearchUrl("919948430"); kitAssert(url === "https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records?where=registre%20like%20%22919948430%22%20and%20familleavis_lib%3D%22Proc%C3%A9dures%20collectives%22&order_by=dateparution%20desc&limit=100", url); });
 KIT_TESTS.add("BODACC URL rejette les SIREN invalides", function () { ["12345", "ABCDEFGHI", "9199484301", null].forEach(function (siren) { kitAssert(KIT_PURE.bodaccSearchUrl(siren) === null, String(siren)); }); });
 KIT_TESTS.add("BODACC parse les jugements réalistes", function () { var body = { results: [{ jugement: "{\"famille\":\"Avis de dépôt\",\"nature\":\"Dépôt de l'état des créances\",\"date\":\"2026-08-05\"}", dateparution: "2026-08-07", tribunal: "TAE Marseille" }, { jugement: "{\"famille\":\"Jugement d'ouverture\",\"nature\":\"Jugement d'ouverture d'une procédure de redressement judiciaire\",\"date\":\"2026-01-18\"}", dateparution: "2026-01-20", tribunal: "TAE Lyon" }] }; var parsed = KIT_PURE.parseBodaccProcedures(body); kitAssert(parsed.length === 2); kitAssert(parsed[0].nature === "Dépôt de l'état des créances" && parsed[0].date === "2026-08-05" && parsed[0].tribunal === "TAE Marseille"); kitAssert(parsed[1].nature === "Jugement d'ouverture d'une procédure de redressement judiciaire" && parsed[1].date === "2026-01-18" && parsed[1].tribunal === "TAE Lyon"); });
-KIT_TESTS.add("BODACC parse ignore un jugement malformé sans jeter", function () { var parsed = KIT_PURE.parseBodaccProcedures({ results: [{ jugement: "{pas du json", tribunal: "X" }, { jugement: "{\"famille\":\"Jugement d'ouverture\",\"date\":\"2026-01-18\"}", tribunal: "TAE Paris" }] }); kitAssert(parsed.length === 1 && parsed[0].nature === "Jugement d'ouverture" && parsed[0].famille === "Jugement d'ouverture" && parsed[0].date === "2026-01-18" && parsed[0].tribunal === "TAE Paris"); kitAssert(JSON.stringify(KIT_PURE.parseBodaccProcedures(null)) === "[]" && JSON.stringify(KIT_PURE.parseBodaccProcedures({})) === "[]"); });
+KIT_TESTS.add("BODACC parse ignore un jugement malformé sans jeter", function () { var parsed = KIT_PURE.parseBodaccProcedures({ results: [{ jugement: "{pas du json", tribunal: "X" }, { jugement: "{\"famille\":\"Jugement d'ouverture\",\"date\":\"2026-01-18\"}", tribunal: "TAE Paris" }] }); kitAssert(parsed.length === 1 && parsed[0].nature === "Jugement d'ouverture" && parsed[0].famille === "Jugement d'ouverture" && parsed[0].date === "2026-01-18" && parsed[0].tribunal === "TAE Paris"); });
+KIT_TESTS.add("BODACC parse : forme invalide = échec (null), vide valide = []", function () { kitAssert(KIT_PURE.parseBodaccProcedures(null) === null); kitAssert(KIT_PURE.parseBodaccProcedures({}) === null); kitAssert(KIT_PURE.parseBodaccProcedures({ results: "pas un tableau" }) === null); kitAssert(JSON.stringify(KIT_PURE.parseBodaccProcedures({ results: [] })) === "[]"); });
+KIT_TESTS.add("BODACC parse ignore un jugement déjà objet ou tableau JSON", function () { var parsed = KIT_PURE.parseBodaccProcedures({ results: [{ jugement: { famille: "Jugement d'ouverture" } }, { jugement: "[1,2,3]" }, { jugement: "{\"famille\":\"Jugement d'ouverture\",\"date\":\"2026-01-18\"}" }] }); kitAssert(parsed.length === 1 && parsed[0].famille === "Jugement d'ouverture"); });
 KIT_TESTS.add("BODACC décide l'état de la procédure", function () { var ouverture = { famille: "Jugement d'ouverture", nature: "Redressement judiciaire", date: "2026-01-18" }; var clotureRecente = { famille: "Jugement de clôture", nature: "Clôture pour insuffisance d'actif", date: "2026-06-01" }; var clotureAncienne = { famille: "Jugement de cloture", nature: "Cloture", date: "2020-01-01" }; kitAssert(KIT_PURE.procedureEtatFrom([]) === "aucune"); kitAssert(KIT_PURE.procedureEtatFrom([ouverture]) === "en-cours"); kitAssert(KIT_PURE.procedureEtatFrom([clotureRecente, ouverture]) === "cloturee"); kitAssert(KIT_PURE.procedureEtatFrom([ouverture, clotureAncienne]) === "en-cours"); kitAssert(KIT_PURE.procedureEtatFrom([{ famille: "Avis de dépôt", nature: "Dépôt de l'état des créances", date: "2026-08-05" }]) === "cloturee"); });
+KIT_TESTS.add("BODACC ouverture insensible à la casse de la famille (bogue reproduit en revue)", function () { kitAssert(KIT_PURE.procedureEtatFrom([{ famille: "jugement d'ouverture", nature: "Redressement judiciaire", date: "2026-01-18" }]) === "en-cours"); kitAssert(KIT_PURE.bodaccEstOuverture({ famille: "JUGEMENT D'OUVERTURE", nature: "Liquidation judiciaire" })); kitAssert(!KIT_PURE.bodaccEstOuverture({ famille: "Avis de dépôt", nature: "Dépôt de l'état des créances" })); });
+KIT_TESTS.add("BODACC clôture même jour et deux ouvertures successives", function () { var o = { famille: "Jugement d'ouverture", nature: "Redressement", date: "2026-01-18" }; var cMemeJour = { famille: "Jugement de clôture", nature: "Clôture", date: "2026-01-18" }; kitAssert(KIT_PURE.procedureEtatFrom([cMemeJour, o]) === "cloturee"); var o2 = { famille: "Jugement d'ouverture", nature: "Liquidation", date: "2026-07-01" }; var cEntreDeux = { famille: "Jugement de clôture", nature: "Clôture", date: "2026-03-01" }; kitAssert(KIT_PURE.procedureEtatFrom([o2, cEntreDeux, o]) === "en-cours"); });
+KIT_TESTS.add("BODACC dates vides ne prouvent pas une clôture", function () { var o = { famille: "Jugement d'ouverture", nature: "Redressement", date: "" }; var c = { famille: "Jugement de clôture", nature: "Clôture", date: "" }; kitAssert(KIT_PURE.procedureEtatFrom([c, o]) === "en-cours"); kitAssert(KIT_PURE.procedureEtatFrom([{ famille: "Jugement de clôture", nature: "Clôture", date: "2026-06-01" }, o]) === "en-cours"); });
 KIT_TESTS.add("effectifs similarité normalise et bonifie le numéro commun", function () { kitAssert(KIT_PURE.adresseSimilarity("14 faubourg Reclus 73000 Chambéry", "14 FAUBOURG RECLUS 73000 CHAMBERY") === 7); kitAssert(KIT_PURE.adresseSimilarity("12 rue de la Paix", "14 FAUBOURG RECLUS") === 0); kitAssert(KIT_PURE.adresseSimilarity("Chambéry-le-Haut", "CHAMBERY LE HAUT") === 3); kitAssert(KIT_PURE.adresseSimilarity("a b rue", "a b rue") === 1); });
 KIT_TESTS.add("effectifs similarité rejette les adresses vides", function () { kitAssert(KIT_PURE.adresseSimilarity("", "14 rue Reclus") === 0); kitAssert(KIT_PURE.adresseSimilarity("14 rue Reclus", "") === 0); kitAssert(KIT_PURE.adresseSimilarity(null, "14 rue Reclus") === 0); kitAssert(KIT_PURE.adresseSimilarity("14 rue Reclus", {}) === 0); });
 KIT_TESTS.add("effectifs classement remonte le bon homonyme sans mutation", function () { var premier = { id: "paix", siege: { adresse: "12 rue de la Paix 73000 Chambéry" } }; var second = { id: "reclus", siege: { adresse: "14 faubourg Reclus 73000 Chambéry" } }; var results = [premier, second]; var ranked = KIT_PURE.rankEffectifCandidates(results, "14 faubourg Reclus 73000 Chambéry"); kitAssert(ranked !== results && ranked[0] === second && ranked[1] === premier); kitAssert(results.length === 2 && results[0] === premier && results[1] === second); });
@@ -483,7 +494,8 @@ KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { up
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
 KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.3["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v45["']/.test(KIT_SOURCE_SW)); });
-KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); var appels = KIT_SOURCE_HTML.match(/KIT_PURE\.bodaccSearchUrl\(/g) || []; kitAssert(appels.length >= 2, "fiche et lot doivent appeler bodaccSearchUrl"); });
+KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); kitAssert(/KIT_PURE\.bodaccSearchUrl\(c\.effectifSiren\)/.test(KIT_SOURCE_HTML), "la fiche doit appeler bodaccSearchUrl"); kitAssert(/KIT_PURE\.bodaccSearchUrl\(target\.cle\)/.test(KIT_SOURCE_HTML), "le lot doit appeler bodaccSearchUrl"); });
+KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/\.catch\(function \(\) \{ report\.bodaccKo\.push\(target\.label\); \}\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé dans son propre catch"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -2082,7 +2094,10 @@ function App(props) {
     var annonce = procedures[0] || null;
     if (etat === "en-cours") {
       annonce = null;
-      procedures.forEach(function (item) { if ((/ouverture/i.test(item.nature || "") || /jugement d'ouverture/i.test(item.famille || "")) && (!annonce || String(item.date || "") > String(annonce.date || ""))) annonce = item; });
+      procedures.forEach(function (item) { if (KIT_PURE.bodaccEstOuverture(item) && (!annonce || String(item.date || "") > String(annonce.date || ""))) annonce = item; });
+    } else if (etat === "cloturee") {
+      /* L'annonce mémorisée doit être le jugement de clôture, pas la dernière annonce quelconque. */
+      procedures.forEach(function (item) { if (KIT_PURE.bodaccEstCloture(item) && (!annonce || !KIT_PURE.bodaccEstCloture(annonce) || String(item.date || "") > String(annonce.date || ""))) annonce = item; });
     }
     return {
       procedureEtat: etat,
@@ -2097,17 +2112,21 @@ function App(props) {
     if (!c || !c.effectifSiren || !navigator.onLine) return;
     setEffectifModal({ id: c.id, company: c.company, bodacc: true });
     setEffectifResults([]); setEffectifMessage(""); setEffectifLoading(true);
+    var bodaccUrl = KIT_PURE.bodaccSearchUrl(c.effectifSiren);
+    if (!bodaccUrl) { setEffectifMessage("SIREN mémorisé invalide — relancer « Rechercher l'effectif »."); setEffectifLoading(false); return; }
     var seq = ++effectifReqSeq.current;
     var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
     var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
     var options = { referrerPolicy: "no-referrer", credentials: "omit" };
     if (controller) options.signal = controller.signal;
-    fetch(KIT_PURE.bodaccSearchUrl(c.effectifSiren), options).then(function (response) {
+    fetch(bodaccUrl, options).then(function (response) {
       if (!response.ok) throw new Error("HTTP " + String(response.status));
       return response.json();
     }).then(function (body) {
       if (seq !== effectifReqSeq.current) return;
-      var patch = procedurePatch(KIT_PURE.parseBodaccProcedures(body));
+      var procedures = KIT_PURE.parseBodaccProcedures(body);
+      if (procedures === null) { setEffectifMessage("Réponse BODACC invalide — la fiche n'a pas été modifiée."); return; }
+      var patch = procedurePatch(procedures);
       updContact(c.id, patch);
       if (patch.procedureEtat === "en-cours") setEffectifMessage("Procédure collective en cours détectée.");
       else if (patch.procedureEtat === "cloturee") setEffectifMessage("Procédure collective passée détectée.");
@@ -2241,7 +2260,7 @@ function App(props) {
 
   function runBulkEffectifs() {
     if (!bulkPreview || !navigator.onLine) return;
-    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], procedures: [], bodaccKo: 0, stopped: "" };
+    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], procedures: [], bodaccKo: [], stopped: "" };
     setBulkPreview(null); setBulkProgress({ done: 0, total: lot.targets.length });
     function next(index) {
       if (index >= lot.targets.length) { setBulkProgress(null); setBulkReport(report); setBulkResume(null); return; }
@@ -2258,11 +2277,13 @@ function App(props) {
         }).then(function (body) { clearTimeout(timer); return body && body.results || []; }, function (error) { clearTimeout(timer); throw error; });
       }
       function requestBodacc() {
+        var bodaccUrl = KIT_PURE.bodaccSearchUrl(target.cle);
+        if (!bodaccUrl) return Promise.reject(new Error("SIREN invalide"));
         var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
         var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
         var options = { referrerPolicy: "no-referrer", credentials: "omit" };
         if (controller) options.signal = controller.signal;
-        return fetch(KIT_PURE.bodaccSearchUrl(target.cle), options).then(function (response) {
+        return fetch(bodaccUrl, options).then(function (response) {
           if (!response.ok) throw new Error("HTTP " + String(response.status));
           return response.json();
         }).then(function (body) { clearTimeout(timer); return body; }, function (error) { clearTimeout(timer); throw error; });
@@ -2287,10 +2308,12 @@ function App(props) {
         }
         if (target.mode !== "siren") return null;
         return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(requestBodacc).then(function (body) {
-          var patch = procedurePatch(KIT_PURE.parseBodaccProcedures(body));
+          var procedures = KIT_PURE.parseBodaccProcedures(body);
+          if (procedures === null) { report.bodaccKo.push(target.label); return; }
+          var patch = procedurePatch(procedures);
           working = updContact(target.id, patch, null, working);
           if (patch.procedureEtat === "en-cours") report.procedures.push(target.label);
-        }).catch(function () { report.bodaccKo += 1; });
+        }).catch(function () { report.bodaccKo.push(target.label); });
       }).then(function () {
         setBulkProgress({ done: index + 1, total: lot.targets.length });
         setTimeout(function () { next(index + 1); }, 250);
@@ -4415,7 +4438,7 @@ function App(props) {
           {!navigator.onLine ? <p role="alert" style={{ margin: "9px 0 0", fontSize: 12, color: "#9A3115" }}>Actions indisponibles hors ligne.</p> : null}
           {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id}>{target.label}{target.mode === "siren" ? " · SIREN " + target.cle : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
           {bulkProgress ? <p role="status" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#235C68" }}>Progression : {bulkProgress.done} / {bulkProgress.total}</p> : null}
-          {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.procedures.length ? <p style={{ margin: "4px 0", color: "#BE3C1A", fontWeight: 600 }}>⚠ Procédures collectives : {bulkReport.procedures.join(", ")}</p> : null}{bulkReport.bodaccKo > 0 ? <p style={{ margin: "4px 0", color: "#9A3115" }}>BODACC injoignable pour {bulkReport.bodaccKo} fiche(s)</p> : null}{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
+          {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.procedures.length ? <p style={{ margin: "4px 0", color: "#BE3C1A", fontWeight: 600 }}>⚠ Procédures collectives : {bulkReport.procedures.join(", ")}</p> : null}{(bulkReport.bodaccKo || []).length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>BODACC injoignable — à revérifier depuis la fiche : {bulkReport.bodaccKo.join(", ")}</p> : null}{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
         </div> : null}
 
         {showMeetingSettings ? (
