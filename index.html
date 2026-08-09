@@ -308,7 +308,29 @@ var KIT_PURE = (function () {
     for (var i = 0; i < bounds.length; i += 1) { if (value <= bounds[i]) return TRANCHE_CODES[i]; }
     return "53";
   }
-  function effectifTieBreak(a, b) { return trancheRank(b && b.effectifTranche) - trancheRank(a && a.effectifTranche); }
+  function trancheBorneBasse(code) {
+    var bornes = { "00": 0, "01": 1, "02": 3, "03": 6, "11": 10, "12": 20, "21": 50, "22": 100, "31": 200, "32": 250, "41": 500, "42": 1000, "51": 2000, "52": 5000, "53": 10000 };
+    var key = String(code == null ? "" : code);
+    return Object.prototype.hasOwnProperty.call(bornes, key) ? bornes[key] : 0;
+  }
+  function entierPositifOuNul(value) { return typeof value === "number" && isFinite(value) && value >= 0 && Math.floor(value) === value; }
+  function couvertureTotale(contact) {
+    var c = contact || {};
+    var total = entierPositifOuNul(c.effectifPrecis) ? c.effectifPrecis : trancheBorneBasse(c.effectifTranche);
+    var secondaires = Array.isArray(c.effectifsSecondaires) ? c.effectifsSecondaires : [];
+    secondaires.forEach(function (entree) {
+      var item = entree || {};
+      total += entierPositifOuNul(item.precis) ? item.precis : trancheBorneBasse(item.tranche);
+    });
+    return total;
+  }
+  function couvertureTranche(contact) {
+    var c = contact || {};
+    var secondaires = Array.isArray(c.effectifsSecondaires) ? c.effectifsSecondaires : [];
+    if (trancheRank(c.effectifTranche) < 0 && !entierPositifOuNul(c.effectifPrecis) && secondaires.length === 0) return "NN";
+    return trancheFromCount(couvertureTotale(c));
+  }
+  function effectifTieBreak(a, b) { return trancheRank(couvertureTranche(b)) - trancheRank(couvertureTranche(a)); }
   function effectifSearchUrl(denomination, codePostal) {
     var url = "https://recherche-entreprises.api.gouv.fr/search?q=" + encodeURIComponent(String(denomination || "")) + "&per_page=10";
     return typeof codePostal === "string" && /^\d{5}$/.test(codePostal) ? url + "&code_postal=" + codePostal : url;
@@ -364,6 +386,18 @@ var KIT_PURE = (function () {
     });
     return cloturee ? "cloturee" : "en-cours";
   }
+  function procedureCombine(resultats) {
+    var defaut = { etat: "aucune", nature: "", date: "", tribunal: "" };
+    if (!Array.isArray(resultats) || resultats.length === 0) return defaut;
+    var rangs = { "aucune": 0, "cloturee": 1, "en-cours": 2 };
+    var retenu = null;
+    var pireRang = -1;
+    resultats.forEach(function (resultat) {
+      var rang = resultat && Object.prototype.hasOwnProperty.call(rangs, resultat.etat) ? rangs[resultat.etat] : -1;
+      if (rang > pireRang) { retenu = resultat; pireRang = rang; }
+    });
+    return retenu || defaut;
+  }
   function cspAllowsApi(htmlText) {
     var meta = String(htmlText || "").match(/<meta\b[^>]*http-equiv\s*=\s*["']Content-Security-Policy["'][^>]*>/i);
     if (!meta) return true;
@@ -389,6 +423,31 @@ var KIT_PURE = (function () {
   }
   function denominationMatch(a, b) {
     return normalizedText(a) === normalizedText(b);
+  }
+  function propagationCibles(contacts, sourceId, denomination, siren) {
+    var resultat = { aRattacher: [], protegees: [], autres: [] };
+    (Array.isArray(contacts) ? contacts : []).forEach(function (contact) {
+      if (!contact || contact.id === sourceId || !denominationMatch(contact.company, denomination)) return;
+      var label = contact.lastName || contact.name || contact.company || "";
+      if (contact.effectifSource === "manuel") resultat.protegees.push(label);
+      else if (contact.effectifSiren && contact.effectifSiren !== siren) resultat.autres.push(label);
+      else resultat.aRattacher.push(contact.id);
+    });
+    return resultat;
+  }
+  function secondairesAjoute(secondaires, entree, sirenPrincipal) {
+    var copie = Array.isArray(secondaires) ? secondaires.slice() : [];
+    var siren = entree && String(entree.siren == null ? "" : entree.siren);
+    if (!/^\d{9}$/.test(siren) || siren === String(sirenPrincipal == null ? "" : sirenPrincipal)) return copie;
+    var normalisee = { siren: siren, denomination: String(entree.denomination == null ? "" : entree.denomination), tranche: String(entree.tranche == null ? "" : entree.tranche), annee: entree.annee || "", precis: null, date: entree.date || "" };
+    var index = -1;
+    copie.forEach(function (item, i) { if (index < 0 && item && String(item.siren) === siren) index = i; });
+    if (index >= 0) copie[index] = normalisee;
+    else copie.push(normalisee);
+    return copie;
+  }
+  function secondairesRetire(secondaires, siren) {
+    return (Array.isArray(secondaires) ? secondaires : []).filter(function (entree) { return !entree || String(entree.siren) !== String(siren); });
   }
   function adresseSimilarity(adresseKit, adresseApi) {
     if (typeof adresseKit !== "string" || typeof adresseApi !== "string") return 0;
@@ -440,7 +499,7 @@ var KIT_PURE = (function () {
       return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null };
     });
   }
-  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -456,6 +515,12 @@ KIT_TESTS.add("effectifs ordre complet et inconnus", function () { var codes = [
 KIT_TESTS.add("effectifs libellés exacts", function () { var expected = { "00": "0 sal.", "01": "1-2 sal.", "02": "3-5 sal.", "03": "6-9 sal.", "11": "10-19 sal.", "12": "20-49 sal.", "21": "50-99 sal.", "22": "100-199 sal.", "31": "200-249 sal.", "32": "250-499 sal.", "41": "500-999 sal.", "42": "1000-1999 sal.", "51": "2000-4999 sal.", "52": "5000-9999 sal.", "53": "10000+ sal." }; Object.keys(expected).forEach(function (code) { kitAssert(KIT_PURE.trancheLabel(code) === expected[code], code); }); kitAssert(KIT_PURE.trancheLabel("NN") === ""); });
 KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,"00"],[1,"01"],[2,"01"],[3,"02"],[5,"02"],[6,"03"],[9,"03"],[10,"11"],[19,"11"],[20,"12"],[49,"12"],[50,"21"],[99,"21"],[100,"22"],[199,"22"],[200,"31"],[249,"31"],[250,"32"],[499,"32"],[500,"41"],[999,"41"],[1000,"42"],[1999,"42"],[2000,"51"],[4999,"51"],[5000,"52"],[9999,"52"],[10000,"53"]]; pairs.forEach(function (pair) { kitAssert(KIT_PURE.trancheFromCount(pair[0]) === pair[1], String(pair[0])); }); });
 KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
+KIT_TESTS.add("effectifs bornes basses exactes", function () { var expected = { "00": 0, "01": 1, "02": 3, "03": 6, "11": 10, "12": 20, "21": 50, "22": 100, "31": 200, "32": 250, "41": 500, "42": 1000, "51": 2000, "52": 5000, "53": 10000 }; Object.keys(expected).forEach(function (code) { kitAssert(KIT_PURE.trancheBorneBasse(code) === expected[code], code); }); kitAssert(KIT_PURE.trancheBorneBasse("NN") === 0 && KIT_PURE.trancheBorneBasse() === 0 && KIT_PURE.trancheBorneBasse("XX") === 0); });
+KIT_TESTS.add("effectifs couverture cumulée et tranche équivalente", function () { var contact = { effectifTranche: "21", effectifsSecondaires: [{ tranche: "31" }, { tranche: "42" }] }; kitAssert(KIT_PURE.couvertureTotale(contact) === 1250); kitAssert(KIT_PURE.couvertureTranche(contact) === "42"); kitAssert(KIT_PURE.couvertureTotale({ effectifTranche: "21", effectifPrecis: 75 }) === 75); kitAssert(KIT_PURE.couvertureTranche({}) === "NN"); kitAssert(KIT_PURE.couvertureTotale({ effectifsSecondaires: null }) === 0); kitAssert(KIT_PURE.couvertureTotale({ effectifsSecondaires: [null, {}] }) === 0); });
+KIT_TESTS.add("effectifs départage utilise la couverture cumulée", function () { var mono = { effectifTranche: "41" }; var groupe = { effectifTranche: "21", effectifsSecondaires: [{ tranche: "31" }, { tranche: "42" }] }; kitAssert(KIT_PURE.effectifTieBreak(mono, groupe) > 0); });
+KIT_TESTS.add("effectifs cibles de propagation protégées", function () { var contacts = [{ id: "source", company: "Société-Été" }, { id: "libre", company: "SOCIETE ETE", lastName: "Libre" }, { id: "manuel", company: "Société Été", effectifSource: "manuel", name: "Manuel" }, { id: "autre", company: "Société Été", effectifSiren: "987654321", lastName: "Autre" }, { id: "hors", company: "Autre entreprise" }]; var result = KIT_PURE.propagationCibles(contacts, "source", "SOCIETE ETE", "123456789"); kitAssert(JSON.stringify(result) === JSON.stringify({ aRattacher: ["libre"], protegees: ["Manuel"], autres: ["Autre"] }), JSON.stringify(result)); });
+KIT_TESTS.add("effectifs secondaires ajout remplacement refus et retrait", function () { var origine = [{ siren: "111111111", denomination: "A", tranche: "21", annee: "2025", precis: null, date: "2026-01-01" }]; var ajout = KIT_PURE.secondairesAjoute(origine, { siren: "222222222", denomination: 42, tranche: 31, annee: "2024", precis: 9, date: "2026-02-02" }, "999999999"); kitAssert(origine.length === 1 && ajout.length === 2 && ajout !== origine); kitAssert(JSON.stringify(ajout[1]) === JSON.stringify({ siren: "222222222", denomination: "42", tranche: "31", annee: "2024", precis: null, date: "2026-02-02" })); var remplace = KIT_PURE.secondairesAjoute(ajout, { siren: "111111111", denomination: "A2", tranche: "41" }, "999999999"); kitAssert(remplace.length === 2 && remplace[0].denomination === "A2"); kitAssert(KIT_PURE.secondairesAjoute(origine, { siren: "999999999" }, "999999999").length === 1); kitAssert(KIT_PURE.secondairesAjoute(origine, { siren: "invalide" }, "999999999").length === 1); var retire = KIT_PURE.secondairesRetire(ajout, "111111111"); kitAssert(retire !== ajout && retire.length === 1 && retire[0].siren === "222222222"); });
+KIT_TESTS.add("BODACC combine le pire état et son annonce", function () { var aucune = { etat: "aucune", nature: "", date: "", tribunal: "" }; var cloturee = { etat: "cloturee", nature: "Clôture", date: "2026-01-01", tribunal: "Lyon" }; var enCours = { etat: "en-cours", nature: "Redressement", date: "2026-02-02", tribunal: "Paris" }; kitAssert(KIT_PURE.procedureCombine([aucune, cloturee, enCours]) === enCours); kitAssert(KIT_PURE.procedureCombine([cloturee, aucune]) === cloturee); kitAssert(JSON.stringify(KIT_PURE.procedureCombine([])) === JSON.stringify(aucune)); kitAssert(KIT_PURE.procedureCombine([cloturee, { etat: "cloturee", nature: "Seconde" }]) === cloturee); });
 KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # C+D France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20C%2BD%20France&per_page=10") > 0, url); });
 KIT_TESTS.add("effectifs URL ajoute seulement un code postal valide", function () { var url = KIT_PURE.effectifSearchUrl("A & B", "73000"); kitAssert(url.indexOf("q=A%20%26%20B&per_page=10&code_postal=73000") > 0, url); ["7500", "ABCDE", null, undefined].forEach(function (cp) { kitAssert(KIT_PURE.effectifSearchUrl("X", cp).indexOf("code_postal") < 0, String(cp)); }); });
 KIT_TESTS.add("BODACC URL exacte et valeurs encodées", function () { var url = KIT_PURE.bodaccSearchUrl("919948430"); kitAssert(url === "https://bodacc-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/annonces-commerciales/records?where=registre%20like%20%22919948430%22%20and%20familleavis_lib%3D%22Proc%C3%A9dures%20collectives%22&order_by=dateparution%20desc&limit=100", url); });
