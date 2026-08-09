@@ -327,7 +327,10 @@ var KIT_PURE = (function () {
   function couvertureTranche(contact) {
     var c = contact || {};
     var secondaires = Array.isArray(c.effectifsSecondaires) ? c.effectifsSecondaires : [];
-    if (trancheRank(c.effectifTranche) < 0 && !entierPositifOuNul(c.effectifPrecis) && secondaires.length === 0) return "NN";
+    /* « NN » tant qu'AUCUNE composante n'apporte de donnée connue — sinon une fiche toute inconnue afficherait « 0 sal. » et prendrait le rang 0. */
+    var principalConnu = trancheRank(c.effectifTranche) >= 0 || entierPositifOuNul(c.effectifPrecis);
+    var secondaireConnue = secondaires.some(function (entree) { var item = entree || {}; return trancheRank(item.tranche) >= 0 || entierPositifOuNul(item.precis); });
+    if (!principalConnu && !secondaireConnue) return "NN";
     return trancheFromCount(couvertureTotale(c));
   }
   function effectifTieBreak(a, b) { return trancheRank(couvertureTranche(b)) - trancheRank(couvertureTranche(a)); }
@@ -426,6 +429,8 @@ var KIT_PURE = (function () {
   }
   function propagationCibles(contacts, sourceId, denomination, siren) {
     var resultat = { aRattacher: [], protegees: [], autres: [] };
+    /* Dénomination vide : ne jamais matcher les fiches sans entreprise. */
+    if (!normalizedText(denomination)) return resultat;
     (Array.isArray(contacts) ? contacts : []).forEach(function (contact) {
       if (!contact || contact.id === sourceId || !denominationMatch(contact.company, denomination)) return;
       var label = contact.lastName || contact.name || contact.company || "";
@@ -492,17 +497,17 @@ var KIT_PURE = (function () {
   }
   function bulkEffectifTargets(contacts, includeManual, lotStartISO) {
     var targets = [];
-    (contacts || []).filter(function (contact) {
-      if (!contact || !(contact.company || "").trim()) return false;
-      if (!includeManual && contact.effectifSource === "manuel") return false;
-      return !(lotStartISO && contact.effectifDate && String(contact.effectifDate).slice(0, 10) >= String(lotStartISO).slice(0, 10));
-    }).forEach(function (contact) {
+    function dejaTraitee(dateISO) { return !!(lotStartISO && dateISO && String(dateISO).slice(0, 10) >= String(lotStartISO).slice(0, 10)); }
+    (contacts || []).forEach(function (contact) {
+      if (!contact || !(contact.company || "").trim()) return;
+      if (!includeManual && contact.effectifSource === "manuel") return;
       if (contact.effectifSiren) {
-        targets.push({ id: contact.id, mode: "siren", cle: contact.effectifSiren });
+        /* Reprise par CIBLE : un lot interrompu entre le principal et les secondaires d'une même fiche ne doit pas abandonner les secondaires restantes. */
+        if (!dejaTraitee(contact.effectifDate)) targets.push({ id: contact.id, mode: "siren", cle: contact.effectifSiren });
         (contact.effectifsSecondaires || []).forEach(function (secondaire) {
-          if (secondaire && secondaire.siren) targets.push({ id: contact.id, mode: "secondaire", cle: secondaire.siren });
+          if (secondaire && secondaire.siren && !dejaTraitee(secondaire.date)) targets.push({ id: contact.id, mode: "secondaire", cle: secondaire.siren });
         });
-      } else targets.push({ id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null });
+      } else if (!dejaTraitee(contact.effectifDate)) targets.push({ id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null });
     });
     return targets;
   }
@@ -524,9 +529,11 @@ KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,
 KIT_TESTS.add("effectifs départage stable", function () { kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "51" }, { effectifTranche: "21" }) < 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, {}) < 0); kitAssert(KIT_PURE.effectifTieBreak({}, {}) === 0); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "21" }, { effectifTranche: "21" }) === 0); });
 KIT_TESTS.add("effectifs bornes basses exactes", function () { var expected = { "00": 0, "01": 1, "02": 3, "03": 6, "11": 10, "12": 20, "21": 50, "22": 100, "31": 200, "32": 250, "41": 500, "42": 1000, "51": 2000, "52": 5000, "53": 10000 }; Object.keys(expected).forEach(function (code) { kitAssert(KIT_PURE.trancheBorneBasse(code) === expected[code], code); }); kitAssert(KIT_PURE.trancheBorneBasse("NN") === 0 && KIT_PURE.trancheBorneBasse() === 0 && KIT_PURE.trancheBorneBasse("XX") === 0); });
 KIT_TESTS.add("effectifs couverture cumulée et tranche équivalente", function () { var contact = { effectifTranche: "21", effectifsSecondaires: [{ tranche: "31" }, { tranche: "42" }] }; kitAssert(KIT_PURE.couvertureTotale(contact) === 1250); kitAssert(KIT_PURE.couvertureTranche(contact) === "42"); kitAssert(KIT_PURE.couvertureTotale({ effectifTranche: "21", effectifPrecis: 75 }) === 75); kitAssert(KIT_PURE.couvertureTranche({}) === "NN"); kitAssert(KIT_PURE.couvertureTotale({ effectifsSecondaires: null }) === 0); kitAssert(KIT_PURE.couvertureTotale({ effectifsSecondaires: [null, {}] }) === 0); });
+KIT_TESTS.add("effectifs couverture : cas limites figés", function () { kitAssert(KIT_PURE.couvertureTotale({ effectifTranche: "21", effectifPrecis: "75" }) === 50, "un precis en chaîne retombe sur la borne"); kitAssert(KIT_PURE.couvertureTotale({ effectifTranche: "41", effectifPrecis: 0 }) === 0, "precis 0 explicite prime sur la tranche"); kitAssert(KIT_PURE.couvertureTotale({ effectifsSecondaires: [{ precis: 40 }] }) === 40, "le precis d'une secondaire compte"); kitAssert(KIT_PURE.couvertureTranche({ effectifTranche: "NN", effectifsSecondaires: [{ tranche: "NN" }] }) === "NN", "tout inconnu reste NN, jamais 0 sal."); kitAssert(KIT_PURE.effectifTieBreak({ effectifTranche: "NN", effectifsSecondaires: [{ tranche: "NN" }] }, { effectifTranche: "00" }) > 0, "tout-inconnu passe après un vrai 0 salarié"); });
 KIT_TESTS.add("effectifs départage utilise la couverture cumulée", function () { var mono = { effectifTranche: "41" }; var groupe = { effectifTranche: "21", effectifsSecondaires: [{ tranche: "31" }, { tranche: "42" }] }; kitAssert(KIT_PURE.effectifTieBreak(mono, groupe) > 0); });
 KIT_TESTS.add("effectifs cibles de propagation protégées", function () { var contacts = [{ id: "source", company: "Société-Été" }, { id: "libre", company: "SOCIETE ETE", lastName: "Libre" }, { id: "manuel", company: "Société Été", effectifSource: "manuel", name: "Manuel" }, { id: "autre", company: "Société Été", effectifSiren: "987654321", lastName: "Autre" }, { id: "hors", company: "Autre entreprise" }]; var result = KIT_PURE.propagationCibles(contacts, "source", "SOCIETE ETE", "123456789"); kitAssert(JSON.stringify(result) === JSON.stringify({ aRattacher: ["libre"], protegees: ["Manuel"], autres: ["Autre"] }), JSON.stringify(result)); });
-KIT_TESTS.add("effectifs secondaires ajout remplacement refus et retrait", function () { var origine = [{ siren: "111111111", denomination: "A", tranche: "21", annee: "2025", precis: null, date: "2026-01-01" }]; var ajout = KIT_PURE.secondairesAjoute(origine, { siren: "222222222", denomination: 42, tranche: 31, annee: "2024", precis: 9, date: "2026-02-02" }, "999999999"); kitAssert(origine.length === 1 && ajout.length === 2 && ajout !== origine); kitAssert(JSON.stringify(ajout[1]) === JSON.stringify({ siren: "222222222", denomination: "42", tranche: "31", annee: "2024", precis: null, date: "2026-02-02" })); var remplace = KIT_PURE.secondairesAjoute(ajout, { siren: "111111111", denomination: "A2", tranche: "41" }, "999999999"); kitAssert(remplace.length === 2 && remplace[0].denomination === "A2"); kitAssert(KIT_PURE.secondairesAjoute(origine, { siren: "999999999" }, "999999999").length === 1); kitAssert(KIT_PURE.secondairesAjoute(origine, { siren: "invalide" }, "999999999").length === 1); var retire = KIT_PURE.secondairesRetire(ajout, "111111111"); kitAssert(retire !== ajout && retire.length === 1 && retire[0].siren === "222222222"); });
+KIT_TESTS.add("effectifs propagation : dénomination vide ne matche rien, nom officiel ≠ nom saisi", function () { var contacts = [{ id: "source", company: "" }, { id: "sansEntreprise", company: "" }, { id: "acme", company: "ACME CONSEIL" }]; var vide = KIT_PURE.propagationCibles(contacts, "source", "", "123456789"); kitAssert(vide.aRattacher.length === 0 && vide.protegees.length === 0 && vide.autres.length === 0, "dénomination vide = aucune cible"); var officiel = KIT_PURE.propagationCibles(contacts, "source", "ACME CONSEIL SARL", "123456789"); kitAssert(officiel.aRattacher.length === 0, "la raison sociale officielle ne matche pas le nom saisi — le câblage doit passer le company de la fiche source"); });
+KIT_TESTS.add("effectifs secondaires ajout remplacement refus et retrait", function () { var origine = [{ siren: "111111111", denomination: "A", tranche: "21", annee: "2025", precis: null, date: "2026-01-01" }]; var ajout = KIT_PURE.secondairesAjoute(origine, { siren: "222222222", denomination: 42, tranche: 31, annee: "2024", precis: 9, date: "2026-02-02" }, "999999999"); kitAssert(origine.length === 1 && ajout.length === 2 && ajout !== origine); kitAssert(JSON.stringify(ajout[1]) === JSON.stringify({ siren: "222222222", denomination: "42", tranche: "31", annee: "2024", precis: null, date: "2026-02-02" })); var remplace = KIT_PURE.secondairesAjoute(ajout, { siren: "111111111", denomination: "A2", tranche: "41" }, "999999999"); kitAssert(remplace.length === 2 && remplace[0].denomination === "A2"); kitAssert(KIT_PURE.secondairesAjoute(origine, { siren: "999999999" }, "999999999").length === 1); kitAssert(KIT_PURE.secondairesAjoute(origine, { siren: "invalide" }, "999999999").length === 1); var retire = KIT_PURE.secondairesRetire(ajout, "111111111"); kitAssert(retire !== ajout && retire.length === 1 && retire[0].siren === "222222222"); var avecPrecis = KIT_PURE.secondairesAjoute([{ siren: "111111111", denomination: "A", tranche: "21", annee: "", precis: 12, date: "2026-01-01" }], { siren: "111111111", denomination: "A2", tranche: "41" }, "999999999"); kitAssert(avecPrecis[0].precis === null, "le remplacement remet precis à null — comportement figé"); });
 KIT_TESTS.add("BODACC combine le pire état et son annonce", function () { var aucune = { etat: "aucune", nature: "", date: "", tribunal: "" }; var cloturee = { etat: "cloturee", nature: "Clôture", date: "2026-01-01", tribunal: "Lyon" }; var enCours = { etat: "en-cours", nature: "Redressement", date: "2026-02-02", tribunal: "Paris" }; kitAssert(KIT_PURE.procedureCombine([aucune, cloturee, enCours]) === enCours); kitAssert(KIT_PURE.procedureCombine([cloturee, aucune]) === cloturee); kitAssert(JSON.stringify(KIT_PURE.procedureCombine([])) === JSON.stringify(aucune)); kitAssert(KIT_PURE.procedureCombine([cloturee, { etat: "cloturee", nature: "Seconde" }]) === cloturee); });
 KIT_TESTS.add("effectifs URL encode la dénomination", function () { var url = KIT_PURE.effectifSearchUrl("A & B # C+D France"); kitAssert(url.indexOf("q=A%20%26%20B%20%23%20C%2BD%20France&per_page=10") > 0, url); });
 KIT_TESTS.add("effectifs URL ajoute seulement un code postal valide", function () { var url = KIT_PURE.effectifSearchUrl("A & B", "73000"); kitAssert(url.indexOf("q=A%20%26%20B&per_page=10&code_postal=73000") > 0, url); ["7500", "ABCDE", null, undefined].forEach(function (cp) { kitAssert(KIT_PURE.effectifSearchUrl("X", cp).indexOf("code_postal") < 0, String(cp)); }); });
@@ -554,6 +561,7 @@ KIT_TESTS.add("effectifs dérivation rejette les entrées invalides", function (
 KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr; script-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' http://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' https://evilrecherche-entreprises.api.gouv.fr\">")); });
 KIT_TESTS.add("effectifs garde CSP sur le document réel", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || KIT_PURE.cspAllowsApi(KIT_SOURCE_HTML), "la CSP du document bloque l'API Recherche d'entreprises — ajouter le domaine au connect-src"); });
 KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123", effectifsSecondaires: [{ siren: "456" }, { siren: "789" }] }, { id: "libre", company: "C", address: "8 avenue Hoche 75008 Paris" }, { id: "sansAdresse", company: "E" }, { id: "viaLieu", company: "F", address: "sans code postal", workLocation: "12 rue Y 69003 Lyon" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "lie", mode: "secondaire", cle: "456" }, { id: "lie", mode: "secondaire", cle: "789" }, { id: "libre", mode: "denomination", cle: "C", cp: "75008" }, { id: "sansAdresse", mode: "denomination", cle: "E", cp: null }, { id: "viaLieu", mode: "denomination", cle: "F", cp: "69003" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
+KIT_TESTS.add("effectifs reprise par cible : les secondaires restantes ne sont pas abandonnées", function () { var contacts = [{ id: "interrompu", company: "G", effectifSiren: "111111111", effectifDate: "2026-08-09", effectifsSecondaires: [{ siren: "222222222", date: "2026-08-09" }, { siren: "333333333", date: "2026-01-01" }] }]; var reprise = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-09T08:00:00.000Z"); kitAssert(JSON.stringify(reprise) === JSON.stringify([{ id: "interrompu", mode: "secondaire", cle: "333333333" }]), JSON.stringify(reprise)); kitAssert(KIT_PURE.bulkEffectifTargets(contacts, false, null).length === 3, "lot frais : toutes les cibles"); });
 KIT_TESTS.add("effectifs égalité de dénomination", function () { kitAssert(KIT_PURE.denominationMatch("  Société   Été ", "SOCIETE ETE")); kitAssert(!KIT_PURE.denominationMatch("CABINET MARTIN", "CABINET MARTIN & ASSOCIES")); kitAssert(KIT_PURE.denominationMatch("SAINT-GOBAIN", "SAINT GOBAIN")); kitAssert(KIT_PURE.trancheFromCount(50) === "21"); });
 KIT_TESTS.add("effectifs reprise inclut les dates antérieures au lot", function () { var contacts = [{ id: "ancien", company: "A", effectifSiren: "111", effectifDate: "2026-08-01" }, { id: "recent", company: "B", effectifSiren: "222", effectifDate: "2026-08-06" }]; var cibles = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(cibles.length === 1 && cibles[0].id === "ancien", JSON.stringify(cibles)); var sansReprise = KIT_PURE.bulkEffectifTargets(contacts, false, null); kitAssert(sansReprise.length === 2); });
 KIT_TESTS.add("clé de semaine ISO du lundi au dimanche", function () { kitAssert(KIT_PURE.weekKey("2026-08-03") === "2026-W32"); kitAssert(KIT_PURE.weekKey("2026-08-09") === "2026-W32"); kitAssert(KIT_PURE.weekKey("2026-08-10") === "2026-W33"); });
@@ -567,8 +575,9 @@ KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitA
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
 KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.4["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v46["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("effectifs groupe câblés dans le document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/KIT_PURE\.propagationCibles\(/.test(KIT_SOURCE_HTML)); kitAssert(/MERGE_FIELDS[^;]*[\"']effectifsSecondaires[\"']/.test(KIT_SOURCE_HTML)); kitAssert(KIT_SOURCE_HTML.indexOf("(groupe)") >= 0); kitAssert(/KIT_PURE\.procedureCombine\(/.test(KIT_SOURCE_HTML)); });
-KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); kitAssert(/KIT_PURE\.bodaccSearchUrl\(siren\)/.test(KIT_SOURCE_HTML), "la fiche et le lot doivent appeler bodaccSearchUrl pour chaque SIREN"); });
-KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/if \(bodaccEchecs\) report\.bodaccKo\.push\(target\.label\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé et signalé"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); });
+KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); var appelsSiren = KIT_SOURCE_HTML.match(/KIT_PURE\.bodaccSearchUrl\(siren\)/g) || []; kitAssert(appelsSiren.length >= 2, "la fiche ET le lot doivent chacun appeler bodaccSearchUrl pour chaque SIREN"); });
+KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/if \(bodaccEchecs\) report\.bodaccKo\.push\(target\.label\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé et signalé"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); kitAssert(/if \(target\.mode !== "siren"\) return null;/.test(KIT_SOURCE_HTML), "la passe BODACC du lot ne doit tourner qu'une fois par fiche (cible principale)"); });
+KIT_TESTS.add("câblage propagation et passes partielles du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/KIT_PURE\.propagationCibles\(contacts, effectifModal\.id, \(contact && contact\.company\) \|\| effectifModal\.company/.test(KIT_SOURCE_HTML), "la propagation doit matcher sur le nom saisi de la fiche source, pas la raison sociale SIRENE"); var passesPartielles = KIT_SOURCE_HTML.match(/Passe partielle : l'état déjà connu/g) || []; kitAssert(passesPartielles.length >= 2, "fiche ET lot doivent préserver l'état connu sur passe BODACC partielle"); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -2198,21 +2207,27 @@ function App(props) {
       return fetch(bodaccUrl, options).then(function (response) { if (!response.ok) throw new Error("HTTP " + String(response.status)); return response.json(); }).then(function (body) { clearTimeout(timer); return body; }, function (error) { clearTimeout(timer); throw error; });
     }
     function nextSiren(index) {
-      if (index >= sirens.length) return Promise.resolve();
-      return (index ? new Promise(function (resolve) { setTimeout(resolve, 250); }) : Promise.resolve()).then(function () { return requestSiren(sirens[index]); }).then(function (body) {
-        var procedures = KIT_PURE.parseBodaccProcedures(body);
-        if (procedures === null) echecs += 1;
-        else { var p = procedurePatch(procedures); etats.push({ etat: p.procedureEtat, nature: p.procedureNature, date: p.procedureDate, tribunal: p.procedureTribunal }); }
-      }).catch(function () { echecs += 1; }).then(function () { return nextSiren(index + 1); });
+      /* Fermer le modal (bump de séquence) arrête aussi la chaîne réseau — pas seulement l'écriture finale. */
+      if (index >= sirens.length || seq !== effectifReqSeq.current) return Promise.resolve();
+      return (index ? new Promise(function (resolve) { setTimeout(resolve, 250); }) : Promise.resolve()).then(function () {
+        if (seq !== effectifReqSeq.current) return null;
+        return requestSiren(sirens[index]).then(function (body) {
+          var procedures = KIT_PURE.parseBodaccProcedures(body);
+          if (procedures === null) echecs += 1;
+          else { var p = procedurePatch(procedures); etats.push({ etat: p.procedureEtat, nature: p.procedureNature, date: p.procedureDate, tribunal: p.procedureTribunal }); }
+        }).catch(function () { echecs += 1; });
+      }).then(function () { return nextSiren(index + 1); });
     }
     nextSiren(0).then(function () {
       if (seq !== effectifReqSeq.current) return;
-      if (!etats.length) { setEffectifMessage("Impossible de vérifier le BODACC."); return; }
-      var combine = KIT_PURE.procedureCombine(etats);
+      if (!etats.length) { setEffectifMessage(KIT_PURE.bodaccSearchUrl(c.effectifSiren) ? "Impossible de vérifier le BODACC." : "SIREN mémorisé invalide — relancer « Rechercher l'effectif »."); return; }
+      /* Passe partielle : l'état déjà connu de la fiche entre dans la combinaison — une alerte existante ne peut pas être effacée tant que toutes les entreprises n'ont pas répondu. */
+      var entrees = echecs && c.procedureEtat ? etats.concat([{ etat: c.procedureEtat, nature: c.procedureNature || "", date: c.procedureDate || "", tribunal: c.procedureTribunal || "" }]) : etats;
+      var combine = KIT_PURE.procedureCombine(entrees);
       var patch = { procedureEtat: combine.etat, procedureNature: combine.nature || "", procedureDate: combine.date || "", procedureTribunal: combine.tribunal || "", procedureCheckISO: todayStr() };
       updContact(c.id, patch);
       var message = patch.procedureEtat === "en-cours" ? "Procédure collective en cours détectée." : patch.procedureEtat === "cloturee" ? "Procédure collective passée détectée." : "Aucune procédure collective détectée.";
-      setEffectifMessage(message + (echecs ? " (" + String(echecs) + " entreprise(s) non contrôlée(s))" : ""));
+      setEffectifMessage(message + (echecs ? " (" + String(echecs) + " entreprise(s) non contrôlée(s) — état précédent conservé dans le bilan)" : ""));
     }).then(function () { if (seq === effectifReqSeq.current) setEffectifLoading(false); });
   }
 
@@ -2279,13 +2294,14 @@ function App(props) {
       return;
     }
     var working = updContact(effectifModal.id, effectifPatch(candidate), null, contacts);
-    var propagation = KIT_PURE.propagationCibles(contacts, effectifModal.id, candidate.nom_complet, candidate.siren);
+    /* Les fiches sœurs partagent le nom saisi sur la fiche source — pas la raison sociale officielle SIRENE de la candidate. */
+    var propagation = KIT_PURE.propagationCibles(contacts, effectifModal.id, (contact && contact.company) || effectifModal.company, candidate.siren);
     propagation.aRattacher.forEach(function (id) { working = updContact(id, effectifPatch(candidate), null, working); });
     var messages = [];
     if (propagation.aRattacher.length) messages.push("Rattaché aussi à " + String(propagation.aRattacher.length) + " autre(s) fiche(s).");
     if (propagation.protegees.length) messages.push(String(propagation.protegees.length) + " protégée(s) (saisie manuelle).");
     if (propagation.autres.length) messages.push(String(propagation.autres.length) + " sur un autre SIREN, non modifiée(s).");
-    if (messages.length) setEffectifMessage(messages.join(" "));
+    if (messages.length) { setEffectifResults([]); setEffectifMessage(messages.join(" ")); }
     else fermerEffectifModal();
   }
 
@@ -2397,7 +2413,9 @@ function App(props) {
         } else if (target.mode === "secondaire") {
           var secondaryMatch = results.filter(function (x) { return x.siren === target.cle; })[0];
           var secondaryContact = working.filter(function (c) { return c.id === target.id; })[0];
-          if (!secondaryMatch || secondaryMatch.etat_administratif !== "A" || !secondaryContact) report.preserved.push(target.label + " (groupe)");
+          var secondaireEncorePresente = !!(secondaryContact && (secondaryContact.effectifsSecondaires || []).some(function (s) { return s && String(s.siren) === String(target.cle); }));
+          if (!secondaireEncorePresente) report.preserved.push(target.label + " (groupe — retirée entre-temps)");
+          else if (!secondaryMatch || secondaryMatch.etat_administratif !== "A" || !secondaryContact) report.preserved.push(target.label + " (groupe)");
           else {
             working = updContact(target.id, { effectifsSecondaires: KIT_PURE.secondairesAjoute(secondaryContact.effectifsSecondaires, { siren: secondaryMatch.siren, denomination: secondaryMatch.nom_complet, tranche: secondaryMatch.tranche_effectif_salarie || "NN", annee: secondaryMatch.annee_tranche_effectif_salarie || "", date: todayStr() }, secondaryContact.effectifSiren) }, null, working);
             report.updated.push(target.label + " (groupe)");
@@ -2422,7 +2440,9 @@ function App(props) {
         return nextBodacc(0).then(function () {
           if (bodaccEchecs) report.bodaccKo.push(target.label);
           if (!etats.length) return;
-          var combine = KIT_PURE.procedureCombine(etats);
+          /* Passe partielle : l'état déjà connu entre dans la combinaison — jamais d'effacement d'alerte sans passe complète. */
+          var entrees = bodaccEchecs && bodaccContact && bodaccContact.procedureEtat ? etats.concat([{ etat: bodaccContact.procedureEtat, nature: bodaccContact.procedureNature || "", date: bodaccContact.procedureDate || "", tribunal: bodaccContact.procedureTribunal || "" }]) : etats;
+          var combine = KIT_PURE.procedureCombine(entrees);
           var patch = { procedureEtat: combine.etat, procedureNature: combine.nature || "", procedureDate: combine.date || "", procedureTribunal: combine.tribunal || "", procedureCheckISO: todayStr() };
           working = updContact(target.id, patch, null, working);
           if (patch.procedureEtat === "en-cours") report.procedures.push(target.label);
