@@ -491,13 +491,20 @@ var KIT_PURE = (function () {
     return ranked.map(function (entry) { return entry.candidate; });
   }
   function bulkEffectifTargets(contacts, includeManual, lotStartISO) {
-    return (contacts || []).filter(function (contact) {
+    var targets = [];
+    (contacts || []).filter(function (contact) {
       if (!contact || !(contact.company || "").trim()) return false;
       if (!includeManual && contact.effectifSource === "manuel") return false;
       return !(lotStartISO && contact.effectifDate && String(contact.effectifDate).slice(0, 10) >= String(lotStartISO).slice(0, 10));
-    }).map(function (contact) {
-      return contact.effectifSiren ? { id: contact.id, mode: "siren", cle: contact.effectifSiren } : { id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null };
+    }).forEach(function (contact) {
+      if (contact.effectifSiren) {
+        targets.push({ id: contact.id, mode: "siren", cle: contact.effectifSiren });
+        (contact.effectifsSecondaires || []).forEach(function (secondaire) {
+          if (secondaire && secondaire.siren) targets.push({ id: contact.id, mode: "secondaire", cle: secondaire.siren });
+        });
+      } else targets.push({ id: contact.id, mode: "denomination", cle: contact.company.trim(), cp: extractPostal(contact.address) || extractPostal(contact.workLocation) || null });
     });
+    return targets;
   }
   return { renderTemplate: renderTemplate, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
@@ -546,7 +553,7 @@ KIT_TESTS.add("effectifs câblage : l'interface passe le code postal et classe l
 KIT_TESTS.add("effectifs dérivation rejette les entrées invalides", function () { kitAssert(KIT_PURE.trancheFromCount(-1) === "NN"); kitAssert(KIT_PURE.trancheFromCount(2.5) === "NN"); kitAssert(KIT_PURE.trancheFromCount(NaN) === "NN"); kitAssert(KIT_PURE.trancheFromCount("abc") === "NN"); });
 KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr; script-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' http://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' https://evilrecherche-entreprises.api.gouv.fr\">")); });
 KIT_TESTS.add("effectifs garde CSP sur le document réel", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || KIT_PURE.cspAllowsApi(KIT_SOURCE_HTML), "la CSP du document bloque l'API Recherche d'entreprises — ajouter le domaine au connect-src"); });
-KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123" }, { id: "libre", company: "C", address: "8 avenue Hoche 75008 Paris" }, { id: "sansAdresse", company: "E" }, { id: "viaLieu", company: "F", address: "sans code postal", workLocation: "12 rue Y 69003 Lyon" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "libre", mode: "denomination", cle: "C", cp: "75008" }, { id: "sansAdresse", mode: "denomination", cle: "E", cp: null }, { id: "viaLieu", mode: "denomination", cle: "F", cp: "69003" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
+KIT_TESTS.add("effectifs cibles de lot et reprise", function () { var contacts = [{ id: "manuel", company: "A", effectifSource: "manuel" }, { id: "vide", company: " " }, { id: "lie", company: "B", effectifSiren: "123", effectifsSecondaires: [{ siren: "456" }, { siren: "789" }] }, { id: "libre", company: "C", address: "8 avenue Hoche 75008 Paris" }, { id: "sansAdresse", company: "E" }, { id: "viaLieu", company: "F", address: "sans code postal", workLocation: "12 rue Y 69003 Lyon" }, { id: "repris", company: "D", effectifDate: "2026-08-06" }]; var base = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(JSON.stringify(base) === JSON.stringify([{ id: "lie", mode: "siren", cle: "123" }, { id: "lie", mode: "secondaire", cle: "456" }, { id: "lie", mode: "secondaire", cle: "789" }, { id: "libre", mode: "denomination", cle: "C", cp: "75008" }, { id: "sansAdresse", mode: "denomination", cle: "E", cp: null }, { id: "viaLieu", mode: "denomination", cle: "F", cp: "69003" }]), JSON.stringify(base)); var avecManuel = KIT_PURE.bulkEffectifTargets(contacts, true, "2026-08-06T09:00:00.000Z"); kitAssert(avecManuel.some(function (x) { return x.id === "manuel"; })); });
 KIT_TESTS.add("effectifs égalité de dénomination", function () { kitAssert(KIT_PURE.denominationMatch("  Société   Été ", "SOCIETE ETE")); kitAssert(!KIT_PURE.denominationMatch("CABINET MARTIN", "CABINET MARTIN & ASSOCIES")); kitAssert(KIT_PURE.denominationMatch("SAINT-GOBAIN", "SAINT GOBAIN")); kitAssert(KIT_PURE.trancheFromCount(50) === "21"); });
 KIT_TESTS.add("effectifs reprise inclut les dates antérieures au lot", function () { var contacts = [{ id: "ancien", company: "A", effectifSiren: "111", effectifDate: "2026-08-01" }, { id: "recent", company: "B", effectifSiren: "222", effectifDate: "2026-08-06" }]; var cibles = KIT_PURE.bulkEffectifTargets(contacts, false, "2026-08-06T09:00:00.000Z"); kitAssert(cibles.length === 1 && cibles[0].id === "ancien", JSON.stringify(cibles)); var sansReprise = KIT_PURE.bulkEffectifTargets(contacts, false, null); kitAssert(sansReprise.length === 2); });
 KIT_TESTS.add("clé de semaine ISO du lundi au dimanche", function () { kitAssert(KIT_PURE.weekKey("2026-08-03") === "2026-W32"); kitAssert(KIT_PURE.weekKey("2026-08-09") === "2026-W32"); kitAssert(KIT_PURE.weekKey("2026-08-10") === "2026-W33"); });
@@ -558,9 +565,10 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.3["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v45["']/.test(KIT_SOURCE_SW)); });
-KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); kitAssert(/KIT_PURE\.bodaccSearchUrl\(c\.effectifSiren\)/.test(KIT_SOURCE_HTML), "la fiche doit appeler bodaccSearchUrl"); kitAssert(/KIT_PURE\.bodaccSearchUrl\(target\.cle\)/.test(KIT_SOURCE_HTML), "le lot doit appeler bodaccSearchUrl"); });
-KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/\.catch\(function \(\) \{ report\.bodaccKo\.push\(target\.label\); \}\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé dans son propre catch"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.4["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v46["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("effectifs groupe câblés dans le document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/KIT_PURE\.propagationCibles\(/.test(KIT_SOURCE_HTML)); kitAssert(/MERGE_FIELDS[^;]*[\"']effectifsSecondaires[\"']/.test(KIT_SOURCE_HTML)); kitAssert(KIT_SOURCE_HTML.indexOf("(groupe)") >= 0); kitAssert(/KIT_PURE\.procedureCombine\(/.test(KIT_SOURCE_HTML)); });
+KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); kitAssert(/KIT_PURE\.bodaccSearchUrl\(siren\)/.test(KIT_SOURCE_HTML), "la fiche et le lot doivent appeler bodaccSearchUrl pour chaque SIREN"); });
+KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/if \(bodaccEchecs\) report\.bodaccKo\.push\(target\.label\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé et signalé"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); });
 KIT_TESTS.add("rendu tutoiement avec 3 dates en puces", function () { var dates = KIT_PURE.formatDatesList(["2026-06-17", "2026-06-18", "2026-06-19"], "puces"); var s = KIT_PURE.renderTemplate("Salut {prenom}\n{dates}", { prenom: "Léa", dates: dates }); kitAssert(s.indexOf("Salut Léa") === 0 && s.split("\n").length === 4 && /\.$/.test(s)); });
 KIT_TESTS.add("accroche premier contact sans référence", function () { kitAssert(KIT_PURE.accrocheFor([], ["dejeuner"]) === ""); });
 KIT_TESTS.add("objet avec entreprise", function () { var s = KIT_PURE.cleanSubject(KIT_PURE.renderTemplate("{entreprise} - Proposition de {type}", { entreprise: "Cabinet Dupont", type: "déjeuner" })); kitAssert(s === "Cabinet Dupont - Proposition de déjeuner", s); });
@@ -971,11 +979,11 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.5.3";
+var APP_VERSION = "1.5.4";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
@@ -2177,35 +2185,42 @@ function App(props) {
     if (!c || !c.effectifSiren || !navigator.onLine) return;
     setEffectifModal({ id: c.id, company: c.company, bodacc: true });
     setEffectifResults([]); setEffectifMessage(""); setEffectifLoading(true);
-    var bodaccUrl = KIT_PURE.bodaccSearchUrl(c.effectifSiren);
-    if (!bodaccUrl) { setEffectifMessage("SIREN mémorisé invalide — relancer « Rechercher l'effectif »."); setEffectifLoading(false); return; }
     var seq = ++effectifReqSeq.current;
-    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-    var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
-    var options = { referrerPolicy: "no-referrer", credentials: "omit" };
-    if (controller) options.signal = controller.signal;
-    fetch(bodaccUrl, options).then(function (response) {
-      if (!response.ok) throw new Error("HTTP " + String(response.status));
-      return response.json();
-    }).then(function (body) {
+    var sirens = [c.effectifSiren].concat((c.effectifsSecondaires || []).map(function (s) { return s.siren; }));
+    var etats = []; var echecs = 0;
+    function requestSiren(siren) {
+      var bodaccUrl = KIT_PURE.bodaccSearchUrl(siren);
+      if (!bodaccUrl) return Promise.reject(new Error("SIREN invalide"));
+      var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+      var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
+      var options = { referrerPolicy: "no-referrer", credentials: "omit" };
+      if (controller) options.signal = controller.signal;
+      return fetch(bodaccUrl, options).then(function (response) { if (!response.ok) throw new Error("HTTP " + String(response.status)); return response.json(); }).then(function (body) { clearTimeout(timer); return body; }, function (error) { clearTimeout(timer); throw error; });
+    }
+    function nextSiren(index) {
+      if (index >= sirens.length) return Promise.resolve();
+      return (index ? new Promise(function (resolve) { setTimeout(resolve, 250); }) : Promise.resolve()).then(function () { return requestSiren(sirens[index]); }).then(function (body) {
+        var procedures = KIT_PURE.parseBodaccProcedures(body);
+        if (procedures === null) echecs += 1;
+        else { var p = procedurePatch(procedures); etats.push({ etat: p.procedureEtat, nature: p.procedureNature, date: p.procedureDate, tribunal: p.procedureTribunal }); }
+      }).catch(function () { echecs += 1; }).then(function () { return nextSiren(index + 1); });
+    }
+    nextSiren(0).then(function () {
       if (seq !== effectifReqSeq.current) return;
-      var procedures = KIT_PURE.parseBodaccProcedures(body);
-      if (procedures === null) { setEffectifMessage("Réponse BODACC invalide — la fiche n'a pas été modifiée."); return; }
-      var patch = procedurePatch(procedures);
+      if (!etats.length) { setEffectifMessage("Impossible de vérifier le BODACC."); return; }
+      var combine = KIT_PURE.procedureCombine(etats);
+      var patch = { procedureEtat: combine.etat, procedureNature: combine.nature || "", procedureDate: combine.date || "", procedureTribunal: combine.tribunal || "", procedureCheckISO: todayStr() };
       updContact(c.id, patch);
-      if (patch.procedureEtat === "en-cours") setEffectifMessage("Procédure collective en cours détectée.");
-      else if (patch.procedureEtat === "cloturee") setEffectifMessage("Procédure collective passée détectée.");
-      else setEffectifMessage("Aucune procédure collective détectée.");
-    }).catch(function (error) {
-      if (seq !== effectifReqSeq.current) return;
-      setEffectifMessage(error && error.name === "AbortError" ? "La vérification BODACC a dépassé le délai de 15 secondes." : "Impossible de vérifier le BODACC.");
-    }).then(function () { clearTimeout(timer); if (seq === effectifReqSeq.current) setEffectifLoading(false); });
+      var message = patch.procedureEtat === "en-cours" ? "Procédure collective en cours détectée." : patch.procedureEtat === "cloturee" ? "Procédure collective passée détectée." : "Aucune procédure collective détectée.";
+      setEffectifMessage(message + (echecs ? " (" + String(echecs) + " entreprise(s) non contrôlée(s))" : ""));
+    }).then(function () { if (seq === effectifReqSeq.current) setEffectifLoading(false); });
   }
 
-  function openEffectifSearch(c, sansFiltre) {
+  function openEffectifSearch(c, sansFiltre, optionsRecherche) {
     if (!c || !(c.company || "").trim()) return;
     var cp = sansFiltre ? null : (KIT_PURE.extractPostal(c.address) || KIT_PURE.extractPostal(c.workLocation));
-    setEffectifModal({ id: c.id, company: c.company, cp: cp });
+    var secondaire = !!(optionsRecherche && optionsRecherche.secondaire);
+    setEffectifModal({ id: c.id, company: c.company, cp: cp, secondaire: secondaire });
     setEffectifResults([]);
     setEffectifMessage("");
     if (!navigator.onLine) { setEffectifMessage("Recherche indisponible hors ligne."); return; }
@@ -2231,7 +2246,7 @@ function App(props) {
       if (seq !== effectifReqSeq.current) return results;
       if (cp && !results.length) {
         setEffectifMessage("Aucun résultat avec le code postal " + cp + " — recherche élargie.");
-        setEffectifModal({ id: c.id, company: c.company, cp: null });
+        setEffectifModal({ id: c.id, company: c.company, cp: null, secondaire: secondaire });
         return request(null);
       }
       return results;
@@ -2257,8 +2272,21 @@ function App(props) {
 
   function chooseEffectif(candidate) {
     if (!effectifModal) return;
-    updContact(effectifModal.id, effectifPatch(candidate));
-    fermerEffectifModal();
+    var contact = contacts.filter(function (c) { return c.id === effectifModal.id; })[0];
+    if (effectifModal.secondaire) {
+      if (contact) updContact(effectifModal.id, { effectifsSecondaires: KIT_PURE.secondairesAjoute(contact.effectifsSecondaires, { siren: candidate.siren, denomination: candidate.nom_complet, tranche: candidate.tranche_effectif_salarie || "NN", annee: candidate.annee_tranche_effectif_salarie || "", date: todayStr() }, contact.effectifSiren) });
+      fermerEffectifModal();
+      return;
+    }
+    var working = updContact(effectifModal.id, effectifPatch(candidate), null, contacts);
+    var propagation = KIT_PURE.propagationCibles(contacts, effectifModal.id, candidate.nom_complet, candidate.siren);
+    propagation.aRattacher.forEach(function (id) { working = updContact(id, effectifPatch(candidate), null, working); });
+    var messages = [];
+    if (propagation.aRattacher.length) messages.push("Rattaché aussi à " + String(propagation.aRattacher.length) + " autre(s) fiche(s).");
+    if (propagation.protegees.length) messages.push(String(propagation.protegees.length) + " protégée(s) (saisie manuelle).");
+    if (propagation.autres.length) messages.push(String(propagation.autres.length) + " sur un autre SIREN, non modifiée(s).");
+    if (messages.length) setEffectifMessage(messages.join(" "));
+    else fermerEffectifModal();
   }
 
   function openManualEffectif(c) {
@@ -2317,7 +2345,7 @@ function App(props) {
     /* Le filtre de reprise (effectifDate >= debut du lot) ne s'applique QUE sur reprise apres 429 — un lot frais couvre tout */
     var resuming = !!(bulkResume && bulkResume.kind === kind);
     var started = resuming ? bulkResume.started : nowTS();
-    var targets = KIT_PURE.bulkEffectifTargets(contacts, bulkIncludeManual, resuming ? started : null).filter(function (target) { return kind === "complete" ? target.mode === "denomination" : target.mode === "siren"; });
+    var targets = KIT_PURE.bulkEffectifTargets(contacts, bulkIncludeManual, resuming ? started : null).filter(function (target) { return kind === "complete" ? target.mode === "denomination" : target.mode !== "denomination"; });
     targets = targets.map(function (target) { var contact = contacts.filter(function (c) { return c.id === target.id; })[0]; return Object.assign({}, target, { label: contact && contact.company || target.cle }); });
     setBulkReport(null);
     setBulkPreview({ kind: kind, started: started, targets: targets });
@@ -2341,8 +2369,8 @@ function App(props) {
           return response.json();
         }).then(function (body) { clearTimeout(timer); return body && body.results || []; }, function (error) { clearTimeout(timer); throw error; });
       }
-      function requestBodacc() {
-        var bodaccUrl = KIT_PURE.bodaccSearchUrl(target.cle);
+      function requestBodacc(siren) {
+        var bodaccUrl = KIT_PURE.bodaccSearchUrl(siren);
         if (!bodaccUrl) return Promise.reject(new Error("SIREN invalide"));
         var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
         var timer = setTimeout(function () { if (controller) controller.abort(); }, 15000);
@@ -2366,19 +2394,39 @@ function App(props) {
           var candidate = results.length === 1 && KIT_PURE.denominationMatch(results[0].nom_complet, target.cle) ? results[0] : null;
           if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label + (cpUtilise ? " (affiné par " + cpUtilise + ")" : "")); }
           else report.ambiguous.push({ id: target.id, company: target.cle, results: results, cp: cpUtilise });
+        } else if (target.mode === "secondaire") {
+          var secondaryMatch = results.filter(function (x) { return x.siren === target.cle; })[0];
+          var secondaryContact = working.filter(function (c) { return c.id === target.id; })[0];
+          if (!secondaryMatch || secondaryMatch.etat_administratif !== "A" || !secondaryContact) report.preserved.push(target.label + " (groupe)");
+          else {
+            working = updContact(target.id, { effectifsSecondaires: KIT_PURE.secondairesAjoute(secondaryContact.effectifsSecondaires, { siren: secondaryMatch.siren, denomination: secondaryMatch.nom_complet, tranche: secondaryMatch.tranche_effectif_salarie || "NN", annee: secondaryMatch.annee_tranche_effectif_salarie || "", date: todayStr() }, secondaryContact.effectifSiren) }, null, working);
+            report.updated.push(target.label + " (groupe)");
+          }
         } else {
           var match = results.filter(function (x) { return x.siren === target.cle; })[0];
           if (!match || match.etat_administratif !== "A") report.preserved.push(target.label);
           else { working = updContact(target.id, effectifPatch(match), null, working); report.updated.push(target.label); }
         }
         if (target.mode !== "siren") return null;
-        return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(requestBodacc).then(function (body) {
-          var procedures = KIT_PURE.parseBodaccProcedures(body);
-          if (procedures === null) { report.bodaccKo.push(target.label); return; }
-          var patch = procedurePatch(procedures);
+        var bodaccContact = working.filter(function (c) { return c.id === target.id; })[0];
+        var sirens = [bodaccContact && bodaccContact.effectifSiren].concat((bodaccContact && bodaccContact.effectifsSecondaires || []).map(function (s) { return s.siren; }));
+        var etats = []; var bodaccEchecs = 0;
+        function nextBodacc(i) {
+          if (i >= sirens.length) return Promise.resolve();
+          return new Promise(function (resolve) { setTimeout(resolve, 250); }).then(function () { return requestBodacc(sirens[i]); }).then(function (body) {
+            var procedures = KIT_PURE.parseBodaccProcedures(body);
+            if (procedures === null) bodaccEchecs += 1;
+            else { var p = procedurePatch(procedures); etats.push({ etat: p.procedureEtat, nature: p.procedureNature, date: p.procedureDate, tribunal: p.procedureTribunal }); }
+          }).catch(function () { bodaccEchecs += 1; }).then(function () { return nextBodacc(i + 1); });
+        }
+        return nextBodacc(0).then(function () {
+          if (bodaccEchecs) report.bodaccKo.push(target.label);
+          if (!etats.length) return;
+          var combine = KIT_PURE.procedureCombine(etats);
+          var patch = { procedureEtat: combine.etat, procedureNature: combine.nature || "", procedureDate: combine.date || "", procedureTribunal: combine.tribunal || "", procedureCheckISO: todayStr() };
           working = updContact(target.id, patch, null, working);
           if (patch.procedureEtat === "en-cours") report.procedures.push(target.label);
-        }).catch(function () { report.bodaccKo.push(target.label); });
+        });
       }).then(function () {
         setBulkProgress({ done: index + 1, total: lot.targets.length });
         setTimeout(function () { next(index + 1); }, 250);
@@ -3520,8 +3568,8 @@ function App(props) {
 
   // ─── LOG MODAL ───
   function renderEffectifBadge(c) {
-    var label = KIT_PURE.trancheLabel(c && c.effectifTranche);
-    return label ? <span style={{ marginLeft: 6, display: "inline-block", padding: "2px 7px", borderRadius: 9, background: "#F1EFEB", color: "#5C5852", fontSize: 10.5, fontWeight: 600 }}>{label}</span> : null;
+    var label = KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c));
+    return label ? <span style={{ marginLeft: 6, display: "inline-block", padding: "2px 7px", borderRadius: 9, background: "#F1EFEB", color: "#5C5852", fontSize: 10.5, fontWeight: 600 }}>{label + ((c && c.effectifsSecondaires || []).length ? " (groupe)" : "")}</span> : null;
   }
 
   function renderEffectifModal() {
@@ -3531,7 +3579,7 @@ function App(props) {
         <div style={{ background: "#fff", borderRadius: 12, padding: 20, width: "100%", maxWidth: 620, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 16px 45px rgba(0,0,0,0.22)" }} onClick={function (e) { e.stopPropagation(); }}>
           <h3 style={{ margin: "0 0 4px", color: ac }}>{effectifModal.bodacc ? "Vérification BODACC" : "Rattacher l'entreprise"}</h3>
           <p style={{ margin: "0 0 14px", color: "#64748B", fontSize: 13 }}>{effectifModal.bodacc ? "Contrôle des procédures collectives pour « " + effectifModal.company + " »." : "Résultats pour « " + effectifModal.company + " » — choisis l'entité correspondante."}</p>
-          {effectifModal.cp ? <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 12px" }}><span style={{ color: "#64748B", fontSize: 12 }}>{"affiné par " + effectifModal.cp}</span><button onClick={function () { var contact = contacts.filter(function (c) { return c.id === effectifModal.id; })[0]; if (contact) openEffectifSearch(contact, true); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "5px 8px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Élargir la recherche</button></div> : null}
+          {effectifModal.cp ? <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", margin: "0 0 12px" }}><span style={{ color: "#64748B", fontSize: 12 }}>{"affiné par " + effectifModal.cp}</span><button onClick={function () { var contact = contacts.filter(function (c) { return c.id === effectifModal.id; })[0]; if (contact) openEffectifSearch(contact, true, { secondaire: effectifModal.secondaire }); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "5px 8px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Élargir la recherche</button></div> : null}
           {effectifLoading ? <p style={{ fontSize: 13 }}>Recherche en cours…</p> : null}
           {effectifMessage ? <p role="alert" style={{ padding: 10, background: "#FBEAE5", borderRadius: 8, color: "#9A3115", fontSize: 13 }}>{effectifMessage}</p> : null}
           {effectifResults.map(function (candidate, index) {
@@ -4006,7 +4054,12 @@ function App(props) {
             {c.metAt ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>LIEU DE RENCONTRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.metAt}</p></div> : null}
             {c.sector ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>CCN DE BRANCHE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.sector}</p></div> : null}
             {c.birthday ? <div style={{ padding: 14, background: "#FDF2F8", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#9D174D", fontWeight: 600 }}>ANNIVERSAIRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{fmtDate(c.birthday)}</p></div> : null}
-            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p><p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(c.effectifTranche) ? (c.effectifPrecis != null ? String(c.effectifPrecis) + " sal. · " : "") + KIT_PURE.trancheLabel(c.effectifTranche) + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button disabled={!navigator.onLine} title={!navigator.onLine ? "Recherche indisponible hors ligne" : ""} onClick={function () { c.effectifSiren ? refreshEffectif(c) : openEffectifSearch(c); }} style={{ background: "transparent", color: navigator.onLine ? ac : "#94A3B8", border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>{c.effectifSiren ? "Actualiser" : "Rechercher l'effectif"}</button><button onClick={function () { openManualEffectif(c); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Saisir l'effectif</button>{c.effectifSiren ? <button disabled={!navigator.onLine} title={!navigator.onLine ? "Vérification indisponible hors ligne" : ""} onClick={function () { verifyBodacc(c); }} style={{ background: "transparent", color: navigator.onLine ? "#BE3C1A" : "#94A3B8", border: "1px solid " + (navigator.onLine ? "#BE3C1A" : bd), borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Vérifier au BODACC</button> : null}</div></div> : null}
+            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}>
+              <p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p>
+              <p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c)) ? (c.effectifPrecis != null ? String(c.effectifPrecis) + " sal. · " : "") + KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c)) + ((c.effectifsSecondaires || []).length ? " (groupe)" : "") + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button disabled={!navigator.onLine} title={!navigator.onLine ? "Recherche indisponible hors ligne" : ""} onClick={function () { c.effectifSiren ? refreshEffectif(c) : openEffectifSearch(c); }} style={{ background: "transparent", color: navigator.onLine ? ac : "#94A3B8", border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>{c.effectifSiren ? "Actualiser" : "Rechercher l'effectif"}</button><button onClick={function () { openManualEffectif(c); }} style={{ background: "transparent", color: ac, border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Saisir l'effectif</button>{c.effectifSiren ? <button disabled={!navigator.onLine} title={!navigator.onLine ? "Vérification indisponible hors ligne" : ""} onClick={function () { verifyBodacc(c); }} style={{ background: "transparent", color: navigator.onLine ? "#BE3C1A" : "#94A3B8", border: "1px solid " + (navigator.onLine ? "#BE3C1A" : bd), borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Vérifier au BODACC</button> : null}</div>
+              <div style={{ marginTop: 12, borderTop: "1px solid " + bd, paddingTop: 10 }}><p style={{ margin: "0 0 6px", fontSize: 11, color: "#64748B", fontWeight: 700 }}>ENTREPRISES DU GROUPE</p>{(c.effectifsSecondaires || []).map(function (s) { return <div key={s.siren} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 5, fontSize: 12 }}><span>{(s.denomination || s.siren) + " — " + (KIT_PURE.trancheLabel(s.tranche) || "effectif inconnu")}</span><button title="Retirer cette entreprise" onClick={function () { updContact(c.id, { effectifsSecondaires: KIT_PURE.secondairesRetire(c.effectifsSecondaires, s.siren) }); }} style={{ background: "transparent", border: "none", color: "#BE3C1A", cursor: "pointer", fontFamily: ff }}>✕</button></div>; })}<button disabled={!c.effectifSiren || !navigator.onLine} onClick={function () { openEffectifSearch(c, false, { secondaire: true }); }} style={{ marginTop: 8, background: "transparent", color: c.effectifSiren && navigator.onLine ? ac : "#94A3B8", border: "1px solid " + bd, borderRadius: 7, padding: "6px 9px", fontSize: 11.5, fontWeight: 600, cursor: c.effectifSiren && navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Ajouter une entreprise</button></div>
+            </div> : null}
           </div>
 
           {c.procedureEtat === "en-cours" ? <div role="alert" style={{ marginTop: 14, padding: "12px 14px", background: "#FBEAE5", border: "1px solid #BE3C1A", borderRadius: 8, color: "#7C2D12", fontSize: 13.5, fontWeight: 600 }}>{"⚠ Procédure collective — " + (c.procedureNature || "nature non renseignée") + " — " + (c.procedureDate || "date non renseignée") + " — " + (c.procedureTribunal || "tribunal non renseigné")}</div> : c.procedureEtat === "cloturee" ? <p style={{ margin: "12px 0 0", color: "#6E6A64", fontSize: 12.5 }}>{"Procédure collective passée (" + (c.procedureDate || "date non renseignée") + ")"}</p> : null}
@@ -4501,7 +4554,7 @@ function App(props) {
           <label style={{ display: "block", marginBottom: 10, fontSize: 12.5, color: "#235C68" }}><input type="checkbox" checked={bulkIncludeManual} onChange={function (e) { setBulkIncludeManual(e.target.checked); }} /> Inclure les valeurs saisies manuellement</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("complete"); }} style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Compléter les effectifs</button><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("update"); }} style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Mettre à jour les effectifs</button></div>
           {!navigator.onLine ? <p role="alert" style={{ margin: "9px 0 0", fontSize: 12, color: "#9A3115" }}>Actions indisponibles hors ligne.</p> : null}
-          {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id}>{target.label}{target.mode === "siren" ? " · SIREN " + target.cle : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
+          {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id + "-" + target.mode + "-" + target.cle}>{target.label}{target.mode !== "denomination" ? " · SIREN " + target.cle + (target.mode === "secondaire" ? " (groupe)" : "") : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
           {bulkProgress ? <p role="status" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#235C68" }}>Progression : {bulkProgress.done} / {bulkProgress.total}</p> : null}
           {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.procedures.length ? <p style={{ margin: "4px 0", color: "#BE3C1A", fontWeight: 600 }}>⚠ Procédures collectives : {bulkReport.procedures.join(", ")}</p> : null}{(bulkReport.bodaccKo || []).length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>BODACC injoignable — à revérifier depuis la fiche : {bulkReport.bodaccKo.join(", ")}</p> : null}{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
         </div> : null}
