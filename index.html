@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com https://recherche-entreprises.api.gouv.fr https://bodacc-datadila.opendatasoft.com; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'self' https://login.microsoftonline.com">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://graph.microsoft.com https://login.microsoftonline.com https://recherche-entreprises.api.gouv.fr https://bodacc-datadila.opendatasoft.com; base-uri 'self'; object-src 'none'; form-action 'self'; frame-src 'self' https://login.microsoftonline.com">
   <meta name="theme-color" content="#1B1B24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -16,13 +16,44 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #F6F5F2; -webkit-font-smoothing: antialiased; }
     #root { min-height: 100vh; }
+    .kit-boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1B1B24; }
+    .kit-boot-logo { font-weight: 800; font-size: 28px; letter-spacing: 2px; }
+    .kit-boot p { margin-top: 10px; font-size: 14px; color: #64748B; }
+    .kit-boot-late { opacity: 0; animation: kitBootLate 0.4s ease 20s forwards; }
+    @keyframes kitBootLate { to { opacity: 1; } }
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="root"><div class="kit-boot"><div class="kit-boot-logo">KIT</div><p>Ouverture…</p><p class="kit-boot-late">Si cet écran persiste, rechargez la page.</p></div></div>
   <script src="./lib/react.production.min.js"></script>
   <script src="./lib/react-dom.production.min.js"></script>
   <script src="./lib/msal-browser.min.js"></script>
+  <script>
+  /* Enregistrement du service worker AVANT la compilation Babel : hors-ligne et détection de mise à jour opérationnels dès le chargement. */
+  (function () {
+    if (typeof navigator === "undefined" || typeof document === "undefined" || !("serviceWorker" in navigator)) return;
+    document.addEventListener("DOMContentLoaded", function () {
+      /* Page non contrôlée au chargement = première installation : ne jamais signaler une « mise à jour » dans ce cas. */
+      var etaitControlee = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.register("./sw.js").then(function (reg) {
+        function watch(w) {
+          if (!w) return;
+          w.addEventListener("statechange", function () {
+            if (w.state === "activated" && etaitControlee) {
+              window.__kitMajPrete = true;
+              window.dispatchEvent(new Event("kit-sw-updated"));
+            }
+          });
+        }
+        watch(reg.installing);
+        reg.addEventListener("updatefound", function () { watch(reg.installing); });
+        document.addEventListener("visibilitychange", function () {
+          if (document.visibilityState === "visible") { reg.update().catch(function () {}); }
+        });
+      }).catch(function () {});
+    });
+  })();
+  </script>
   <script src="./lib/babel.min.js"></script>
   <script src="./lib/xlsx.full.min.js"></script>
   <script src="./lib/exceljs.min.js"></script>
@@ -573,8 +604,12 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.5["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v47["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.6["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v48["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("retours de mise à jour et propagation câblés dans le document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/window\.__kitMajPrete = true/.test(KIT_SOURCE_HTML)); kitAssert(/if \(window\.__kitMajPrete\) setUpdReady\(true\);/.test(KIT_SOURCE_HTML)); kitAssert(/w\.state === "activated" && etaitControlee/.test(KIT_SOURCE_HTML), "le signal de mise à jour exige une page déjà contrôlée (jamais à la première installation)"); kitAssert(/else \{ setEffectifResults\(\[\]\); setEffectifMessage\("Rattachée\. Aucune autre fiche ne porte ce nom d'entreprise\."\); \}/.test(KIT_SOURCE_HTML), "la branche vide de la propagation doit afficher son message, jamais fermer en silence"); });
+KIT_TESTS.add("câblage : la balise Babel porte data-presets=react", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var tag = KIT_SOURCE_HTML.match(/<script[^>]*type="text\/babel"[^>]*>/); kitAssert(!!tag && /data-presets="react"/.test(tag[0]) && /data-type="module"/.test(tag[0])); });
+KIT_TESTS.add("CSP du document réel : unsafe-eval retiré, unsafe-inline conservé", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "script-src", "'unsafe-eval'") === false); kitAssert(KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "script-src", "'unsafe-inline'") === true); kitAssert(KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://graph.microsoft.com") === true); });
+KIT_TESTS.add("câblage : service worker enregistré avant le bloc Babel, plus dans le bloc", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var motif = "navigator.serviceWorker" + ".register("; var iBabel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'); var avant = KIT_SOURCE_HTML.slice(0, iBabel), apres = KIT_SOURCE_HTML.slice(iBabel); kitAssert(iBabel > 0); kitAssert(avant.indexOf(motif) >= 0); kitAssert(apres.indexOf(motif) === -1); kitAssert(avant.indexOf("etaitControlee") >= 0); kitAssert(avant.indexOf("DOMContentLoaded") >= 0); });
+KIT_TESTS.add("écran d'attente statique dans #root", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var iRoot = KIT_SOURCE_HTML.indexOf('<div id="root">'); var iScript = KIT_SOURCE_HTML.indexOf("<script", iRoot); var zone = KIT_SOURCE_HTML.slice(iRoot, iScript); kitAssert(iRoot > 0 && zone.indexOf("Ouverture…") >= 0 && zone.indexOf("kit-boot-late") >= 0); });
 KIT_TESTS.add("effectifs groupe câblés dans le document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/KIT_PURE\.propagationCibles\(/.test(KIT_SOURCE_HTML)); kitAssert(/MERGE_FIELDS[^;]*[\"']effectifsSecondaires[\"']/.test(KIT_SOURCE_HTML)); kitAssert(KIT_SOURCE_HTML.indexOf("(groupe)") >= 0); kitAssert(/KIT_PURE\.procedureCombine\(/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); var appelsSiren = KIT_SOURCE_HTML.match(/KIT_PURE\.bodaccSearchUrl\(siren\)/g) || []; kitAssert(appelsSiren.length >= 2, "la fiche ET le lot doivent chacun appeler bodaccSearchUrl pour chaque SIREN"); });
 KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/if \(bodaccEchecs\) report\.bodaccKo\.push\(target\.label\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé et signalé"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); kitAssert(/if \(target\.mode !== "siren"\) return null;/.test(KIT_SOURCE_HTML), "la passe BODACC du lot ne doit tourner qu'une fois par fiche (cible principale)"); });
@@ -839,7 +874,7 @@ var KIT_AGENDA = (function () {
   };
 }());
   </script>
-  <script type="text/babel" data-type="module">
+  <script type="text/babel" data-type="module" data-presets="react">
 
 /* ═══════ PASSWORD AUTH ═══════ */
 var PWD_KEY = "kit-crm-pwd";
@@ -989,7 +1024,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.5.5";
+var APP_VERSION = "1.5.6";
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -4924,29 +4959,6 @@ function App(props) {
 
 var root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(React.createElement(ProtectedApp));
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", function () {
-    /* Page non contrôlée au chargement = première installation : ne jamais signaler une « mise à jour » dans ce cas. */
-    var etaitControlee = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register("./sw.js").then(function (reg) {
-      function watch(w) {
-        if (!w) return;
-        w.addEventListener("statechange", function () {
-          if (w.state === "activated" && etaitControlee) {
-            window.__kitMajPrete = true;
-            window.dispatchEvent(new Event("kit-sw-updated"));
-          }
-        });
-      }
-      watch(reg.installing);
-      reg.addEventListener("updatefound", function () { watch(reg.installing); });
-      document.addEventListener("visibilitychange", function () {
-        if (document.visibilityState === "visible") { reg.update().catch(function () {}); }
-      });
-    }).catch(function () {});
-  });
-}
 </script>
 </body>
 </html>
