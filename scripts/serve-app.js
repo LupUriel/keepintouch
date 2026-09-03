@@ -8,7 +8,6 @@
 var fs = require("fs");
 var http = require("http");
 var path = require("path");
-var url = require("url");
 
 var ROOT = path.join(__dirname, "..");
 var MIME_TYPES = {
@@ -35,7 +34,7 @@ function handler(request, response) {
   var filename;
 
   try {
-    pathname = decodeURIComponent(url.parse(request.url).pathname);
+    pathname = decodeURIComponent(new URL(request.url, "http://127.0.0.1").pathname);
   } catch (error) {
     respond(response, 404, "Introuvable\n");
     return;
@@ -47,7 +46,7 @@ function handler(request, response) {
   }
 
   relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
-  if (relative.split(/[\\/]+/).indexOf("..") !== -1) {
+  if (relative.indexOf("\0") !== -1 || relative.split(/[\\/]+/).some(function (segment) { return segment === ".." || segment.charAt(0) === "."; })) {
     respond(response, 404, "Introuvable\n");
     return;
   }

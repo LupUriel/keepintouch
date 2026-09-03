@@ -44,8 +44,9 @@ try {
     }
   });
 
-  fs.readdirSync(repertoireLib).forEach(function (fichier) {
-    if (/\.js$/i.test(fichier) && !declarations[fichier]) erreurs.push("NON DECLARE " + fichier);
+  fs.readdirSync(repertoireLib, { withFileTypes: true }).forEach(function (entree) {
+    if (entree.isDirectory()) { erreurs.push("SOUS-REPERTOIRE NON ATTENDU " + entree.name); return; }
+    if (/\.(m|c)?js$/i.test(entree.name) && !declarations[entree.name]) erreurs.push("NON DECLARE " + entree.name);
   });
 } catch (erreur) {
   erreurs.push("ECHEC MANIFESTE: " + (erreur && erreur.message || erreur));

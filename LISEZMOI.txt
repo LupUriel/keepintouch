@@ -151,8 +151,8 @@ le résultat constitue un signal d'information et ne remplace pas un suivi jurid
 ## Pour les développeurs
 Lancez les tests avec `node scripts/kit-tests-node.js`.
 Les quatre portes s'exécutent avec `node scripts/run-gates.js` ; ajoutez `--with-smoke` pour inclure le smoke.
-Lancez le smoke avec `node scripts/smoke-navigateur.js` sous Node ≥ 22, avec Chrome ou Edge indiqué par `KIT_BROWSER`.
+Lancez le smoke avec `node scripts/smoke-navigateur.js` sous Node ≥ 22 : Chrome ou Edge est détecté automatiquement (`KIT_BROWSER` ou `--browser` pour en imposer un) ; l'application est ouverte dans un navigateur invisible, les 138 tests y sont exécutés, l'écran de mot de passe puis le tableau de bord (fixture de session, sans mot de passe réel) et le service worker sont vérifiés.
 Servez l'application localement avec `node scripts/serve-app.js 8000`.
-Sur chaque PR, le contrôle GitHub `portes` + `smoke` bloque la fusion tant qu'il n'est pas vert ; le propriétaire peut le contourner.
+Sur chaque PR, GitHub exécute les contrôles `portes` et `smoke` ; une fois la règle de branche activée, la fusion est bloquée tant que `portes` (puis `smoke`) n'est pas vert, le propriétaire gardant un contournement.
 Créez un tag `vX.Y.Z` par version livrée.
 Après la fusion, suivez la recette dans `docs/RECETTE.md`.

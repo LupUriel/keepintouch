@@ -27,7 +27,7 @@ function messageAndExit(message, code) {
 }
 
 function parseOptions(argv) {
-  var options = { url: null, timeout: 90, minOk: 100, browser: null };
+  var options = { url: null, timeout: 90, minOk: null, browser: null };
   var names = { "--url": "url", "--timeout": "timeout", "--min-ok": "minOk", "--browser": "browser" };
   var i;
   var key;
@@ -38,9 +38,9 @@ function parseOptions(argv) {
     i += 1;
   }
   options.timeout = Number(options.timeout);
-  options.minOk = Number(options.minOk);
+  if (options.minOk !== null) options.minOk = Number(options.minOk);
   if (!isFinite(options.timeout) || options.timeout <= 0) throw new Error("--timeout doit être un nombre positif");
-  if (!isFinite(options.minOk) || options.minOk < 0 || Math.floor(options.minOk) !== options.minOk) throw new Error("--min-ok doit être un entier positif ou nul");
+  if (options.minOk !== null && (!isFinite(options.minOk) || options.minOk < 0 || Math.floor(options.minOk) !== options.minOk)) throw new Error("--min-ok doit être un entier positif ou nul");
   if (options.url && !/^http:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?(?:\/|$)/i.test(options.url)) {
     throw new Error("--url doit viser http://127.0.0.1 ou http://localhost");
   }
@@ -132,10 +132,30 @@ function cleanup() {
     }
     await closeServer(localServer);
     if (profile) {
-      try { fs.rmSync(profile, { recursive: true, force: true }); } catch (error6) { /* nettoyage au mieux */ }
+      for (var tentative = 0; tentative < 6; tentative += 1) {
+        try { fs.rmSync(profile, { recursive: true, force: true }); } catch (error6) { /* nettoyage au mieux */ }
+        if (!fs.existsSync(profile)) break;
+        await sleep(300);
+      }
+      if (fs.existsSync(profile)) process.stderr.write("Avertissement : profil temporaire non supprimé : " + profile + "\n");
     }
   }());
   return cleanupPromise;
+}
+
+function countExpectedTests() {
+  try { return (fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8").match(/KIT_TESTS\.add\(/g) || []).length; } catch (error) { return 0; }
+}
+
+async function waitForValue(send, expression, ms) {
+  var deadline = Date.now() + ms;
+  var result;
+  while (Date.now() < deadline) {
+    result = await send("Runtime.evaluate", { expression: expression, returnByValue: true });
+    if (result.result && result.result.result && result.result.result.value) return result.result.result.value;
+    await sleep(250);
+  }
+  return null;
 }
 
 function withTimeout(promise, ms, label) {
@@ -159,8 +179,12 @@ async function run() {
   var browserPending = {};
   var exceptions = [];
   var logErrors = [];
-  var loadResolve;
-  var loadPromise = new Promise(function (resolve) { loadResolve = resolve; });
+  var loadWaiters = [];
+  function nextLoad() { return new Promise(function (resolve) { loadWaiters.push(resolve); }); }
+  var loadPromise = nextLoad();
+  var authEvaluation;
+  var swState;
+  var expectedOk = countExpectedTests();
   var started;
   var evaluation;
   var appResult;
@@ -192,7 +216,7 @@ async function run() {
     debugPort = await freePort();
     profile = fs.mkdtempSync(path.join(os.tmpdir(), "kit-smoke-"));
     args = ["--headless=new", "--disable-gpu", "--disable-background-networking", "--no-first-run", "--no-default-browser-check"];
-    if (process.platform === "linux") args.push("--no-sandbox");
+    if (process.platform === "linux") args.push("--no-sandbox", "--disable-dev-shm-usage");
     args.push("--remote-debugging-port=" + debugPort, "--user-data-dir=" + profile, "about:blank");
     browserProcess = childProcess.spawn(browser, args, { stdio: "ignore" });
     browserProcess.once("error", function (error) {
@@ -242,38 +266,64 @@ async function run() {
         delete pending[msg.id];
         if (msg.error) item.reject(new Error(msg.error.message));
         else item.resolve(msg);
-      } else if (msg.method === "Page.loadEventFired") loadResolve();
-      else if (msg.method === "Runtime.exceptionThrown") exceptions.push(msg.params.exceptionDetails.text || "Exception sans libellé");
+      } else if (msg.method === "Page.loadEventFired") { while (loadWaiters.length) loadWaiters.shift()(); }
+      else if (msg.method === "Runtime.exceptionThrown") exceptions.push((msg.params.exceptionDetails.exception && msg.params.exceptionDetails.exception.description) || msg.params.exceptionDetails.text || "Exception sans libellé");
       else if (msg.method === "Log.entryAdded" && msg.params.entry.level === "error") logErrors.push(msg.params.entry.text || "Erreur sans libellé");
     };
+    socket.onclose = function () {
+      Object.keys(pending).forEach(function (id) { pending[id].reject(new Error("Connexion DevTools fermée (navigateur arrêté ?)")); delete pending[id]; });
+    };
+    /* Chaque commande DevTools est bornée par le délai global : un navigateur figé ou mort ne bloque jamais le smoke (P2 revue). */
     function send(method, params) {
-      return new Promise(function (resolve, reject) {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return Promise.reject(new Error("Connexion DevTools indisponible pour " + method));
+      return withTimeout(new Promise(function (resolve, reject) {
         var id = ++nextId;
         pending[id] = { resolve: resolve, reject: reject };
         socket.send(JSON.stringify({ id: id, method: method, params: params || {} }));
-      });
+      }), options.timeout * 1000, "Délai dépassé sur " + method);
     }
     await send("Page.enable");
     await send("Runtime.enable");
     await send("Log.enable");
-    await send("Page.navigate", { url: appUrl });
+    var navigation = await send("Page.navigate", { url: appUrl });
+    if (navigation.result && navigation.result.errorText) throw new Error("Navigation impossible vers " + appUrl + " : " + navigation.result.errorText);
     await withTimeout(loadPromise, options.timeout * 1000, "Page.loadEventFired non reçu avant le délai");
 
     evaluation = await send("Runtime.evaluate", {
-      expression: "(function () { var logs = [], errors = [], oldLog = console.log, oldError = console.error, failures = -1, timing = performance.getEntriesByType('navigation')[0], html = document.documentElement.outerHTML, match = /var APP_VERSION = [\\\"']([^\\\"']+)[\\\"']/.exec(html); console.log = function () { logs.push(Array.prototype.join.call(arguments, ' ')); }; console.error = function () { errors.push(Array.prototype.join.call(arguments, ' ')); }; try { if (typeof KIT_TESTS !== 'undefined' && KIT_TESTS && typeof KIT_TESTS.run === 'function') failures = KIT_TESTS.run(); } catch (e) { errors.push(String(e && e.stack || e)); failures = -1; } finally { console.log = oldLog; console.error = oldError; } var all = logs.concat(errors); return { version: match ? match[1] : null, password: !!document.querySelector('input[type=password]'), rootHasBoot: !!(document.querySelector('#root') && document.querySelector('#root').innerHTML.indexOf('kit-boot') >= 0), dclMs: timing ? timing.domContentLoadedEventEnd - timing.domContentLoadedEventStart : -1, kitTests: { failures: failures, ok: logs.filter(function (line) { return /^OK /.test(line); }).length, nonOk: all.filter(function (line) { return !/^OK /.test(line); }).slice(0, 5) } }; })()",
+      expression: "(function () { var logs = [], errors = [], oldLog = console.log, oldError = console.error, failures = -1, timing = performance.getEntriesByType('navigation')[0], html = document.documentElement.outerHTML, match = /var APP_VERSION = [\\\"']([^\\\"']+)[\\\"']/.exec(html); console.log = function () { logs.push(Array.prototype.join.call(arguments, ' ')); }; console.error = function () { errors.push(Array.prototype.join.call(arguments, ' ')); }; try { if (typeof KIT_TESTS !== 'undefined' && KIT_TESTS && typeof KIT_TESTS.run === 'function') failures = KIT_TESTS.run(); } catch (e) { errors.push(String(e && e.stack || e)); failures = -1; } finally { console.log = oldLog; console.error = oldError; } var all = logs.concat(errors); return { version: match ? match[1] : null, password: !!document.querySelector('input[type=password]'), rootHasBoot: !!(document.querySelector('#root') && document.querySelector('#root').innerHTML.indexOf('kit-boot') >= 0), rootRendered: !!(document.querySelector('#root') && document.querySelector('#root').children.length > 0), dclMs: timing ? timing.domContentLoadedEventEnd - timing.domContentLoadedEventStart : -1, kitTests: { failures: failures, ok: logs.filter(function (line) { return /^OK /.test(line); }).length, nonOk: all.filter(function (line) { return !/^OK /.test(line); }).slice(0, 5) } }; })()",
       returnByValue: true
     });
     if (!evaluation.result || !evaluation.result.result || evaluation.result.result.subtype === "error") throw new Error("Évaluation du smoke impossible");
     appResult = evaluation.result.result.value;
-    await sleep(2000);
-    swResult = await send("Runtime.evaluate", { expression: "('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistrations().then(function (registrations) { return registrations.length; }) : -1", awaitPromise: true, returnByValue: true });
+    /* Service worker : attendre son activation (au plus 15 s) et compter les enregistrements. */
+    swResult = await send("Runtime.evaluate", { expression: "('serviceWorker' in navigator) ? Promise.race([navigator.serviceWorker.ready.then(function (r) { return r.active ? 'active' : 'inactive'; }), new Promise(function (res) { setTimeout(function () { res('timeout'); }, 15000); })]).then(function (state) { return navigator.serviceWorker.getRegistrations().then(function (registrations) { return { state: state, count: registrations.length }; }); }) : { state: 'unsupported', count: -1 }", awaitPromise: true, returnByValue: true });
+    swState = swResult.result && swResult.result.result && swResult.result.result.value ? swResult.result.result.value : { state: "inconnu", count: -1 };
+    /* Application authentifiée : fixture de stockage (haché factice + drapeau de session, jamais de vrai mot de passe), rechargement, attente du tableau de bord. */
+    await send("Runtime.evaluate", { expression: "localStorage.setItem('kit-crm-pwd', 'smoke-fixture'); sessionStorage.setItem('kit-crm-auth', '1'); true", returnByValue: true });
+    loadPromise = nextLoad();
+    await send("Page.reload", { ignoreCache: true });
+    await withTimeout(loadPromise, options.timeout * 1000, "Page.loadEventFired non reçu après rechargement authentifié");
+    authEvaluation = await waitForValue(send, "(function () { var shell = !!document.querySelector('.kit-shell'); var pwd = !!document.querySelector('input[type=password]'); return (shell || pwd) ? { authenticated: shell && !pwd, dashboardTitle: (document.querySelector('.kit-shell h1, .kit-shell h2') || {}).textContent || null } : null; })()", 20000);
     report = appResult;
-    report.swRegistrations = swResult.result && swResult.result.result ? swResult.result.result.value : -1;
+    report.authenticated = authEvaluation ? authEvaluation.authenticated === true : false;
+    report.dashboardTitle = authEvaluation ? authEvaluation.dashboardTitle : null;
+    report.swState = swState.state;
+    report.swRegistrations = swState.count;
+    report.expectedOk = expectedOk;
+    report.minOk = options.minOk;
     report.browser = versionInfo.Browser || null;
     report.exceptions = exceptions;
     report.logErrors = logErrors;
     report.url = appUrl;
-    failed = report.password !== true || report.kitTests.failures !== 0 || report.kitTests.ok < options.minOk || exceptions.length > 0 || logErrors.some(function (entry) { return entry.indexOf("SyntaxError") >= 0; }) || report.rootHasBoot === true;
+    failed = report.password !== true
+      || report.authenticated !== true
+      || report.kitTests.failures !== 0
+      || (options.minOk === null ? (expectedOk > 0 && report.kitTests.ok !== expectedOk) : report.kitTests.ok < options.minOk)
+      || (report.swState !== "unsupported" && (report.swState !== "active" || report.swRegistrations < 1))
+      || exceptions.length > 0
+      || logErrors.some(function (entry) { return entry.indexOf("SyntaxError") >= 0; })
+      || report.rootHasBoot === true
+      || report.rootRendered !== true;
     process.stdout.write(JSON.stringify(report) + "\n");
     process.stdout.write((failed ? "SMOKE_ECHEC" : "SMOKE_OK") + "\n");
     process.exitCode = failed ? 1 : 0;
@@ -285,6 +335,7 @@ async function run() {
 }
 
 process.on("exit", function () {
+  if (process.exitCode === undefined) process.exitCode = 2; /* jamais de sortie muette en succès */
   try { if (socket) socket.close(); } catch (error) { /* nettoyage au mieux */ }
   try { if (browserSocket) browserSocket.close(); } catch (error2) { /* nettoyage au mieux */ }
   try { if (browserProcess && !browserProcess.killed) browserProcess.kill(); } catch (error3) { /* nettoyage au mieux */ }

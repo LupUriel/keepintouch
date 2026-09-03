@@ -8,7 +8,13 @@ var childProcess = require("child_process");
 var fs = require("fs");
 var path = require("path");
 var racine = path.join(__dirname, "..");
-var avecSmoke = process.argv.slice(2).indexOf("--with-smoke") !== -1;
+var argumentsCli = process.argv.slice(2);
+var inconnus = argumentsCli.filter(function (a) { return a !== "--with-smoke"; });
+if (inconnus.length) {
+  console.error("Argument(s) inconnu(s) : " + inconnus.join(" ") + " (seule l'option --with-smoke est acceptée)");
+  process.exit(2);
+}
+var avecSmoke = argumentsCli.indexOf("--with-smoke") !== -1;
 var debutGlobal = Date.now();
 var portes = [
   { nom: "check-babel.js", arguments: [path.join(racine, "scripts", "check-babel.js")] },
