@@ -6,7 +6,6 @@
 - L'application est servie par GitHub Pages à l'adresse : https://lupuriel.github.io/keepintouch/
 - Toute fusion sur la branche `main` (bouton « Merge pull request » sur GitHub) redéploie
   automatiquement le site en une à deux minutes. Aucune autre manipulation n'est nécessaire.
-- (L'ancien guide décrivait un déploiement Netlify par glisser-déposer : il est obsolète.)
 
 ## Mettre à jour l'application
 
@@ -148,3 +147,12 @@ le résultat constitue un signal d'information et ne remplace pas un suivi jurid
 - Le mot de passe est stocké localement (hashé, non lisible) dans chaque navigateur
 - Mot de passe perdu : effacez les données du site dans les paramètres de Chrome —
   attention, cela efface aussi vos contacts (faites une sauvegarde avant)
+
+## Pour les développeurs
+Lancez les tests avec `node scripts/kit-tests-node.js`.
+Les quatre portes s'exécutent avec `node scripts/run-gates.js` ; ajoutez `--with-smoke` pour inclure le smoke.
+Lancez le smoke avec `node scripts/smoke-navigateur.js` sous Node ≥ 22, avec Chrome ou Edge indiqué par `KIT_BROWSER`.
+Servez l'application localement avec `node scripts/serve-app.js 8000`.
+Sur chaque PR, le contrôle GitHub `portes` + `smoke` bloque la fusion tant qu'il n'est pas vert ; le propriétaire peut le contourner.
+Créez un tag `vX.Y.Z` par version livrée.
+Après la fusion, suivez la recette dans `docs/RECETTE.md`.
