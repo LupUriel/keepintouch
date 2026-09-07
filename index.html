@@ -887,6 +887,13 @@ KIT_TESTS.add("suivi : apporteurs — tri, fiche supprimée, fiche archivée, re
 KIT_TESTS.add("suivi : réciprocité par fiche", function () { var a = { id: "A", interactions: [{ type: "recommandation_donnee", lieId: "X" }] }, x = { id: "X", interactions: [{ type: "dossier", lieId: "A" }, { type: "recommandation_donnee", lieId: "Y" }] }, y = { id: "Y", interactions: [] }, contacts = [a, x, y]; kitAssert(JSON.stringify(KIT_PURE.reciprocite(a, contacts)) === JSON.stringify({ dossiersRecus: 0, dossiersApportes: 1, recoRecuesDeLui: 0, recoDonneesParMoi: 1 })); kitAssert(JSON.stringify(KIT_PURE.reciprocite(x, contacts)) === JSON.stringify({ dossiersRecus: 1, dossiersApportes: 0, recoRecuesDeLui: 0, recoDonneesParMoi: 2 })); kitAssert(KIT_PURE.reciprocite(y, contacts).recoDonneesParMoi === 1); y.interactions.push({ type: "recommandation_recue", lieId: "A" }); kitAssert(KIT_PURE.reciprocite(a, contacts).recoRecuesDeLui === 1); kitAssert(JSON.stringify(KIT_PURE.reciprocite({ id: "N" }, contacts)) === JSON.stringify({ dossiersRecus: 0, dossiersApportes: 0, recoRecuesDeLui: 0, recoDonneesParMoi: 0 })); });
 KIT_TESTS.add("suivi : pluriel", function () { kitAssert(KIT_PURE.pluriel(1, "dossier", "dossiers") === "1 dossier"); kitAssert(KIT_PURE.pluriel(2, "dossier", "dossiers") === "2 dossiers"); kitAssert(KIT_PURE.pluriel(0, "recommandation reçue", "recommandations reçues") === "0 recommandation reçue"); });
 KIT_TESTS.add("suivi : patch d'interaction avec fiche liée", function () { var e = { iid: "i", type: "dossier", lieId: "A", lieLabel: "Jean DUPONT" }, conserve = KIT_PURE.patchInteraction(e, { comment: "x" }), vide = KIT_PURE.patchInteraction(e, { lieId: "", lieLabel: "" }), remplace = KIT_PURE.patchInteraction(e, { lieId: "B", lieLabel: "Marie MARTIN" }); kitAssert(conserve.lieId === "A" && conserve.lieLabel === "Jean DUPONT"); kitAssert(vide.lieId === "" && vide.lieLabel === ""); kitAssert(remplace.lieId === "B" && remplace.lieLabel === "Marie MARTIN"); });
+KIT_TESTS.add("câblage suivi : types dans INTER_TYPES", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var INTER_" + "TYPES = ["), fin = KIT_SOURCE_HTML.indexOf("var RENCONTRE_" + "TYPES", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), autre = tranche.indexOf('value: "' + "autre" + '"'); KIT_PURE.SUIVI_TYPES.forEach(function (v) { var pos = tranche.indexOf('value: "' + v + '"'); kitAssert(pos >= 0 && pos < autre, v); }); kitAssert(tranche.indexOf("suivi" + ":") === -1); });
+KIT_TESTS.add("câblage suivi : logInteraction n'efface pas les relances pour un type de suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function log" + "Interaction("), fin = KIT_SOURCE_HTML.indexOf("function update" + "Interaction(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("var suivi = KIT_PURE." + "estSuivi(type)"), b = tranche.indexOf("if (!suivi && c." + "followUpDate)"), c = tranche.indexOf("if (!suivi && c." + "awaitingUntil"); kitAssert(a >= 0 && a < b && b < c); });
+KIT_TESTS.add("câblage suivi : latestInteraction ignore les types de suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function latest" + "Interaction("), fin = KIT_SOURCE_HTML.indexOf("function is" + "Awaiting(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.derniere" + "InteractionHorsSuivi(") >= 0); });
+KIT_TESTS.add("câblage suivi : modal", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suivi = tranche.indexOf("var suiviModal = KIT_PURE." + "estSuivi(logType)"), attente = tranche.indexOf("En attente d'un " + "retour"); kitAssert(suivi >= 0 && suivi < attente); kitAssert(tranche.indexOf("suiviModal ? false : !!" + "logAwait") >= 0 && tranche.indexOf("suiviModal ? false : !!" + "logRetry") >= 0); kitAssert(tranche.indexOf("SUIVI DU " + "RÉSEAU") >= 0 && tranche.indexOf('maxHeight: "' + '84vh"') >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteur" + "DepuisOrigine(") >= 0 && tranche.indexOf("RECOMMANDÉ " + "À") >= 0); });
+KIT_TESTS.add("câblage suivi : export Dernier contact hors suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), rows = KIT_SOURCE_HTML.indexOf("var rows =", debut), tranche = KIT_SOURCE_HTML.slice(debut, rows + 1500); kitAssert(tranche.indexOf("else if (!KIT_PURE." + "estSuivi(x.type))") >= 0); });
+KIT_TESTS.add("câblage suivi : accroche, graphique mensuel, recherche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), a = KIT_SOURCE_HTML.indexOf("KIT_PURE.accroche" + "For(", app), accroche = KIT_SOURCE_HTML.slice(a, a + 200), m = KIT_SOURCE_HTML.indexOf("var monthly" + "Data", app), mensuel = KIT_SOURCE_HTML.slice(m, m + 600), r = KIT_SOURCE_HTML.indexOf("if (search)", app), recherche = KIT_SOURCE_HTML.slice(r, r + 700); kitAssert(accroche.indexOf(".filter(function (x) { return !KIT_PURE." + "estSuivi(x.type); })") >= 0); kitAssert(mensuel.indexOf("!KIT_PURE." + "estSuivi(x.type)) mCount++") >= 0); kitAssert(recherche.indexOf("x." + "lieLabel") >= 0); });
+KIT_TESTS.add("câblage suivi : fiche — ligne Dossiers et historique via", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE." + "reciprocite(c, contacts)") >= 0); kitAssert(tranche.indexOf("Dossiers" + " : ") >= 0 && tranche.indexOf('"via "') >= 0 && tranche.indexOf("(fiche " + "supprimée)") >= 0); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -1236,6 +1243,9 @@ var INTER_TYPES = [
   { value: "formation_repas", label: "Formation avec repas", icon: "🎓" },
   { value: "formation", label: "Formation sans repas", icon: "🎓" },
   { value: "conference_repas", label: "Conférence avec verre / repas", icon: "🎤" },
+  { value: "dossier", label: "Dossier confié", icon: "📁" },
+  { value: "recommandation_recue", label: "Recommandation reçue", icon: "🤝" },
+  { value: "recommandation_donnee", label: "Recommandation donnée", icon: "➡️" },
   { value: "autre", label: "Autre", icon: "…" },
   { value: "appel", label: "Appel", icon: "✆", legacy: true },
 ];
@@ -1835,11 +1845,7 @@ function statusLabel(s) {
 
 // Interaction la plus récente (par date)
 function latestInteraction(c) {
-  var best = null;
-  (c.interactions || []).forEach(function (x) {
-    if (!best || x.date > best.date) best = x;
-  });
-  return best;
+  return KIT_PURE.derniereInteractionHorsSuivi(c.interactions);
 }
 
 // Le contact est-il en attente d'un retour ? (dernière interaction marquée "en attente")
@@ -2090,6 +2096,9 @@ function App(props) {
   var [logType, setLogType] = useState("appel_echange");
   var [logAwait, setLogAwait] = useState(false);
   var [logRetry, setLogRetry] = useState(false);
+  var [logLieId, setLogLieId] = useState("");
+  var [logLieLabel, setLogLieLabel] = useState("");
+  var [logLieQuery, setLogLieQuery] = useState("");
   var [showLog, setShowLog] = useState(false);
   var [logId, setLogId] = useState(null);
   var [editIid, setEditIid] = useState(null);
@@ -2879,11 +2888,12 @@ function App(props) {
     var newInts = [entry].concat(c.interactions || []);
     newInts.sort(function (a, b) { return b.date.localeCompare(a.date); });
     var patch = Object.assign({ interactions: newInts }, contactUpdates || {});
+    var suivi = KIT_PURE.estSuivi(type);
     // Une rencontre conviviale réinitialise le cycle : on lève tout report en cours
     if (RENCONTRE_TYPES.indexOf(type) >= 0) patch.snoozedUntil = "";
     // Contacter la personne accomplit la relance planifiée éventuelle
-    if (c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
-    if (c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
+    if (!suivi && c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
+    if (!suivi && c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
     updContact(id, patch, rootUpdates);
   }
 
@@ -2930,8 +2940,8 @@ function App(props) {
   function archiveContact(id) { updContact(id, { archived: true }); }
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
-  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setEditIid(null); }
-  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setEditIid(null); }
+  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setShowLog(true); }
   function openEditInteraction(id, entry) {
     var iid = entry.iid;
     /* Entrée sans iid (données créées avant la migration de la session) : rétro-remplir avant d'éditer, sinon la confirmation créerait un doublon */
@@ -2941,7 +2951,7 @@ function App(props) {
       if (!c) return;
       updContact(id, { interactions: (c.interactions || []).map(function (e) { return e === entry ? Object.assign({}, e, { iid: iid }) : e; }) });
     }
-    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setShowLog(true);
+    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setLogLieId(entry.lieId || ""); setLogLieLabel(entry.lieLabel || ""); setLogLieQuery(""); setShowLog(true);
   }
 
   function inviteMobile(c) {
@@ -3041,7 +3051,7 @@ function App(props) {
     var c = contacts.find(function (x) { return x.id === inviteId; });
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!c || !t) return;
-    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType], entreprise: (c.company || "").trim() };
+    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor((c.interactions || []).filter(function (x) { return !KIT_PURE.estSuivi(x.type); }), RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType], entreprise: (c.company || "").trim() };
     setInviteObjet(KIT_PURE.cleanSubject(KIT_PURE.renderTemplate(t.objet || "", vals)));
     setInviteCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
     setInviteStep("preview");
@@ -3212,7 +3222,7 @@ function App(props) {
       var lastRdvInt = null, lastContactInt = null;
       (c.interactions || []).forEach(function (x) {
         if (RENCONTRE_TYPES.indexOf(x.type) >= 0) { if (!lastRdvInt || x.date > lastRdvInt.date) lastRdvInt = x; }
-        else { if (!lastContactInt || x.date > lastContactInt.date) lastContactInt = x; }
+        else if (!KIT_PURE.estSuivi(x.type)) { if (!lastContactInt || x.date > lastContactInt.date) lastContactInt = x; }
       });
       return [
         (c.lastName || c.name || "").toUpperCase(), c.firstName || "", c.inTransition ? "Oui" : "Non",
@@ -3795,7 +3805,7 @@ function App(props) {
       var hay = KIT_PURE.contactHaystack(c);
       var hit = norm(hay).indexOf(q) >= 0;
       if (!hit) hit = KIT_PURE.matchesPhoneDigits(search, [c.phonePro, c.phonePerso, c.phone]);
-      if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
+      if (!hit) hit = (c.interactions || []).some(function (x) { return (x.comment && norm(x.comment).indexOf(q) >= 0) || (x.lieLabel && norm(x.lieLabel).indexOf(q) >= 0); });
       if (!hit) return false;
     }
     return true;
@@ -3922,7 +3932,7 @@ function App(props) {
     var mLabel = md.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
     var mCount = 0;
     activeContacts.forEach(function (c) {
-      (c.interactions || []).forEach(function (x) { if (x.date && x.date.indexOf(mKey) === 0) mCount++; });
+      (c.interactions || []).forEach(function (x) { if (x.date && x.date.indexOf(mKey) === 0 && !KIT_PURE.estSuivi(x.type)) mCount++; });
     });
     monthlyData.push({ key: mKey, label: mLabel, count: mCount });
   }
@@ -4052,38 +4062,60 @@ function App(props) {
     var c = null;
     for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === logId) { c = contacts[i]; break; } }
     if (!c) return null;
+    var suiviModal = KIT_PURE.estSuivi(logType);
+    var lieLibelle = logType === "recommandation_donnee" ? "RECOMMANDÉ À" : "APPORTEUR";
+    function choisirType(t) {
+      setLogType(t.value); setLogRetry(t.value === "appel_message");
+      if (KIT_PURE.estSuivi(t.value)) { setLogAwait(false); setLogRetry(false); }
+      else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); }
+      if (t.value === "dossier" && !editIid && !logLieId) {
+        var pre = KIT_PURE.apporteurDepuisOrigine(c.origin, activeContacts.filter(function (x) { return x.id !== c.id; }).map(function (x) { return { id: x.id, label: displayName(x), libelles: [displayName(x), contactLabel(x), x.name, x.lastName] }; }));
+        if (pre) { setLogLieId(pre.id); setLogLieLabel(pre.label); }
+      }
+    }
+    function boutonType(t) {
+      var active = logType === t.value;
+      return React.createElement("button", { key: t.value, onClick: function () { choisirType(t); }, style: { padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: active ? ac : "#64748B" } }, t.icon + " " + t.label);
+    }
     return (
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={closeLogModal}>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%", position: "relative" }} onClick={function (e) { e.stopPropagation(); }}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%", position: "relative", maxHeight: "84vh", overflowY: "auto" }} onClick={function (e) { e.stopPropagation(); }}>
           <button title="Fermer" onClick={closeLogModal} style={{ position: "absolute", top: 12, right: 12, background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 6, fontFamily: ff }}>{"✕"}</button>
           <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>{editIid ? "Modifier l'interaction" : "Enregistrer un contact"}</h3>
           <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TYPE D'INTERACTION</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-            {INTER_TYPES.filter(function (t) { return !t.legacy; }).map(function (t) {
-              var active = logType === t.value;
-              return React.createElement("button", {
-                key: t.value,
-                onClick: function () { setLogType(t.value); setLogRetry(t.value === "appel_message"); },
-                style: { padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: active ? ac : "#64748B" }
-              }, t.icon + " " + t.label);
-            })}
+            {INTER_TYPES.filter(function (t) { return !t.legacy && !KIT_PURE.estSuivi(t.value); }).map(boutonType)}
           </div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>SUIVI DU RÉSEAU</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{INTER_TYPES.filter(function (t) { return KIT_PURE.estSuivi(t.value); }).map(boutonType)}</div>
+          {suiviModal ? (
+            <div style={{ position: "relative", marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{lieLibelle}</label>
+              {logLieId ? <button onClick={function () { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); }} style={{ background: "#EFE9EE", border: "1px solid #D7CAD4", borderRadius: 999, padding: "6px 10px", color: "#475569", cursor: "pointer", fontFamily: ff }}>{logLieLabel + "  ✕"}</button> : (
+                <React.Fragment>
+                  <input value={logLieQuery} onChange={function (e) { setLogLieQuery(e.target.value); }} placeholder="Nom d'une fiche de votre réseau…" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
+                  {norm(logLieQuery).length >= 1 ? <div style={{ position: "absolute", left: 0, right: 0, top: 58, maxHeight: 210, overflowY: "auto", background: "#fff", border: "1px solid " + bd, borderRadius: 8, zIndex: 2, boxShadow: "0 6px 18px rgba(15,23,42,0.12)" }}>{activeContacts.filter(function (x) { return x.id !== c.id && norm(displayName(x) + " " + (x.company || "")).indexOf(norm(logLieQuery)) >= 0; }).sort(function (a, b) { return sortName(a) < sortName(b) ? -1 : sortName(a) > sortName(b) ? 1 : 0; }).slice(0, 8).map(function (x) { return <div key={x.id} onMouseDown={function () { setLogLieId(x.id); setLogLieLabel(displayName(x)); setLogLieQuery(""); }} style={{ padding: "9px 10px", cursor: "pointer", borderBottom: "1px solid #ECE9E3", fontSize: 13 }}>{displayName(x) + (x.company ? " — " + x.company : "")}</div>; })}</div> : null}
+                </React.Fragment>
+              )}
+              <p style={{ margin: "5px 0 0", fontSize: 12, color: "#64748B" }}>Laissez vide si la personne n'est pas dans votre réseau.</p>
+            </div>
+          ) : null}
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATE</label>
           <input type="date" value={logDate} onChange={function (e) { setLogDate(e.target.value); }} style={{ width: "100%", maxWidth: 200, padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", marginBottom: 14 }} />
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>COMMENTAIRE (OPTIONNEL)</label>
           <textarea value={logCmt} onChange={function (e) { setLogCmt(e.target.value); }} placeholder="Ex: Parlé du dossier X…" rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", resize: "vertical" }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogAwait(!logAwait); }}>
+          {suiviModal ? null : (<React.Fragment><label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogAwait(!logAwait); }}>
             <span style={{ width: 18, height: 18, borderRadius: 4, border: "1.5px solid " + (logAwait ? "#2F7C8C" : bd), background: logAwait ? "#2F7C8C" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>{logAwait ? "✓" : ""}</span>
             {"⏳ En attente d'un retour (relance conseillée après " + String(FOLLOWUP_DAYS) + " jours)"}
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogRetry(!logRetry); }}>
             <span style={{ width: 18, height: 18, borderRadius: 4, border: "1.5px solid " + (logRetry ? "#2F7C8C" : bd), background: logRetry ? "#2F7C8C" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>{logRetry ? "✓" : ""}</span>
             {"🔁 Tentative de nouvel échange (relance conseillée après " + String(FOLLOWUP_RETRY_DAYS) + " jours)"}
-          </label>
+          </label></React.Fragment>)}
           <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
             <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeLogModal}>Annuler</button>
-            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { if (editIid) updateInteraction(logId, editIid, { comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: !!logAwait, retryPending: !!logRetry }); else logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { var awaiting = suiviModal ? false : !!logAwait; var retry = suiviModal ? false : !!logRetry; var lie = suiviModal && logLieId ? { lieId: logLieId, lieLabel: logLieLabel } : { lieId: "", lieLabel: "" }; if (editIid) updateInteraction(logId, editIid, Object.assign({ comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: awaiting, retryPending: retry }, lie)); else logInteraction(logId, logCmt, logDate, logType, awaiting, retry, suiviModal && logLieId ? lie : undefined); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
           </div>
         </div>
       </div>
@@ -4429,6 +4461,12 @@ function App(props) {
     var retrying = retryDays >= 0;
     var retryWarn = retryDays >= FOLLOWUP_RETRY_DAYS;
     var rawOverdue = !!cycC && rdvMonths >= cycC.warn;
+    var rec = KIT_PURE.reciprocite(c, contacts);
+    var segs = [];
+    if (rec.dossiersRecus) segs.push(KIT_PURE.pluriel(rec.dossiersRecus, "confié", "confiés"));
+    if (rec.dossiersApportes) segs.push(KIT_PURE.pluriel(rec.dossiersApportes, "apporté", "apportés"));
+    if (rec.recoDonneesParMoi) segs.push(KIT_PURE.pluriel(rec.recoDonneesParMoi, "recommandation donnée", "recommandations données"));
+    if (rec.recoRecuesDeLui) segs.push(KIT_PURE.pluriel(rec.recoRecuesDeLui, "recommandation reçue", "recommandations reçues"));
 
     return (
       <div>
@@ -4573,6 +4611,7 @@ function App(props) {
           ) : null}
 
           {c.origin ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Origine : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{c.origin}</span></p> : null}
+          {segs.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Dossiers : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{segs.join(" · ")}</span></p> : null}
           {c.notes ? <div style={{ marginTop: 14, padding: 14, background: "#FAF0D4", borderRadius: 8, borderLeft: "3px solid #B5790B" }}><p style={{ margin: 0, fontSize: 11, color: "#8A5E08", fontWeight: 600 }}>NOTES</p><p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{c.notes}</p></div> : null}
         </div>
 
@@ -4596,8 +4635,9 @@ function App(props) {
                 var typeInfo = null;
                 for (var ti = 0; ti < INTER_TYPES.length; ti++) { if (INTER_TYPES[ti].value === x.type) { typeInfo = INTER_TYPES[ti]; break; } }
                 var isRepas = RENCONTRE_TYPES.indexOf(x.type) >= 0;
-                var pillBg = isRepas ? "#FAF0D4" : "#EAF3F5";
-                var pillBorder = isRepas ? "#F1E3B4" : "#C7E0E6";
+                var isSuivi = KIT_PURE.estSuivi(x.type);
+                var pillBg = isSuivi ? "#EFE9EE" : isRepas ? "#FAF0D4" : "#EAF3F5";
+                var pillBorder = isSuivi ? "#D7CAD4" : isRepas ? "#F1E3B4" : "#C7E0E6";
                 return (
                   <div key={idx} style={{ display: "flex", gap: 14, padding: "8px 0", position: "relative" }}>
                     <div style={{ width: 32, height: 32, borderRadius: "50%", background: pillBg, border: "2px solid " + pillBorder, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, zIndex: 1 }}>{typeInfo ? typeInfo.icon : "•"}</div>
@@ -4608,6 +4648,7 @@ function App(props) {
                         {x.awaitingResponse ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"⏳ en attente"}</span> : null}
                         {x.retryPending ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"🔁 nouvel échange"}</span> : null}
                       </p>
+                      {(x.lieId || x.lieLabel) ? <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748B" }}>{(x.type === "recommandation_donnee" ? "→ " : "via ") + (x.lieLabel || "") + (contacts.some(function (k) { return k.id === x.lieId; }) ? "" : " (fiche supprimée)")}</p> : null}
                       {x.comment ? <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#475569" }}>{x.comment}</p> : null}
                     </div>
                     <div style={{ display: "flex", alignItems: "flex-start", flexShrink: 0 }}>
