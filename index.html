@@ -567,21 +567,27 @@ var KIT_PURE = (function () {
     var copieCourant = JSON.parse(JSON.stringify(courant)), copieInst = JSON.parse(JSON.stringify(instantane)), data = copieCourant, contactsCourant = copieCourant.contacts || [];
     var mapCourant = {}, mapInst = {}, tombesInter = {}, tombesContacts = {}, revenus = {};
     var rapport = { champsRetablis: 0, contactsRevenus: [], contactsConserves: 0, interactionsRevenues: 0, interactionsRetirees: 0, categoriesAjoutees: 0, contactsRestaures: 0 };
-    contactsCourant.forEach(function (c) { mapCourant[c.id] = c; });
-    (copieInst.contacts || []).forEach(function (c) { mapInst[c.id] = c; });
+    contactsCourant.forEach(function (c) { if (c.id) mapCourant[c.id] = c; });
+    (copieInst.contacts || []).forEach(function (c) { if (c.id) mapInst[c.id] = c; });
     (copieCourant.deletedInteractions || []).forEach(function (t) { tombesInter[t.cid + "|" + t.iid] = true; });
     (copieCourant.deletedContacts || []).forEach(function (t) { tombesContacts[t.id] = t; });
     data.contacts = [];
     (copieInst.contacts || []).forEach(function (inst) {
+      if (!inst.id) { data.contacts.push(JSON.parse(JSON.stringify(inst))); rapport.contactsRestaures += 1; return; }
       var cour = mapCourant[inst.id], contact = JSON.parse(JSON.stringify(inst));
       if (cour) {
         var modifie = false, iidsInst = {};
         contact.fieldsUpdatedAt = {};
         Object.keys(inst.fieldsUpdatedAt || {}).forEach(function (f) { contact.fieldsUpdatedAt[f] = inst.fieldsUpdatedAt[f]; });
         (champsFusion || []).forEach(function (f) { var vi = inst[f] === undefined ? null : inst[f], vc = cour[f] === undefined ? null : cour[f]; if (JSON.stringify(vi) !== JSON.stringify(vc)) { contact.fieldsUpdatedAt[f] = nowISO; modifie = true; rapport.champsRetablis += 1; } });
-        contact.updatedAt = modifie ? nowISO : inst.updatedAt;
+        contact.updatedAt = modifie ? nowISO : ((inst.updatedAt || "") > (cour.updatedAt || "") ? inst.updatedAt : cour.updatedAt);
         (inst.interactions || []).forEach(function (interaction) { iidsInst[interaction.iid] = true; });
-        (cour.interactions || []).forEach(function (interaction) { if (!iidsInst[interaction.iid]) rapport.interactionsRetirees += 1; });
+        (cour.interactions || []).forEach(function (interaction) {
+          if (iidsInst[interaction.iid]) return;
+          rapport.interactionsRetirees += 1;
+          var cle = inst.id + "|" + interaction.iid;
+          if (!tombesInter[cle]) { copieCourant.deletedInteractions.push({ cid: inst.id, iid: interaction.iid, deletedAt: nowISO }); tombesInter[cle] = true; }
+        });
       } else {
         revenus[inst.id] = true;
         var suppression = tombesContacts[inst.id] && tombesContacts[inst.id].deletedAt;
@@ -591,7 +597,7 @@ var KIT_PURE = (function () {
       contact.interactions = (contact.interactions || []).map(function (interaction) { if (!tombesInter[inst.id + "|" + interaction.iid]) return interaction; interaction.iid = interaction.iid + "~r" + String(nowISO).replace(/\D/g, ""); rapport.interactionsRevenues += 1; return interaction; });
       data.contacts.push(contact);
     });
-    contactsCourant.forEach(function (c) { if (mapInst[c.id]) return; data.contacts.push(JSON.parse(JSON.stringify(c))); rapport.contactsConserves += 1; });
+    contactsCourant.forEach(function (c) { if (c.id && mapInst[c.id]) return; data.contacts.push(JSON.parse(JSON.stringify(c))); rapport.contactsConserves += 1; });
     rapport.contactsRestaures = (copieInst.contacts || []).length;
     data.deletedContacts = (copieCourant.deletedContacts || []).filter(function (t) { return !revenus[t.id]; });
     data.deletedInteractions = JSON.parse(JSON.stringify(copieCourant.deletedInteractions || []));
@@ -685,13 +691,12 @@ KIT_TESTS.add("récupération : candidats lisibles et illisibles", function () {
 KIT_TESTS.add("récupération : choix par défaut", function () { kitAssert(KIT_PURE.choisirRecuperation([]).choix === null); kitAssert(KIT_PURE.choisirRecuperation([null, { nbContacts: 0 }]).choix === null); var ancien = { source: "instantane", derniereModification: "2026-09-01T00:00:00.000Z", nbContacts: 9 }; var recent = { source: "miroir", derniereModification: "2026-09-02T00:00:00.000Z", nbContacts: 1 }; var entree = [ancien, recent]; var avant = JSON.stringify(entree); var r = KIT_PURE.choisirRecuperation(entree); kitAssert(r.choix === recent && r.liste[0] === recent); kitAssert(JSON.stringify(entree) === avant); var petit = { derniereModification: "2026-09-03T00:00:00.000Z", nbContacts: 1 }; var grand = { derniereModification: "2026-09-03T00:00:00.000Z", nbContacts: 2 }; kitAssert(KIT_PURE.choisirRecuperation([petit, grand]).choix === grand); });
 KIT_TESTS.add("retour : champ rétabli daté, champ identique inchangé", function () { var now = "2026-09-03T11:00:00.000Z"; var courant = { contacts: [{ id: "A", notes: "", company: "X", updatedAt: "2026-09-03T10:00:00.000Z", fieldsUpdatedAt: { notes: "2026-09-03T10:00:00.000Z", company: "2026-09-01T00:00:00.000Z" }, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ id: "A", notes: "Vieille note", company: "X", updatedAt: "2026-09-01T00:00:00.000Z", fieldsUpdatedAt: { notes: "2026-09-01T00:00:00.000Z", company: "2026-09-01T00:00:00.000Z" }, interactions: [] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, now, ["notes", "company"]); kitAssert(r.data.contacts[0].notes === "Vieille note"); kitAssert(r.data.contacts[0].fieldsUpdatedAt.notes === now && r.data.contacts[0].fieldsUpdatedAt.company === "2026-09-01T00:00:00.000Z"); kitAssert(r.data.contacts[0].updatedAt === now && r.rapport.champsRetablis === 1); });
 KIT_TESTS.add("retour : contact supprimé revenu, tombe retirée, horloge en avance", function () { var courant = { contacts: [], deletedContacts: [{ id: "B", label: "ancien", deletedAt: "2026-09-03T12:00:00.000Z" }], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ id: "B", lastName: "Nom", firstName: "Prénom", interactions: [] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", []); kitAssert(r.data.contacts[0].updatedAt === "2026-09-03T12:00:00.000Z"); kitAssert(r.data.deletedContacts.length === 0); kitAssert(r.rapport.contactsRevenus[0].label === "Nom Prénom"); });
-KIT_TESTS.add("retour : fiche créée depuis conservée", function () { var courant = { contacts: [{ id: "C" }, { id: "D" }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [], deletedContacts: [{ id: "D", deletedAt: "2026-09-01T00:00:00.000Z" }] }; var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", []); kitAssert(r.data.contacts.length === 2 && r.data.contacts[0].id === "C" && r.data.contacts[1].id === "D"); kitAssert(r.rapport.contactsConserves === 2); });
+KIT_TESTS.add("retour : fiches présentes aujourd'hui mais absentes de l'instantané conservées (y compris ressuscitées après l'instantané)", function () { var courant = { contacts: [{ id: "C" }, { id: "D" }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [], deletedContacts: [{ id: "D", deletedAt: "2026-09-01T00:00:00.000Z" }] }; var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", []); kitAssert(r.data.contacts.length === 2 && r.data.contacts[0].id === "C" && r.data.contacts[1].id === "D"); kitAssert(r.rapport.contactsConserves === 2); });
 KIT_TESTS.add("retour : interaction supprimée revenue sous nouvel iid, tombe conservée, interactions saisies depuis comptées", function () { var now = "2026-09-03T11:00:00.000Z"; var courant = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "N" }] }], deletedContacts: [], deletedInteractions: [{ cid: "A", iid: "X", deletedAt: "2026-09-02T00:00:00.000Z" }], categories: [] }; var inst = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "X" }, { iid: "Y" }] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, now, []); kitAssert(r.data.contacts[0].interactions[0].iid === "X~r20260903110000000" && r.data.contacts[0].interactions[1].iid === "Y"); kitAssert(r.rapport.interactionsRevenues === 1 && r.rapport.interactionsRetirees === 1); kitAssert(r.data.deletedInteractions[0].cid === "A" && r.data.deletedInteractions[0].iid === "X"); });
-KIT_TESTS.add("retour : réglages, modèles, catégories, non-mutation", function () { var courant = { contacts: [{ id: "A", category: "Client", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: ["Client"], settings: { x: 1 }, templates: ["T"], pendingInvites: ["P"], savedAt: "2026-09-03T10:00:00.000Z" }; var inst = { contacts: [{ id: "A", category: "Confrère", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [] }; var avantCourant = JSON.stringify(courant), avantInst = JSON.stringify(inst); var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", ["category"]); kitAssert(JSON.stringify(r.data.settings) === JSON.stringify(courant.settings) && JSON.stringify(r.data.templates) === JSON.stringify(courant.templates) && JSON.stringify(r.data.pendingInvites) === JSON.stringify(courant.pendingInvites) && r.data.savedAt === courant.savedAt); kitAssert(JSON.stringify(r.data.categories) === JSON.stringify(["Client", "Confrère"]) && r.rapport.categoriesAjoutees === 1); kitAssert(JSON.stringify(courant) === avantCourant && JSON.stringify(inst) === avantInst); });
-KIT_TESTS.add("retour : aller-retour avec la fusion (miroir de test)", function () { /* miroir de test des règles de mergeData ; à mettre à jour si mergeData change */ function kitFusionMini(local, importe, champs) { var tombes = {}; (local.deletedInteractions || []).concat(importe.deletedInteractions || []).forEach(function (t) { tombes[t.cid + "|" + t.iid] = true; }); var lm = {}, im = {}, out = JSON.parse(JSON.stringify(local)); (local.contacts || []).forEach(function (c) { lm[c.id] = c; }); (importe.contacts || []).forEach(function (c) { im[c.id] = c; }); out.deletedInteractions = (local.deletedInteractions || []).concat((importe.deletedInteractions || []).filter(function (t) { return !(local.deletedInteractions || []).some(function (x) { return x.cid === t.cid && x.iid === t.iid; }); })); out.contacts = []; (local.contacts || []).concat((importe.contacts || []).filter(function (c) { return !lm[c.id]; })).forEach(function (base) { var lc = lm[base.id], ic = im[base.id]; if (!lc || !ic) { out.contacts.push(JSON.parse(JSON.stringify(lc || ic))); return; } var merged = JSON.parse(JSON.stringify(lc)); merged.fieldsUpdatedAt = merged.fieldsUpdatedAt || {}; champs.forEach(function (f) { var lt = (lc.fieldsUpdatedAt || {})[f] || "", it = (ic.fieldsUpdatedAt || {})[f] || ""; if (it >= lt) { merged[f] = ic[f]; merged.fieldsUpdatedAt[f] = it; } }); var seen = {}; merged.interactions = []; (lc.interactions || []).concat(ic.interactions || []).forEach(function (x) { if (!x || seen[x.iid] || tombes[base.id + "|" + x.iid]) return; seen[x.iid] = true; merged.interactions.push(JSON.parse(JSON.stringify(x))); }); out.contacts.push(merged); }); return out; } var now = "2026-09-03T11:00:00.000Z"; var courantChamp = { contacts: [{ id: "A", notes: "", fieldsUpdatedAt: { notes: "2026-09-03T10:00:00.000Z" }, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var instChamp = { contacts: [{ id: "A", notes: "Vieille note", fieldsUpdatedAt: { notes: "2026-09-01T00:00:00.000Z" }, interactions: [] }], deletedContacts: [] }; var retourChamp = KIT_PURE.revenirAVersion(courantChamp, instChamp, now, ["notes"]).data; var exportAvecErreur = JSON.parse(JSON.stringify(courantChamp)); kitAssert(kitFusionMini(retourChamp, exportAvecErreur, ["notes"]).contacts[0].notes === "Vieille note"); kitAssert(kitFusionMini(exportAvecErreur, retourChamp, ["notes"]).contacts[0].notes === "Vieille note"); var courantInter = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [{ cid: "A", iid: "X" }], categories: [] }; var instInter = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "X" }] }], deletedContacts: [] }; var retourInter = KIT_PURE.revenirAVersion(courantInter, instInter, now, []).data; var exportOuXVit = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "X" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; [kitFusionMini(retourInter, exportOuXVit, []), kitFusionMini(exportOuXVit, retourInter, [])].forEach(function (fusion) { kitAssert(fusion.contacts[0].interactions.length === 1 && fusion.contacts[0].interactions[0].iid === "X~r20260903110000000"); }); });
+KIT_TESTS.add("retour : réglages, modèles, catégories, non-mutation", function () { var courant = { contacts: [{ id: "A", category: "Client", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: ["Client"], settings: { x: 1 }, templates: ["T"], pendingInvites: ["P"], savedAt: "2026-09-03T10:00:00.000Z" }; var inst = { contacts: [{ id: "A", category: "Confrère", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], settings: { x: 2 }, templates: ["Autre"], pendingInvites: ["Autre"] }; var avantCourant = JSON.stringify(courant), avantInst = JSON.stringify(inst); var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", ["category"]); kitAssert(JSON.stringify(r.data.settings) === JSON.stringify(courant.settings) && JSON.stringify(r.data.templates) === JSON.stringify(courant.templates) && JSON.stringify(r.data.pendingInvites) === JSON.stringify(courant.pendingInvites) && r.data.savedAt === courant.savedAt); kitAssert(JSON.stringify(r.data.categories) === JSON.stringify(["Client", "Confrère"]) && r.rapport.categoriesAjoutees === 1); kitAssert(JSON.stringify(courant) === avantCourant && JSON.stringify(inst) === avantInst); });
 KIT_TESTS.add("catégories après import : union ordonnée sans doublon", function () { var r = KIT_PURE.categoriesApresImport(["Client", "Prospect"], ["Confrère", "Confrère", "Client", "", "  Partenaire  ", null]); kitAssert(JSON.stringify(r) === JSON.stringify(["Client", "Prospect", "Confrère", "Partenaire"])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(["A"], [])) === JSON.stringify(["A"])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport([], ["B"])) === JSON.stringify(["B"])); var src = ["X"]; KIT_PURE.categoriesApresImport(src, ["Y"]); kitAssert(src.length === 1, "la liste d'entrée ne doit pas être mutée"); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(["Client"], ["client", "CLIENT"])) === JSON.stringify(["Client", "client", "CLIENT"]), "comparaison sensible à la casse, comme le reste de l'application"); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(null, null)) === JSON.stringify([])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(undefined, ["A"])) === JSON.stringify(["A"])); });
 KIT_TESTS.add("câblage import : catégories dérivées des fiches réellement enregistrées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var iImp = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("); var iFin = KIT_SOURCE_HTML.indexOf("setShowImp(false)", iImp); var corps = KIT_SOURCE_HTML.slice(iImp, iFin); kitAssert(iImp > 0 && iFin > iImp); kitAssert(/var retenues = dupes\.length > 0 \? uniques : nc;/.test(corps), "retenues = fiches effectivement enregistrées selon la branche"); kitAssert(/KIT_PURE\.categoriesApresImport\(categories, retenues\.map\(function \(c\) \{ return c\.category; \}\)\)/.test(corps), "catégories dérivées des fiches retenues, jamais des lignes rejetées"); kitAssert(corps.indexOf("var retenues =") > corps.lastIndexOf("uniques.push(newC)"), "retenues calculées après le dédoublonnage"); kitAssert(corps.indexOf("categoriesRencontrees") === -1, "plus d'accumulation parallèle"); kitAssert(corps.indexOf("addCategory(") === -1, "plus d'appel addCategory dans l'import"); kitAssert((corps.match(/categories: categoriesFinales/g) || []).length === 2, "les deux branches d'enregistrement utilisent categoriesFinales"); });
-KIT_TESTS.add("câblage save : instantané de début de journée, quota isolé, jauge", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("var save = useCallback" + "(function (partial, opts)"); var d1 = KIT_SOURCE_HTML.indexOf("}, [data]);", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert((corps.match(/saveDailySnapshot\(precedent \|\| serialized\)/g) || []).length === 2); kitAssert(corps.indexOf("saveDailySnapshot(serialized)") === -1); var s1 = corps.indexOf("localStorage.setItem(STORAGE_KEY, serialized)"); var s2 = corps.lastIndexOf("localStorage.setItem(STORAGE_KEY, serialized)"); kitAssert(s1 > 0 && s2 > s1); kitAssert(corps.lastIndexOf("var precedent", s1) >= 0 && corps.lastIndexOf("var precedent", s2) > s1); kitAssert(/KIT_PURE\.estQuotaDepasse\(/.test(corps)); kitAssert((corps.match(/KIT_STORAGE_STATUS\.notify\(serialized\.length\)/g) || []).length === 2); kitAssert((corps.match(/nd\.savedAt = nowTS\(\)/g) || []).length === 2); var c1 = corps.indexOf("} catch (eQ)"); kitAssert(c1 > 0 && corps.indexOf("KIT_TRACKED_FILE.queue(serialized)", c1) > c1, "le fichier suivi est alimenté même si setItem échoue"); });
+KIT_TESTS.add("câblage save : instantané de début de journée, quota isolé, jauge", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var KIT_APP = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var d0 = KIT_APP.indexOf("var save = useCallback" + "(function (partial, opts)"); var d1 = KIT_APP.indexOf("}, [data]);", d0); var corps = KIT_APP.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert((corps.match(/saveDailySnapshot\(precedent \|\| JSON\.stringify\(/g) || []).length === 2); kitAssert(corps.indexOf("saveDailySnapshot(serialized)") === -1); kitAssert((corps.match(/KIT_TRACKED_FILE\.queue\(serialized\)/g) || []).length === 2); var normal = corps.slice(corps.indexOf("setData(function (prev)"), corps.indexOf("return nd;", corps.indexOf("setData(function (prev)"))); var q = normal.indexOf("} catch (eQ)"); kitAssert(q > 0 && q < normal.indexOf("saveDailySnapshot(") && normal.indexOf("saveDailySnapshot(") < normal.indexOf("KIT_TRACKED_FILE.queue(serialized)") && normal.indexOf("KIT_TRACKED_FILE.queue(serialized)") < normal.indexOf('idbSet("data", nd)')); var verify = corps.slice(0, corps.indexOf("setData(function (prev)")); kitAssert(verify.indexOf('notify(false, quota ? "quota" : "")') >= 0 && verify.indexOf("parsedBack") >= 0); kitAssert((corps.match(/KIT_STORAGE_STATUS\.notify\(serialized\.length\)/g) || []).length === 2); });
 KIT_TESTS.add("câblage saveDailySnapshot : une écriture par jour", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("function saveDaily" + "Snapshot("); var d1 = KIT_SOURCE_HTML.indexOf("var KIT_TRACKED_FILE", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(/snapshotJourEnCours === today/.test(corps)); kitAssert(/snapshotJourEnCours = today/.test(corps)); kitAssert(KIT_SOURCE_HTML.lastIndexOf("var snapshotJourEnCours = null;", d0) >= 0); });
 KIT_TESTS.add("câblage KIT_SAVE_STATUS : raison publiée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("var KIT_SAVE_" + "STATUS"); var d1 = KIT_SOURCE_HTML.indexOf("var KIT_STORAGE_" + "STATUS", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(/function notify\(nextOk, raison\)/.test(corps)); kitAssert(/KIT_SAVE_STATUS\.subscribe\(function \(ok, raison\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("câblage Remplacer tout : sauvegarde avant écrasement, vouvoiement", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("function handleRestore" + "JSON("); var d1 = KIT_SOURCE_HTML.indexOf("reader.readAsText(file)", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(corps.indexOf("downloadJSON(") >= 0 && corps.indexOf("downloadJSON(") < corps.indexOf("save(restorePartial)")); kitAssert(corps.indexOf("kit-sauvegarde-avant-remplacement-") >= 0); kitAssert(corps.indexOf("utilise plutôt") === -1); });
@@ -791,6 +796,12 @@ KIT_TESTS.add("hôte Graph en majuscules accepté (casse d'hôte HTTP)", functio
 KIT_TESTS.add("décision de pagination Graph aux frontières", function () { var lien = "https://graph.microsoft.com/v1.0/next"; kitAssert(KIT_PURE.graphNextStep(10, null) === "fin"); kitAssert(KIT_PURE.graphNextStep(50, null) === "fin"); kitAssert(KIT_PURE.graphNextStep(49, lien) === "continuer"); kitAssert(KIT_PURE.graphNextStep(50, lien) === "plafond"); kitAssert(KIT_PURE.graphNextStep(51, lien) === "plafond"); kitAssert(KIT_PURE.graphNextStep(10, "https://evil.com/x") === "lien-invalide"); kitAssert(KIT_PURE.graphNextStep(10, "https://GRAPH.MICROSOFT.COM/v1.0/next") === "continuer"); });
 KIT_TESTS.add("CSP du document réel autorise Microsoft (connexion + agenda + iframe de renouvellement)", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || (KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://graph.microsoft.com") && KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://login.microsoftonline.com") && KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://bodacc-datadila.opendatasoft.com") && KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "frame-src", "https://login.microsoftonline.com")), "la CSP du document prive Microsoft ou le BODACC — connexion/agenda/contrôle casseraient"); });
 KIT_TESTS.add("cspDirectiveAllows : directives et refus", function () { var csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://a.example; frame-src 'self' https://b.example\">"; kitAssert(KIT_PURE.cspDirectiveAllows(csp, "connect-src", "https://a.example")); kitAssert(!KIT_PURE.cspDirectiveAllows(csp, "connect-src", "https://b.example")); kitAssert(KIT_PURE.cspDirectiveAllows(csp, "frame-src", "https://b.example")); kitAssert(!KIT_PURE.cspDirectiveAllows(csp, "worker-src", "https://a.example")); kitAssert(KIT_PURE.cspDirectiveAllows("<html></html>", "connect-src", "https://a.example")); });
+KIT_TESTS.add("retour : interactions retirées créent des tombes", function () { var now = "2026-09-03T11:00:00.000Z"; var courant = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "N" }, { iid: "D" }] }], deletedContacts: [], deletedInteractions: [{ cid: "A", iid: "D", deletedAt: "2026-09-01T00:00:00.000Z" }], categories: [] }; var inst = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, now, []); kitAssert(r.rapport.interactionsRetirees === 2 && r.data.deletedInteractions.length === 2); kitAssert(r.data.deletedInteractions.some(function (t) { return t.cid === "A" && t.iid === "N" && t.deletedAt === now; })); });
+KIT_TESTS.add("retour : contacts sans id préservés séparément", function () { var courant = { contacts: [{ name: "Courant" }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ name: "Instantané" }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", []); kitAssert(r.data.contacts.length === 2 && r.data.contacts[0].name === "Instantané" && r.data.contacts[1].name === "Courant"); kitAssert(r.rapport.contactsRestaures === 1 && r.rapport.contactsConserves === 1); });
+KIT_TESTS.add("retour : contact commun non modifié garde updatedAt maximal", function () { var courant = { contacts: [{ id: "A", updatedAt: "2026-09-02T00:00:00.000Z", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ id: "A", updatedAt: "2026-09-01T00:00:00.000Z", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", []); kitAssert(r.data.contacts[0].updatedAt === "2026-09-02T00:00:00.000Z"); });
+KIT_TESTS.add("retour : aller-retour avec la fusion", function () { if (typeof mergeData === "undefined") return; var now = "2026-09-03T11:00:00.000Z"; var courant = { contacts: [{ id: "A", notes: "", updatedAt: now, fieldsUpdatedAt: { notes: "2026-09-03T10:00:00.000Z" }, interactions: [{ iid: "N", date: "2026-09-03" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ id: "A", notes: "Vieille note", updatedAt: "2026-09-01T00:00:00.000Z", fieldsUpdatedAt: { notes: "2026-09-01T00:00:00.000Z" }, interactions: [] }], deletedContacts: [] }; var retour = KIT_PURE.revenirAVersion(courant, inst, now, ["notes"]).data; [mergeData(retour, courant), mergeData(courant, retour)].forEach(function (fusion) { kitAssert(fusion.contacts[0].notes === "Vieille note" && fusion.contacts[0].interactions.length === 0); }); });
+KIT_TESTS.add("documentation : conduite à tenir cohérente", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("archi" + "vez") === -1); kitAssert(KIT_SOURCE_DOCS.indexOf("archiver ne libère pas d'espace") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Revenir à cette version") >= 0 && KIT_SOURCE_DOCS.indexOf("Restaurer cette copie") >= 0 && KIT_SOURCE_DOCS.indexOf('category: "Client"') >= 0); });
+KIT_TESTS.add("câblage récupération renforcé", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var KIT_APP = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var iApp = KIT_APP.indexOf("function App(props)"); var corpsApp = KIT_APP.slice(iApp, iApp + 400000); var r = corpsApp.indexOf("if (recu" + "peration) return"); var l = corpsApp.indexOf("if (loa" + "ding || !data)"); kitAssert(iApp > 0 && r > 0 && l > 0 && r < l); var d0 = corpsApp.indexOf("async function " + "load()"); var d1 = corpsApp.indexOf("load();", d0); var load = corpsApp.slice(d0, d1); kitAssert(load.indexOf("miroirPlusRecent") >= 0 && load.indexOf("!miroirPlusRecent") < load.indexOf('idbSet("data", mig.d)')); kitAssert(load.indexOf("Promise.all(") >= 0 && load.indexOf("Array.isArray(parsed.contacts)") >= 0 && load.indexOf('mode: "c"') >= 0); var continuer = KIT_APP.slice(KIT_APP.indexOf("function continuerSansRestaurer("), KIT_APP.indexOf("function repartirAVide(")); kitAssert(continuer.indexOf("mettreEnQuarantaine(") < continuer.indexOf("setRecuperation(null)")); var restaurer = KIT_APP.slice(KIT_APP.indexOf("function restaurerCopie("), KIT_APP.indexOf("function continuerSansRestaurer(")); kitAssert(restaurer.indexOf("localStorage.removeItem(STORAGE_KEY)") < restaurer.indexOf("save(")); var repartir = corpsApp.slice(corpsApp.indexOf("async function repartirAVide("), r); kitAssert(repartir.indexOf("await exporterCopie(") < repartir.indexOf("await mettreEnQuarantaine(") && repartir.indexOf("await mettreEnQuarantaine(") < repartir.indexOf("save(vide)")); kitAssert(repartir.indexOf("Export annulé") >= 0); var agenda = KIT_APP.slice(KIT_APP.indexOf("KIT_AGENDA.setRestoreHandler(function"), KIT_APP.indexOf("KIT_AGENDA.setCheckpointProvider", KIT_APP.indexOf("KIT_AGENDA.setRestoreHandler(function"))); kitAssert(agenda.indexOf("idbSet(") === -1); var ecran = KIT_APP.slice(KIT_APP.indexOf("function EcranRecuperation("), KIT_APP.indexOf("function App(props)")); kitAssert(ecran.indexOf("key={cand.cle || cand.source}") >= 0 && ecran.indexOf("cand.key") === -1 && ecran.indexOf("props.onRestaurer(") >= 0 && ecran.indexOf("props.onRepartirAVide") >= 0); });
 KIT_TESTS.add("restauration branche la normalisation du brouillon", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.normalizeCandidateResult\(payload\.candidateResult\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("brouillon en chargement normalisé en erreur", function () { var result = KIT_PURE.normalizeCandidateResult({ etat: "chargement", candidates: ["2026-08-03"] }); kitAssert(JSON.stringify(result) === JSON.stringify({ etat: "erreur", candidates: [] })); });
 KIT_TESTS.add("brouillons terminés conservés", function () { ["ok", "erreur", "non-connecte"].forEach(function (etat) { var result = { etat: etat, candidates: ["2026-08-03"] }; kitAssert(KIT_PURE.normalizeCandidateResult(result) === result); }); });
@@ -1402,6 +1413,7 @@ function localDateISO(date) {
 }
 var snapshotJourEnCours = null;
 function saveDailySnapshot(serialized) {
+  try { JSON.parse(serialized); } catch (e) { return Promise.resolve(); }
   var today = localDateISO(new Date());
   if (snapshotJourEnCours === today) return Promise.resolve();
   snapshotJourEnCours = today;
@@ -1909,7 +1921,7 @@ function EcranRecuperation(props) {
   var rec = props.recuperation;
   function carte(cand, principale) {
     var dateModification = String(cand.derniereModification || "").slice(0, 10);
-    return <div key={cand.key || cand.source} style={{ background: "#fff", border: "1px solid #9FCAD3", borderRadius: 10, padding: 14, marginTop: 10 }}>
+    return <div key={cand.cle || cand.source} style={{ background: "#fff", border: "1px solid #9FCAD3", borderRadius: 10, padding: 14, marginTop: 10 }}>
       <p style={{ margin: "0 0 5px", fontWeight: 700, color: "#235C68" }}>{cand.source === "miroir" ? "Copie de sécurité" : "Version du " + fmtDate(cand.date)}</p>
       <p style={{ margin: "0 0 4px", fontSize: 13 }}>Dernière modification : {fmtDate(dateModification)}</p>
       <p style={{ margin: "0 0 10px", fontSize: 13 }}>{String(cand.nbContacts) + " fiche(s)"}</p>
@@ -1920,12 +1932,13 @@ function EcranRecuperation(props) {
     </div>;
   }
   return <div style={{ minHeight: "100vh", background: "#F6F7F9", padding: "24px 16px", boxSizing: "border-box", fontFamily: "system-ui", color: "#1E293B" }}><div style={{ maxWidth: 620, margin: "40px auto", background: "#EAF3F5", border: "1px solid #9FCAD3", borderRadius: 14, padding: 20 }}>
-    <h1 style={{ margin: "0 0 12px", fontSize: 22, color: "#235C68" }}>{rec.mode === "a" ? "Vos données locales sont absentes ou illisibles" : "Vos dernières modifications n'avaient pas pu être enregistrées (espace de stockage plein) : une copie de sécurité plus récente a été conservée."}</h1>
-    <p style={{ fontSize: 14 }}>Vos exports et votre fichier suivi ne sont pas touchés tant que vous n'avez pas choisi.</p>
-    {carte(rec.choix, true)}
+    <h1 style={{ margin: "0 0 12px", fontSize: 22, color: "#235C68" }}>{rec.mode === "a" ? "Vos données locales sont absentes ou illisibles" : (rec.mode === "b" ? "Une copie de sécurité plus récente que vos données locales a été trouvée (par exemple après un espace de stockage plein ou une écriture interrompue)." : "Vos données locales sont absentes ou illisibles et les copies de sécurité ne répondent pas")}</h1>
+    <p style={{ fontSize: 14 }}>{rec.mode === "c" ? "IndexedDB ne répond pas sur cet appareil. Fermez les autres onglets de l'application puis réessayez. Vos exports et votre fichier suivi ne sont pas touchés." : "Vos exports et votre fichier suivi ne sont pas touchés tant que vous n'avez pas choisi."}</p>
+    {rec.choix ? carte(rec.choix, true) : null}
     {rec.liste.length > 1 ? <button onClick={function () { setVoirAutres(!voirAutres); }} style={{ marginTop: 12, border: "none", background: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer" }}>Voir les autres copies</button> : null}
     {voirAutres ? rec.liste.filter(function (cand) { return cand !== rec.choix; }).map(function (cand) { return carte(cand, false); }) : null}
     {rec.mode === "b" ? <button onClick={props.onContinuer} style={{ display: "block", marginTop: 16, background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: "pointer" }}>Continuer sans restaurer</button> : null}
+    {rec.mode === "c" ? <button onClick={function () { window.location.reload(); }} style={{ display: "block", marginTop: 16, background: "#235C68", color: "#fff", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: "pointer", fontWeight: 600 }}>Réessayer</button> : null}
     <button onClick={props.onRepartirAVide} style={{ display: "block", marginTop: 22, border: "none", background: "none", color: "#64748B", textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Repartir à vide</button>
   </div></div>;
 }
@@ -2058,37 +2071,43 @@ function App(props) {
       try { if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().then(function (v) { setPersistOk(v); }).catch(function () {}); } } catch (e0) {}
       function borne(p) { return Promise.race([p, new Promise(function (res) { setTimeout(function () { res(RECUPERATION_INDISPO); }, RECUPERATION_DELAI_MS); })]); }
       var raw = null, parsed = null, lisible = false;
-      try { raw = localStorage.getItem(STORAGE_KEY); if (raw) { parsed = JSON.parse(raw); lisible = true; } } catch (e1) { lisible = false; }
+      try { raw = localStorage.getItem(STORAGE_KEY); if (raw) { parsed = JSON.parse(raw); lisible = !!(parsed && typeof parsed === "object" && !Array.isArray(parsed) && Array.isArray(parsed.contacts)); } } catch (e1) { lisible = false; }
       var miroir = await borne(idbGet("data"));
       var cles = await borne(idbKeys());
       var indispo = miroir === RECUPERATION_INDISPO || cles === RECUPERATION_INDISPO;
       if (indispo) setCopiesInaccessibles(true);
       if (lisible) {
-        var mig = migrateData(parsed);
+        var mig;
+        try { mig = migrateData(parsed); } catch (eM) { lisible = false; }
+      }
+      if (lisible) {
         var dejaVue = false; try { dejaVue = sessionStorage.getItem("kit-crm-recup-vue") === "1"; } catch (e2) {}
-        if (!indispo && miroir && !dejaVue) {
-          var candMiroir = KIT_PURE.candidatRecuperation("miroir", "data", miroir);
-          if (candMiroir && candMiroir.nbContacts > 0 && candMiroir.derniereModification > KIT_PURE.derniereModification(mig.d)) {
-            setRecuperation({ mode: "b", choix: candMiroir, liste: [candMiroir], courant: mig.d });
-            return; /* aucune écriture, data reste null, loading reste true */
-          }
+        var miroirPlusRecent = false;
+        var candMiroir = null;
+        if (!indispo && miroir) {
+          candMiroir = KIT_PURE.candidatRecuperation("miroir", "data", miroir);
+          miroirPlusRecent = !!(candMiroir && candMiroir.nbContacts > 0 && candMiroir.derniereModification > KIT_PURE.derniereModification(mig.d));
+        }
+        if (miroirPlusRecent && !dejaVue) {
+          setRecuperation({ mode: "b", choix: candMiroir, liste: [candMiroir], courant: mig.d });
+          KIT_STORAGE_STATUS.notify(raw.length);
+          return; /* aucune écriture, data reste null, loading reste true */
         }
         setData(mig.d);
         if (mig.changed) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mig.d)); } catch (e3) {} }
-        idbSet("data", mig.d);
+        if (!indispo && !miroirPlusRecent) idbSet("data", mig.d);
         KIT_STORAGE_STATUS.notify(raw.length);
         setLoading(false);
         return;
       }
       if (raw && !lisible) mettreEnQuarantaine(raw);
+      if (indispo) { setRecuperation({ mode: "c", choix: null, liste: [], courant: null }); return; }
       if (!indispo) {
         var candidats = [];
         if (miroir) candidats.push(KIT_PURE.candidatRecuperation("miroir", "data", miroir));
         var clesSnap = (cles || []).filter(function (k) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(k)); }).sort().reverse();
-        for (var i = 0; i < clesSnap.length; i++) {
-          var brut = await borne(idbGet(clesSnap[i]));
-          if (brut !== RECUPERATION_INDISPO) candidats.push(KIT_PURE.candidatRecuperation("instantane", String(clesSnap[i]), brut));
-        }
+        var bruts = await borne(Promise.all(clesSnap.map(function (k) { return idbGet(k); })));
+        if (bruts !== RECUPERATION_INDISPO) bruts.forEach(function (brut, i) { candidats.push(KIT_PURE.candidatRecuperation("instantane", String(clesSnap[i]), brut)); });
         var choix = KIT_PURE.choisirRecuperation(candidats);
         if (choix.choix) { setRecuperation({ mode: "a", choix: choix.choix, liste: choix.liste, courant: null }); return; }
       }
@@ -2180,10 +2199,12 @@ function App(props) {
       KIT_STORAGE_STATUS.notify(serialized.length);
       if (!ecritureOk) { KIT_SAVE_STATUS.notify(false, quota ? "quota" : ""); return false; }
       var back = localStorage.getItem(STORAGE_KEY) || "";
-      var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
+      var parsedBack;
+      try { parsedBack = JSON.parse(back); } catch (eP) { KIT_SAVE_STATUS.notify(false, ""); return false; }
+      var ok = typeof verify === "function" ? !!verify(parsedBack) : back === serialized;
       if (!ok) return false;
       KIT_SAVE_STATUS.notify(true, "");
-      saveDailySnapshot(precedent || serialized);
+      saveDailySnapshot(precedent || JSON.stringify(data || nd));
       KIT_TRACKED_FILE.queue(serialized);
       setData(nd); idbSet("data", nd);
       return true;
@@ -2197,7 +2218,7 @@ function App(props) {
       try { localStorage.setItem(STORAGE_KEY, serialized); } catch (eQ) { ecritureOk = false; quota = KIT_PURE.estQuotaDepasse(eQ); }
       KIT_STORAGE_STATUS.notify(serialized.length);
       KIT_SAVE_STATUS.notify(ecritureOk, ecritureOk ? "" : (quota ? "quota" : ""));
-      saveDailySnapshot(precedent || serialized);
+      saveDailySnapshot(precedent || JSON.stringify(prev || nd));
       KIT_TRACKED_FILE.queue(serialized);
       idbSet("data", nd);
       return nd;
@@ -2215,7 +2236,6 @@ function App(props) {
       try {
         var current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
         setData(current);
-        idbSet("data", current);
       } catch (e) {}
       // La restauration prime : une confirmation éclair déjà affichée (z-1020) recouvrirait
       // la feuille restaurée (z-1000) ; l'entrée « lien-ouvert » persistée se représentera.
@@ -2255,7 +2275,7 @@ function App(props) {
     setShowMenu(false);
     if (!("Notification" in window) || !("serviceWorker" in navigator)) { alert("Les notifications ne sont pas supportées par ce navigateur."); return; }
     var perm = await Notification.requestPermission();
-    if (perm !== "granted") { alert("Permission refusée. Tu peux la réactiver dans les réglages du navigateur."); return; }
+    if (perm !== "granted") { alert("Permission refusée. Vous pouvez la réactiver dans les réglages du navigateur."); return; }
     idbSet("data", data);
     try {
       var reg = await navigator.serviceWorker.ready;
@@ -2293,20 +2313,22 @@ function App(props) {
     var canShareFiles = false;
     try { canShareFiles = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e2) {}
     if (KIT_PURE.exportModeFor(canShareFiles) === "partage") {
-      navigator.share({ files: [file], title: "Copie de sécurité Keep In Touch" }).catch(function (error) { if (!error || error.name !== "AbortError") downloadJSON(backup, filename); });
-      return;
+      return navigator.share({ files: [file], title: "Copie de sécurité Keep In Touch" }).then(function () { return true; }).catch(function (error) { if (error && error.name === "AbortError") return false; downloadJSON(backup, filename); return true; });
     }
     downloadJSON(backup, filename);
+    return Promise.resolve(true);
   }
 
   function restaurerCopie(cand) {
     var mig = migrateData(JSON.parse(JSON.stringify(cand.data)));
+    if (recuperation.mode === "a") { try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} }
     setRecuperation(null);
     save(mig.d);
     setLoading(false);
   }
 
   function continuerSansRestaurer() {
+    mettreEnQuarantaine(recuperation.choix.data);
     try { sessionStorage.setItem("kit-crm-recup-vue", "1"); } catch (e) {}
     var d = recuperation.courant;
     setRecuperation(null);
@@ -2314,18 +2336,20 @@ function App(props) {
     setLoading(false);
   }
 
-  function repartirAVide() {
+  async function repartirAVide() {
     if (!confirm("Repartir avec une base vide ? La copie proposée sera d'abord exportée et conservée en quarantaine.")) return;
-    if (!confirm("Dernière confirmation : toutes les fiches de cet appareil seront effacées" + (trackedFile.name ? ". Le fichier " + trackedFile.name + " sera lui aussi remplacé par une base vide" : "") + ".")) return;
-    exporterCopie(recuperation.choix, "kit-sauvegarde-avant-remise-a-zero-" + todayStr() + ".json");
-    mettreEnQuarantaine(recuperation.choix.data);
+    if (!confirm(recuperation.mode === "c" ? "Aucune copie de sécurité n'est accessible : les données éventuellement présentes dans IndexedDB ne seront pas conservées." : "Dernière confirmation : toutes les fiches de cet appareil seront effacées" + (trackedFile.name ? ". Le fichier " + trackedFile.name + " sera lui aussi remplacé par une base vide" : "") + ".")) return;
+    var exporte = recuperation.choix ? await exporterCopie(recuperation.choix, "kit-sauvegarde-avant-remise-a-zero-" + todayStr() + ".json") : true;
+    if (!exporte) { alert("Export annulé : rien n'a été effacé."); return; }
+    if (recuperation.choix) await mettreEnQuarantaine(recuperation.choix.data);
+    if (recuperation.mode === "a" || recuperation.mode === "c") { try { localStorage.removeItem(STORAGE_KEY); } catch (e) {} }
     var vide = migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d;
     setRecuperation(null);
     save(vide);
     setLoading(false);
   }
 
-  if (recuperation) return <EcranRecuperation recuperation={recuperation} trackedFileName={trackedFile.name} onRestaurer={restaurerCopie} onExporter={exporterCopie} onContinuer={continuerSansRestaurer} onRepartirAVide={repartirAVide} />;
+  if (recuperation) return <EcranRecuperation recuperation={recuperation} onRestaurer={restaurerCopie} onExporter={exporterCopie} onContinuer={continuerSansRestaurer} onRepartirAVide={repartirAVide} />;
   if (loading || !data) {
     return React.createElement("div", {
       style: { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "system-ui", color: "#64748B" }
@@ -3295,11 +3319,11 @@ function App(props) {
     var r = essai.rapport;
     var noms = r.contactsRevenus.slice(0, 5).map(function (x) { return x.label; }).join(", ") + (r.contactsRevenus.length > 5 ? "…" : "");
     var quand = fmtDate(snapshot.date);
-    if (!confirm("Revenir à l'état du début du " + quand + " ? Vos fiches et historiques reprendront cet état : " + String(r.champsRetablis) + " champ(s) rétabli(s), " + String(r.contactsRevenus.length) + " fiche(s) supprimée(s) depuis reviendront" + (noms ? " (" + noms + ")" : "") + ", " + String(r.interactionsRetirees) + " interaction(s) saisie(s) depuis seront retirées. Les " + String(r.contactsConserves) + " fiche(s) créée(s) depuis, vos réglages, modèles et catégories sont conservés. Une sauvegarde de l'état actuel est d'abord téléchargée.")) return;
+    if (!confirm("Revenir à l'état du début du " + quand + " ? Vos fiches et historiques reprendront cet état : " + String(r.champsRetablis) + " champ(s) rétabli(s), " + String(r.contactsRevenus.length) + " fiche(s) supprimée(s) depuis reviendront" + (noms ? " (" + noms + ")" : "") + ", " + String(r.interactionsRetirees) + " interaction(s) saisie(s) depuis seront retirées, " + String(r.interactionsRevenues) + " interaction(s) supprimée(s) depuis reviendront. Les " + String(r.contactsConserves) + " fiche(s) créée(s) depuis, vos réglages, modèles et catégories sont conservés. Une sauvegarde de l'état actuel est d'abord téléchargée.")) return;
     var nomFichier = "kit-sauvegarde-avant-retour-" + todayStr() + ".json";
     downloadJSON({ version: "kit-crm-v5", exportDate: todayStr(), data: data }, nomFichier);
     save(essai.data);
-    alert("Retour effectué : " + String(r.contactsRestaures) + " fiches à l'état du " + quand + ". Sauvegarde de l'état précédent : " + nomFichier + " (dossier Téléchargements). Pour annuler ce retour, utilisez « Remplacer tout » avec ce fichier (« Importer / fusionner » ne le ré-appliquerait pas).");
+    alert("Retour effectué : " + String(r.contactsRestaures) + " fiches à l'état du " + quand + " et " + String(r.contactsConserves) + " fiche(s) créée(s) depuis conservée(s) (total " + String(essai.data.contacts.length) + "). Sauvegarde de l'état précédent : " + nomFichier + " (dossier Téléchargements). Pour annuler ce retour, utilisez « Remplacer tout » avec ce fichier (« Importer / fusionner » ne le ré-appliquerait pas).");
     setShowBackup(false);
   }
 
@@ -3840,6 +3864,7 @@ function App(props) {
   }
 
   function renderCatBadge(catName) {
+    catName = String(catName || "");
     var h = 0;
     for (var i = 0; i < catName.length; i++) h += catName.charCodeAt(i);
     h = h % 360;
