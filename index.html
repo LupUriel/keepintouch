@@ -323,7 +323,7 @@ var KIT_PURE = (function () {
   }
   function patchInteraction(entry, patch) {
     var next = Object.assign({}, entry || {});
-    ["comment", "date", "type", "awaitingResponse", "retryPending"].forEach(function (key) {
+    ["comment", "date", "type", "awaitingResponse", "retryPending", "lieId", "lieLabel"].forEach(function (key) {
       if (patch && Object.prototype.hasOwnProperty.call(patch, key)) next[key] = patch[key];
     });
     return next;
@@ -454,6 +454,111 @@ var KIT_PURE = (function () {
     var text = String(value || "").toLowerCase();
     if (text.normalize) text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return text.replace(/-/g, " ").replace(/\s+/g, " ").trim();
+  }
+  var SUIVI_TYPES = ["dossier", "recommandation_recue", "recommandation_donnee"];
+  function estSuivi(type) { return SUIVI_TYPES.indexOf(type) >= 0; }
+  function derniereInteractionHorsSuivi(interactions) {
+    var best = null;
+    if (!Array.isArray(interactions)) return null;
+    interactions.forEach(function (interaction) {
+      if (!interaction || typeof interaction !== "object" || estSuivi(interaction.type)) return;
+      if (best === null || String(interaction.date || "") > String(best.date || "")) best = interaction;
+    });
+    return best;
+  }
+  function apporteurDepuisOrigine(origin, candidats) {
+    var o = normalizedText(origin), correspondances = [];
+    if (o.length < 3) return null;
+    (Array.isArray(candidats) ? candidats : []).forEach(function (candidat) {
+      var trouve = (candidat && Array.isArray(candidat.libelles) ? candidat.libelles : []).some(function (libelle) {
+        var l = normalizedText(libelle);
+        return l.length >= 3 && l === o;
+      });
+      if (trouve) correspondances.push(candidat);
+    });
+    return correspondances.length === 1 ? { id: correspondances[0].id, label: correspondances[0].label } : null;
+  }
+  function statsDossiers(contacts, todayISO, jours) {
+    var duree = typeof jours === "number" && isFinite(jours) && jours > 0 ? jours : 365;
+    var debutISO = addDaysISO(todayISO, -duree);
+    var resultat = { dossiers: 0, recommandationsRecues: 0, recommandationsDonnees: 0, contactsAvecDossier: 0 };
+    (Array.isArray(contacts) ? contacts : []).forEach(function (contact) {
+      var ficheAvecDossier = false;
+      (contact && Array.isArray(contact.interactions) ? contact.interactions : []).forEach(function (interaction) {
+        if (!interaction || typeof interaction.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(interaction.date) || interaction.date < debutISO || interaction.date > todayISO || !estSuivi(interaction.type)) return;
+        if (interaction.type === "dossier") { resultat.dossiers += 1; ficheAvecDossier = true; }
+        else if (interaction.type === "recommandation_recue") resultat.recommandationsRecues += 1;
+        else if (interaction.type === "recommandation_donnee") resultat.recommandationsDonnees += 1;
+      });
+      if (ficheAvecDossier) resultat.contactsAvecDossier += 1;
+    });
+    return resultat;
+  }
+  function apporteurs(contacts, todayISO) {
+    var fiches = Array.isArray(contacts) ? contacts : [], parId = {}, lignes = {};
+    fiches.forEach(function (fiche) { if (fiche && typeof fiche.id === "string") parId[fiche.id] = fiche; });
+    fiches.forEach(function (fiche) {
+      (fiche && Array.isArray(fiche.interactions) ? fiche.interactions : []).forEach(function (interaction) {
+        if (!interaction || (interaction.type !== "dossier" && interaction.type !== "recommandation_recue") || typeof interaction.lieId !== "string" || interaction.lieId.length === 0) return;
+        var id = interaction.lieId;
+        if (!lignes[id]) lignes[id] = { id: id, label: "", existe: false, archivee: false, dossiers: 0, recommandationsRecues: 0, dernierDossierISO: null, dernierEchangeISO: null, joursDepuisEchange: null, aRemercier: false, _labelDate: null };
+        var ligne = lignes[id], date = String(interaction.date || "");
+        if (interaction.type === "dossier") {
+          ligne.dossiers += 1;
+          if (ligne.dernierDossierISO === null || date > ligne.dernierDossierISO) ligne.dernierDossierISO = date;
+        } else ligne.recommandationsRecues += 1;
+        if (String(interaction.lieLabel || "") && (ligne._labelDate === null || date > ligne._labelDate)) { ligne.label = interaction.lieLabel; ligne._labelDate = date; }
+      });
+    });
+    Object.keys(lignes).forEach(function (id) {
+      var ligne = lignes[id], fiche = parId[id];
+      if (fiche) {
+        ligne.existe = true;
+        ligne.archivee = !!fiche.archived;
+        ligne.label = (((fiche.firstName || "") + " " + (fiche.lastName || "").toUpperCase()).trim()) || fiche.name || "";
+        var dernier = derniereInteractionHorsSuivi(fiche.interactions);
+        ligne.dernierEchangeISO = dernier ? String(dernier.date || "") : null;
+      }
+      if (ligne.dernierEchangeISO !== null) {
+        var pToday = String(todayISO || "").split("-"), pEchange = ligne.dernierEchangeISO.split("-");
+        ligne.joursDepuisEchange = Math.round((Date.UTC(Number(pToday[0]), Number(pToday[1]) - 1, Number(pToday[2])) - Date.UTC(Number(pEchange[0]), Number(pEchange[1]) - 1, Number(pEchange[2]))) / 86400000);
+      }
+      ligne.aRemercier = ligne.existe && ligne.dossiers > 0 && (ligne.dernierEchangeISO === null || ligne.dernierEchangeISO < ligne.dernierDossierISO);
+      delete ligne._labelDate;
+    });
+    return Object.keys(lignes).map(function (id) { return lignes[id]; }).sort(function (a, b) {
+      if (a.aRemercier !== b.aRemercier) return a.aRemercier ? -1 : 1;
+      if (a.dossiers !== b.dossiers) return b.dossiers - a.dossiers;
+      if (a.label < b.label) return -1;
+      if (a.label > b.label) return 1;
+      if (a.id < b.id) return -1;
+      if (a.id > b.id) return 1;
+      return 0;
+    });
+  }
+  function reciprocite(contact, contacts) {
+    var resultat = { dossiersRecus: 0, dossiersApportes: 0, recoRecuesDeLui: 0, recoDonneesParMoi: 0 };
+    var cible = contact || {}, cibleId = cible.id;
+    (Array.isArray(cible.interactions) ? cible.interactions : []).forEach(function (interaction) {
+      if (!interaction) return;
+      if (interaction.type === "dossier") resultat.dossiersRecus += 1;
+      if (interaction.type === "recommandation_donnee") resultat.recoDonneesParMoi += 1;
+    });
+    if (typeof cibleId !== "string" || !cibleId) return resultat;
+    (Array.isArray(contacts) ? contacts : []).forEach(function (fiche) {
+      if (!fiche || fiche.id === cibleId) return;
+      (Array.isArray(fiche.interactions) ? fiche.interactions : []).forEach(function (interaction) {
+        if (!interaction || interaction.lieId !== cibleId) return;
+        if (interaction.type === "dossier") resultat.dossiersApportes += 1;
+        else if (interaction.type === "recommandation_recue") resultat.recoRecuesDeLui += 1;
+        else if (interaction.type === "recommandation_donnee") resultat.recoDonneesParMoi += 1;
+      });
+    });
+    return resultat;
+  }
+  function pluriel(n, singulier, plurielForme) {
+    var nombre = typeof n === "number" && isFinite(n) ? n : 0;
+    return String(nombre) + " " + (nombre > 1 ? plurielForme : singulier);
   }
   function denominationMatch(a, b) {
     return normalizedText(a) === normalizedText(b);
@@ -621,7 +726,7 @@ var KIT_PURE = (function () {
     });
     return targets;
   }
-  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurDepuisOrigine: apporteurDepuisOrigine, statsDossiers: statsDossiers, apporteurs: apporteurs, reciprocite: reciprocite, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -683,7 +788,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.7["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v49["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.8["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v50["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("stockage : niveaux et plafond", function () { kitAssert(JSON.stringify(KIT_PURE.niveauStockage(3650434)) === JSON.stringify({ pct: 70, niveau: "attention" })); kitAssert(KIT_PURE.niveauStockage(3093299).pct === 59 && KIT_PURE.niveauStockage(3093299).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage(3145728).pct === 60 && KIT_PURE.niveauStockage(3145728).niveau === "attention"); kitAssert(KIT_PURE.niveauStockage(4194304).pct === 80 && KIT_PURE.niveauStockage(4194304).niveau === "critique"); kitAssert(KIT_PURE.niveauStockage(50, 100).pct === 50 && KIT_PURE.niveauStockage(50, 100).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage("x").pct === 0 && KIT_PURE.niveauStockage("x").niveau === "ok"); });
 KIT_TESTS.add("stockage : détection du quota dépassé", function () { kitAssert(KIT_PURE.estQuotaDepasse({ name: "QuotaExceededError" })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 22 })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 1014 })); kitAssert(KIT_PURE.estQuotaDepasse({ name: "NS_ERROR_DOM_QUOTA_REACHED" })); kitAssert(!KIT_PURE.estQuotaDepasse({ name: "TypeError" })); kitAssert(!KIT_PURE.estQuotaDepasse(null)); kitAssert(!KIT_PURE.estQuotaDepasse("x")); });
 KIT_TESTS.add("récupération : dernière modification", function () { var d = { savedAt: "2026-01-01T00:00:00.000Z", contacts: [{ updatedAt: "2026-09-01T00:00:00.000Z" }] }; kitAssert(KIT_PURE.derniereModification(d) === d.savedAt); kitAssert(KIT_PURE.derniereModification({ contacts: [{ updatedAt: "2026-09-01T00:00:00.000Z" }], deletedContacts: [{ deletedAt: "2026-09-02T00:00:00.000Z" }], deletedInteractions: [{ deletedAt: "2026-09-03T00:00:00.000Z" }], settings: { updatedAt: "2026-09-04T00:00:00.000Z" } }) === "2026-09-04T00:00:00.000Z"); kitAssert(KIT_PURE.derniereModification({}) === "2000-01-01T00:00:00.000Z"); kitAssert(KIT_PURE.derniereModification(null) === "2000-01-01T00:00:00.000Z"); });
@@ -695,6 +800,8 @@ KIT_TESTS.add("retour : fiches présentes aujourd'hui mais absentes de l'instant
 KIT_TESTS.add("retour : interaction supprimée revenue sous nouvel iid, tombe conservée, interactions saisies depuis comptées", function () { var now = "2026-09-03T11:00:00.000Z"; var courant = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "N" }] }], deletedContacts: [], deletedInteractions: [{ cid: "A", iid: "X", deletedAt: "2026-09-02T00:00:00.000Z" }], categories: [] }; var inst = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "X" }, { iid: "Y" }] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, now, []); kitAssert(r.data.contacts[0].interactions[0].iid === "X~r20260903110000000" && r.data.contacts[0].interactions[1].iid === "Y"); kitAssert(r.rapport.interactionsRevenues === 1 && r.rapport.interactionsRetirees === 1); kitAssert(r.data.deletedInteractions[0].cid === "A" && r.data.deletedInteractions[0].iid === "X"); });
 KIT_TESTS.add("retour : réglages, modèles, catégories, non-mutation", function () { var courant = { contacts: [{ id: "A", category: "Client", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: ["Client"], settings: { x: 1 }, templates: ["T"], pendingInvites: ["P"], savedAt: "2026-09-03T10:00:00.000Z" }; var inst = { contacts: [{ id: "A", category: "Confrère", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], settings: { x: 2 }, templates: ["Autre"], pendingInvites: ["Autre"] }; var avantCourant = JSON.stringify(courant), avantInst = JSON.stringify(inst); var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", ["category"]); kitAssert(JSON.stringify(r.data.settings) === JSON.stringify(courant.settings) && JSON.stringify(r.data.templates) === JSON.stringify(courant.templates) && JSON.stringify(r.data.pendingInvites) === JSON.stringify(courant.pendingInvites) && r.data.savedAt === courant.savedAt); kitAssert(JSON.stringify(r.data.categories) === JSON.stringify(["Client", "Confrère"]) && r.rapport.categoriesAjoutees === 1); kitAssert(JSON.stringify(courant) === avantCourant && JSON.stringify(inst) === avantInst); });
 KIT_TESTS.add("catégories après import : union ordonnée sans doublon", function () { var r = KIT_PURE.categoriesApresImport(["Client", "Prospect"], ["Confrère", "Confrère", "Client", "", "  Partenaire  ", null]); kitAssert(JSON.stringify(r) === JSON.stringify(["Client", "Prospect", "Confrère", "Partenaire"])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(["A"], [])) === JSON.stringify(["A"])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport([], ["B"])) === JSON.stringify(["B"])); var src = ["X"]; KIT_PURE.categoriesApresImport(src, ["Y"]); kitAssert(src.length === 1, "la liste d'entrée ne doit pas être mutée"); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(["Client"], ["client", "CLIENT"])) === JSON.stringify(["Client", "client", "CLIENT"]), "comparaison sensible à la casse, comme le reste de l'application"); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(null, null)) === JSON.stringify([])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(undefined, ["A"])) === JSON.stringify(["A"])); });
+KIT_TESTS.add("catégories : Avocat / EC ajoutée par défaut", function () { if (typeof migrateData === "undefined") return; var r = migrateData({ contacts: [], categories: ["Client", "Prospect"], deletedContacts: [], deletedInteractions: [] }); kitAssert(JSON.stringify(r.d.categories) === JSON.stringify(["Client", "Prospect", "Avocat / EC"])); kitAssert(r.changed === true); var complet = migrateData({ contacts: [], categories: ["Client", "Prospect", "Avocat / EC", "Partenaire"], deletedContacts: [], deletedInteractions: [] }); kitAssert(JSON.stringify(complet.d.categories) === JSON.stringify(["Client", "Prospect", "Avocat / EC", "Partenaire"])); kitAssert(complet.d.categories.filter(function (cat) { return cat === "Avocat / EC"; }).length === 1); var absent = migrateData({ contacts: [], deletedContacts: [], deletedInteractions: [] }); kitAssert(JSON.stringify(absent.d.categories) === JSON.stringify(DEFAULT_CATS)); var fiche = { id: "test-client", category: "Client", interactions: [] }; var avecFiche = migrateData({ contacts: [fiche], categories: ["Client", "Prospect"], deletedContacts: [], deletedInteractions: [] }); kitAssert(avecFiche.d.contacts.length === 1 && avecFiche.d.contacts[0].category === "Client"); });
+KIT_TESTS.add("catégories : DEFAULT_CATS contient Avocat / EC", function () { if (typeof DEFAULT_CATS === "undefined") return; kitAssert(DEFAULT_CATS.indexOf("Avocat / EC") >= 0); kitAssert(DEFAULT_CATS.length === 3); });
 KIT_TESTS.add("câblage import : catégories dérivées des fiches réellement enregistrées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var iImp = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("); var iFin = KIT_SOURCE_HTML.indexOf("setShowImp(false)", iImp); var corps = KIT_SOURCE_HTML.slice(iImp, iFin); kitAssert(iImp > 0 && iFin > iImp); kitAssert(/var retenues = dupes\.length > 0 \? uniques : nc;/.test(corps), "retenues = fiches effectivement enregistrées selon la branche"); kitAssert(/KIT_PURE\.categoriesApresImport\(categories, retenues\.map\(function \(c\) \{ return c\.category; \}\)\)/.test(corps), "catégories dérivées des fiches retenues, jamais des lignes rejetées"); kitAssert(corps.indexOf("var retenues =") > corps.lastIndexOf("uniques.push(newC)"), "retenues calculées après le dédoublonnage"); kitAssert(corps.indexOf("categoriesRencontrees") === -1, "plus d'accumulation parallèle"); kitAssert(corps.indexOf("addCategory(") === -1, "plus d'appel addCategory dans l'import"); kitAssert((corps.match(/categories: categoriesFinales/g) || []).length === 2, "les deux branches d'enregistrement utilisent categoriesFinales"); });
 KIT_TESTS.add("câblage save : instantané de début de journée, quota isolé, jauge", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var KIT_APP = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var d0 = KIT_APP.indexOf("var save = useCallback" + "(function (partial, opts)"); var d1 = KIT_APP.indexOf("}, [data]);", d0); var corps = KIT_APP.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert((corps.match(/saveDailySnapshot\(precedent \|\| JSON\.stringify\(/g) || []).length === 2); kitAssert(corps.indexOf("saveDailySnapshot(serialized)") === -1); kitAssert((corps.match(/KIT_TRACKED_FILE\.queue\(serialized\)/g) || []).length === 2); var normal = corps.slice(corps.indexOf("setData(function (prev)"), corps.indexOf("return nd;", corps.indexOf("setData(function (prev)"))); var q = normal.indexOf("} catch (eQ)"); kitAssert(q > 0 && q < normal.indexOf("saveDailySnapshot(") && normal.indexOf("saveDailySnapshot(") < normal.indexOf("KIT_TRACKED_FILE.queue(serialized)") && normal.indexOf("KIT_TRACKED_FILE.queue(serialized)") < normal.indexOf('idbSet("data", nd)')); var verify = corps.slice(0, corps.indexOf("setData(function (prev)")); kitAssert(verify.indexOf('notify(false, quota ? "quota" : "")') >= 0 && verify.indexOf("parsedBack") >= 0); kitAssert((corps.match(/KIT_STORAGE_STATUS\.notify\(serialized\.length\)/g) || []).length === 2); });
 KIT_TESTS.add("câblage saveDailySnapshot : une écriture par jour", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("function saveDaily" + "Snapshot("); var d1 = KIT_SOURCE_HTML.indexOf("var KIT_TRACKED_FILE", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(/snapshotJourEnCours === today/.test(corps)); kitAssert(/snapshotJourEnCours = today/.test(corps)); kitAssert(KIT_SOURCE_HTML.lastIndexOf("var snapshotJourEnCours = null;", d0) >= 0); });
@@ -774,6 +881,35 @@ KIT_TESTS.add("patch interaction tolère un patch absent", function () { var e =
 KIT_TESTS.add("patch interaction préserve iid et métadonnées", function () { var e = { iid: "i1", date: "2026-01-01", invitation: true, meal: "dejeuner", datesProposees: ["2026-02-01"], canal: "mail" }; var p = KIT_PURE.patchInteraction(e, { comment: "Corrigé" }); kitAssert(p !== e && p.iid === "i1" && p.invitation && p.meal === "dejeuner" && p.datesProposees === e.datesProposees && p.canal === "mail"); });
 KIT_TESTS.add("patch interaction applique les champs éditables", function () { var p = KIT_PURE.patchInteraction({ iid: "i1" }, { comment: "Note", date: "2026-08-04", type: "dejeuner", awaitingResponse: true, retryPending: false }); kitAssert(p.comment === "Note" && p.date === "2026-08-04" && p.type === "dejeuner" && p.awaitingResponse === true && p.retryPending === false); });
 KIT_TESTS.add("patch interaction partiel conserve les autres champs", function () { var p = KIT_PURE.patchInteraction({ iid: "i1", comment: "Avant", date: "2026-01-01", type: "email", awaitingResponse: true }, { comment: "Après" }); kitAssert(p.comment === "Après" && p.date === "2026-01-01" && p.type === "email" && p.awaitingResponse === true); });
+KIT_TESTS.add("suivi : types de suivi", function () { kitAssert(KIT_PURE.estSuivi("dossier") && KIT_PURE.estSuivi("recommandation_recue") && KIT_PURE.estSuivi("recommandation_donnee")); kitAssert(!KIT_PURE.estSuivi("dejeuner") && !KIT_PURE.estSuivi(undefined)); kitAssert(KIT_PURE.SUIVI_TYPES.length === 3); });
+KIT_TESTS.add("suivi : dernière interaction hors suivi", function () { var email = { type: "email", date: "2026-05-01" }; kitAssert(KIT_PURE.derniereInteractionHorsSuivi([email, { type: "dossier", date: "2026-06-01" }]) === email); kitAssert(KIT_PURE.derniereInteractionHorsSuivi([]) === null && KIT_PURE.derniereInteractionHorsSuivi(undefined) === null && KIT_PURE.derniereInteractionHorsSuivi([{ type: "dossier", date: "2026-01-01" }]) === null); var premier = { type: "email", date: "2026-05-01" }, second = { type: "sms", date: "2026-05-01" }, sansType = { date: "2026-06-01" }; kitAssert(KIT_PURE.derniereInteractionHorsSuivi([premier, second]) === premier && KIT_PURE.derniereInteractionHorsSuivi([premier, sansType]) === sansType); });
+KIT_TESTS.add("suivi : apporteur depuis l'origine", function () { var candidats = [{ id: "a", label: "Jean DUPONT", libelles: ["Jean DUPONT", "DUPONT Jean", "DUPONT"] }, { id: "b", label: "Marie MARTIN", libelles: ["Marie MARTIN", "MARTIN Marie", "MARTIN"] }]; kitAssert(KIT_PURE.apporteurDepuisOrigine("Me Dupont", candidats) === null); kitAssert(JSON.stringify(KIT_PURE.apporteurDepuisOrigine("dupont", candidats)) === JSON.stringify({ id: "a", label: "Jean DUPONT" })); kitAssert(KIT_PURE.apporteurDepuisOrigine("jean dupont", candidats).id === "a"); kitAssert(KIT_PURE.apporteurDepuisOrigine("DUPONT", candidats.concat([{ id: "c", label: "Cabinet X", libelles: ["DUPONT"] }])) === null); kitAssert(KIT_PURE.apporteurDepuisOrigine("", candidats) === null && KIT_PURE.apporteurDepuisOrigine("Du", candidats) === null && KIT_PURE.apporteurDepuisOrigine("dupont") === null); });
+KIT_TESTS.add("suivi : statistiques des dossiers sur 12 mois", function () { var contacts = [{ id: "A", interactions: [{ type: "dossier", date: "2025-09-07" }, { type: "dossier", date: "2025-09-06" }, { type: "dossier", date: "2026-09-08" }, { type: "recommandation_recue", date: "2026-08-01" }] }, { id: "B", archived: true, interactions: [{ type: "dossier", date: "2026-09-01" }, { type: "recommandation_donnee", date: "2026-08-02" }] }]; kitAssert(JSON.stringify(KIT_PURE.statsDossiers(contacts, "2026-09-07")) === JSON.stringify({ dossiers: 2, recommandationsRecues: 1, recommandationsDonnees: 1, contactsAvecDossier: 2 })); kitAssert(KIT_PURE.statsDossiers(contacts, "2026-09-07", 30).dossiers === 1); kitAssert(KIT_PURE.statsDossiers(contacts, "2026-09-07", 0).dossiers === 2); });
+KIT_TESTS.add("suivi : apporteurs agrégés et à remercier", function () { var base = [{ id: "A", firstName: "Jean", lastName: "Dupont", interactions: [] }, { id: "X", interactions: [{ type: "dossier", date: "2026-03-10", lieId: "A" }] }, { id: "Y", interactions: [{ type: "dossier", date: "2026-06-15", lieId: "A" }] }]; var ligne = KIT_PURE.apporteurs(base, "2026-09-07")[0]; kitAssert(ligne.id === "A" && ligne.label === "Jean DUPONT" && ligne.existe === true && ligne.dossiers === 2 && ligne.dernierDossierISO === "2026-06-15" && ligne.aRemercier === true && ligne.dernierEchangeISO === null && ligne.joursDepuisEchange === null); base[0].interactions = [{ type: "dejeuner", date: "2026-06-15" }, { type: "dossier", date: "2026-07-01" }]; kitAssert(KIT_PURE.apporteurs(base, "2026-09-07")[0].aRemercier === false); base[0].interactions = [{ type: "appel_echange", date: "2026-06-16" }]; ligne = KIT_PURE.apporteurs(base, "2026-09-07")[0]; kitAssert(ligne.aRemercier === false && ligne.joursDepuisEchange === 83); base[0].interactions = [{ type: "email", date: "2026-06-01" }]; kitAssert(KIT_PURE.apporteurs(base, "2026-09-07")[0].aRemercier === true); });
+KIT_TESTS.add("suivi : apporteurs — tri, fiche supprimée, fiche archivée, recommandation seule", function () { var contacts = [{ id: "A", firstName: "Jean", lastName: "Dupont", interactions: [] }, { id: "B", firstName: "Marie", lastName: "Martin", archived: true, interactions: [{ type: "email", date: "2026-08-01" }] }, { id: "X", interactions: [{ type: "dossier", date: "2026-06-01", lieId: "A" }, { type: "dossier", date: "2026-05-01", lieId: "B" }, { type: "dossier", date: "2026-05-02", lieId: "B" }, { type: "dossier", date: "2026-05-03", lieId: "B" }, { type: "recommandation_recue", date: "2026-01-01", lieId: "Z", lieLabel: "Ancien nom" }, { type: "recommandation_recue", date: "2026-07-01", lieId: "Z", lieLabel: "Cabinet X" }, { type: "recommandation_recue", date: "2026-07-02", lieId: "R", lieLabel: "Marie MARTIN" }] }]; var lignes = KIT_PURE.apporteurs(contacts, "2026-09-07"), a = lignes.filter(function (x) { return x.id === "A"; })[0], b = lignes.filter(function (x) { return x.id === "B"; })[0], z = lignes.filter(function (x) { return x.id === "Z"; })[0], r = lignes.filter(function (x) { return x.id === "R"; })[0]; kitAssert(lignes[0] === a && b.dossiers === 3 && b.archivee === true && b.label === "Marie MARTIN"); kitAssert(z.existe === false && z.archivee === false && z.label === "Cabinet X"); kitAssert(r.dossiers === 0 && r.recommandationsRecues === 1 && r.dernierDossierISO === null && r.aRemercier === false); });
+KIT_TESTS.add("suivi : réciprocité par fiche", function () { var a = { id: "A", interactions: [{ type: "recommandation_donnee", lieId: "X" }] }, x = { id: "X", interactions: [{ type: "dossier", lieId: "A" }, { type: "recommandation_donnee", lieId: "Y" }] }, y = { id: "Y", interactions: [] }, contacts = [a, x, y]; kitAssert(JSON.stringify(KIT_PURE.reciprocite(a, contacts)) === JSON.stringify({ dossiersRecus: 0, dossiersApportes: 1, recoRecuesDeLui: 0, recoDonneesParMoi: 1 })); kitAssert(JSON.stringify(KIT_PURE.reciprocite(x, contacts)) === JSON.stringify({ dossiersRecus: 1, dossiersApportes: 0, recoRecuesDeLui: 0, recoDonneesParMoi: 2 })); kitAssert(KIT_PURE.reciprocite(y, contacts).recoDonneesParMoi === 1); y.interactions.push({ type: "recommandation_recue", lieId: "A" }); kitAssert(KIT_PURE.reciprocite(a, contacts).recoRecuesDeLui === 1); kitAssert(JSON.stringify(KIT_PURE.reciprocite({ id: "N" }, contacts)) === JSON.stringify({ dossiersRecus: 0, dossiersApportes: 0, recoRecuesDeLui: 0, recoDonneesParMoi: 0 })); });
+KIT_TESTS.add("suivi : pluriel", function () { kitAssert(KIT_PURE.pluriel(1, "dossier", "dossiers") === "1 dossier"); kitAssert(KIT_PURE.pluriel(2, "dossier", "dossiers") === "2 dossiers"); kitAssert(KIT_PURE.pluriel(0, "recommandation reçue", "recommandations reçues") === "0 recommandation reçue"); });
+KIT_TESTS.add("suivi : patch d'interaction avec fiche liée", function () { var e = { iid: "i", type: "dossier", lieId: "A", lieLabel: "Jean DUPONT" }, conserve = KIT_PURE.patchInteraction(e, { comment: "x" }), vide = KIT_PURE.patchInteraction(e, { lieId: "", lieLabel: "" }), remplace = KIT_PURE.patchInteraction(e, { lieId: "B", lieLabel: "Marie MARTIN" }); kitAssert(conserve.lieId === "A" && conserve.lieLabel === "Jean DUPONT"); kitAssert(vide.lieId === "" && vide.lieLabel === ""); kitAssert(remplace.lieId === "B" && remplace.lieLabel === "Marie MARTIN"); });
+KIT_TESTS.add("câblage suivi : types dans INTER_TYPES", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var INTER_" + "TYPES = ["), fin = KIT_SOURCE_HTML.indexOf("var RENCONTRE_" + "TYPES", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), autre = tranche.indexOf('value: "' + "autre" + '"'); KIT_PURE.SUIVI_TYPES.forEach(function (v) { var pos = tranche.indexOf('value: "' + v + '"'); kitAssert(pos >= 0 && pos < autre, v); }); kitAssert(tranche.indexOf("suivi" + ":") === -1); });
+KIT_TESTS.add("câblage suivi : logInteraction n'efface pas les relances pour un type de suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function log" + "Interaction("), fin = KIT_SOURCE_HTML.indexOf("function update" + "Interaction(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("var suivi = KIT_PURE." + "estSuivi(type)"), b = tranche.indexOf("if (!suivi && c." + "followUpDate)"), c = tranche.indexOf("if (!suivi && c." + "awaitingUntil"); kitAssert(a >= 0 && a < b && b < c); });
+KIT_TESTS.add("câblage suivi : latestInteraction ignore les types de suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function latest" + "Interaction("), fin = KIT_SOURCE_HTML.indexOf("function is" + "Awaiting(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.derniere" + "InteractionHorsSuivi(") >= 0); });
+KIT_TESTS.add("câblage suivi : modal", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suivi = tranche.indexOf("var suiviModal = KIT_PURE." + "estSuivi(logType)"), attente = tranche.indexOf("En attente d'un " + "retour"); kitAssert(suivi >= 0 && suivi < attente); kitAssert(tranche.indexOf("suiviModal ? false : !!" + "logAwait") >= 0 && tranche.indexOf("suiviModal ? false : !!" + "logRetry") >= 0); kitAssert(tranche.indexOf("SUIVI DU " + "RÉSEAU") >= 0 && tranche.indexOf('maxHeight: "' + '84vh"') >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteur" + "DepuisOrigine(") >= 0 && tranche.indexOf("RECOMMANDÉ " + "À") >= 0); });
+KIT_TESTS.add("câblage suivi : export Dernier contact hors suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), rows = KIT_SOURCE_HTML.indexOf("var rows =", debut), tranche = KIT_SOURCE_HTML.slice(debut, rows + 1500); kitAssert(tranche.indexOf("else if (!KIT_PURE." + "estSuivi(x.type))") >= 0); });
+KIT_TESTS.add("câblage suivi : accroche, graphique mensuel, recherche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), a = KIT_SOURCE_HTML.indexOf("KIT_PURE.accroche" + "For(", app), accroche = KIT_SOURCE_HTML.slice(a, a + 200), m = KIT_SOURCE_HTML.indexOf("var monthly" + "Data", app), mensuel = KIT_SOURCE_HTML.slice(m, m + 600), r = KIT_SOURCE_HTML.indexOf("if (search)", app), recherche = KIT_SOURCE_HTML.slice(r, r + 700); kitAssert(accroche.indexOf(".filter(function (x) { return !KIT_PURE." + "estSuivi(x.type); })") >= 0); kitAssert(mensuel.indexOf("!KIT_PURE." + "estSuivi(x.type)) mCount++") >= 0); kitAssert(recherche.indexOf("x." + "lieLabel") >= 0); });
+KIT_TESTS.add("câblage suivi : fiche — ligne Dossiers et historique via", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE." + "reciprocite(c, contacts)") >= 0); kitAssert(tranche.indexOf("Dossiers" + " : ") >= 0 && tranche.indexOf('"via "') >= 0 && tranche.indexOf("(fiche " + "supprimée)") >= 0); });
+KIT_TESTS.add("câblage suivi : Stats — dossiers et apporteurs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), tranche = KIT_SOURCE_HTML.slice(debut, debut + 20000), apporteurs = tranche.indexOf(">Apporteurs<"), origines = tranche.indexOf("Origines des " + "fiches"); kitAssert(tranche.indexOf("KIT_PURE.stats" + "Dossiers(") >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteurs(" + "contacts") >= 0); kitAssert(tranche.indexOf("Dossiers (12 " + "mois)") >= 0); kitAssert(origines >= 0); kitAssert(tranche.indexOf("à " + "remercier") >= 0); kitAssert(tranche.indexOf("Aucun dossier " + "journalisé") >= 0); kitAssert(apporteurs >= 0 && apporteurs < origines); });
+KIT_TESTS.add("câblage suivi : récapitulatif — apporteurs à remercier", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), debut = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), fin = KIT_SOURCE_HTML.indexOf("], 5)", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), avant = KIT_SOURCE_HTML.slice(Math.max(0, debut - 1500), debut), rencontres = tranche.indexOf("Rencontres à " + "programmer"), apporteurs = tranche.indexOf("Apporteurs à " + "remercier"), voeux = tranche.indexOf("Vœux à " + "prévoir"); kitAssert(debut >= 0 && fin > debut); kitAssert(rencontres >= 0 && rencontres < apporteurs && apporteurs < voeux); kitAssert(avant.indexOf("aRemercier." + "length") >= 0); });
+KIT_TESTS.add("câblage suivi : formulaire — origine de la fiche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE DE LA " + "FICHE") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE / " + "APPORTEUR") === -1); });
+KIT_TESTS.add("câblage suivi : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Dossiers et " + "apporteurs") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossier " + "confié") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("RECOMMANDÉ " + "À") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossiers et apporteurs (v1.5." + "8)") >= 0); });
+KIT_TESTS.add("suivi : correctifs apporteurs et réciprocité", function () { var base = [{ id: "A", interactions: [{ type: "email", date: "2026-06-01" }, { type: "dossier", date: "2026-08-01", lieId: "Q" }] }, { id: "X", interactions: [{ type: "dossier", date: "2026-06-15", lieId: "A" }, { type: "recommandation_donnee", date: "2026-08-01", lieId: "D", lieLabel: "Destinataire" }] }]; var lignes = KIT_PURE.apporteurs(base, "2026-09-07"); kitAssert(lignes.filter(function (x) { return x.id === "A"; })[0].aRemercier === true); kitAssert(!lignes.some(function (x) { return x.id === "D"; })); kitAssert(KIT_PURE.apporteurs([{ id: "X", interactions: [{ type: "dossier", date: "2026-01-01", lieId: "", lieLabel: "" }] }], "2026-09-07").length === 0); var disparue = KIT_PURE.apporteurs([{ id: "X", interactions: [{ type: "dossier", date: "2026-01-01", lieId: "Z", lieLabel: "Supprimée" }] }], "2026-09-07")[0]; kitAssert(disparue.existe === false && disparue.aRemercier === false); var contacts = [{ id: "X", interactions: [{ type: "dossier", lieId: "A" }, { type: "recommandation_recue", lieId: "X" }] }, { id: "A", interactions: [] }]; kitAssert(KIT_PURE.reciprocite(contacts[0], contacts).dossiersRecus === 1); kitAssert(KIT_PURE.reciprocite({ interactions: [] }, contacts).dossiersApportes === 0); });
+KIT_TESTS.add("suivi : apporteur depuis l'origine — libellé court", function () { var candidats = [{ id: "a", label: "Jean DUPONT", libelles: ["DUPONT"] }, { id: "c", label: "Du", libelles: ["Du"] }]; kitAssert(KIT_PURE.apporteurDepuisOrigine("Du", candidats) === null); kitAssert(KIT_PURE.apporteurDepuisOrigine("dupont", candidats).id === "a"); });
+KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
+KIT_TESTS.add("câblage suivi : édition conserve la fiche liée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function open" + "EditInteraction("), fin = KIT_SOURCE_HTML.indexOf("function invite" + "Mobile(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("setLogLieId(entry." + 'lieId || "")') >= 0); kitAssert(tranche.indexOf("setLogLieLabel(entry." + 'lieLabel || "")') >= 0); });
+KIT_TESTS.add("câblage suivi : édition sans lien n'ajoute pas de clés vides", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("logLieInitial") >= 0 && tranche.indexOf("logLieInitial") < tranche.indexOf("Mettre à " + "jour")); });
+KIT_TESTS.add("câblage suivi : Stats — apporteurs sans débordement", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), overflow = tranche.indexOf('overflowX: "' + 'auto"'), origines = tranche.indexOf("Origines des " + "fiches"); kitAssert(overflow >= 0 && overflow < origines); });
+KIT_TESTS.add("câblage suivi : détails renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var detailDebut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), detailFin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", detailDebut), detail = KIT_SOURCE_HTML.slice(detailDebut, detailFin), recus = detail.indexOf("rec." + 'dossiersRecus, "confié"'), apportes = detail.indexOf("rec." + 'dossiersApportes, "apporté"'); kitAssert(recus >= 0 && apportes > recus); kitAssert(detail.indexOf('recommandation_donnee" ? "' + '→ " : "via "') >= 0); var statsDebut = detailFin, statsFin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", statsDebut), stats = KIT_SOURCE_HTML.slice(statsDebut, statsFin); kitAssert(stats.indexOf("String(sd." + "dossiers)") >= 0); kitAssert(stats.indexOf("sd." + 'recommandationsRecues, "recommandation reçue"') > stats.indexOf("String(sd." + "dossiers)")); kitAssert(stats.indexOf("sd." + 'recommandationsDonnees, "donnée"') > stats.indexOf("sd." + 'recommandationsRecues, "recommandation reçue"')); kitAssert(stats.indexOf("KIT_PURE.statsDossiers(contacts, " + "todayStr(), 365)") >= 0); kitAssert(stats.indexOf("{a." + "aRemercier ? <span title=") >= 0); kitAssert(stats.indexOf("lignesApporteurs.length === " + "0 ?") >= 0); });
+KIT_TESTS.add("câblage suivi : modal et récapitulatif renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("!t.legacy && !KIT_PURE." + "estSuivi(t.value)") >= 0); kitAssert(tranche.indexOf('else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery("");') >= 0); kitAssert(tranche.indexOf('t.value === "dossier" && !editIid && !' + "logLieId") >= 0); kitAssert(tranche.indexOf("var lie = suiviModal && " + "lieId") >= 0); var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), recap = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), avant = KIT_SOURCE_HTML.slice(Math.max(0, recap - 1500), recap); kitAssert(avant.indexOf("KIT_PURE.apporteurs(contacts, todayStr()).filter(function (a) { return a." + "aRemercier; })") >= 0); });
+KIT_TESTS.add("suivi : fusion conserve la fiche liée", function () { if (typeof mergeData === "undefined") return; var pc = { contacts: [{ id: "X", updatedAt: "2026-09-02T00:00:00.000Z", interactions: [{ iid: "s1", type: "dossier", date: "2026-09-01", lieId: "ap1", lieLabel: "Jean DUPONT" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var android = { contacts: [{ id: "X", updatedAt: "2026-09-01T00:00:00.000Z", interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var fusion = mergeData(android, pc), interaction = fusion.contacts[0].interactions[0]; kitAssert(interaction.lieId === "ap1" && interaction.lieLabel === "Jean DUPONT"); android.deletedInteractions = [{ cid: "X", iid: "s1" }]; kitAssert(mergeData(android, pc).contacts[0].interactions.length === 0); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -1101,7 +1237,6 @@ function ProtectedApp() {
 var { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const STORAGE_KEY = "kit-crm-v5";
-const DEFAULT_CATS = ["Client", "Prospect"];
 const PRIORITIES = [
   { value: "high", label: "Élevé", color: "#BE3C1A", bg: "#FBEAE5" },
   { value: "medium", label: "Moyen", color: "#B5790B", bg: "#FAF0D4" },
@@ -1123,6 +1258,9 @@ var INTER_TYPES = [
   { value: "formation_repas", label: "Formation avec repas", icon: "🎓" },
   { value: "formation", label: "Formation sans repas", icon: "🎓" },
   { value: "conference_repas", label: "Conférence avec verre / repas", icon: "🎤" },
+  { value: "dossier", label: "Dossier confié", icon: "📁" },
+  { value: "recommandation_recue", label: "Recommandation reçue", icon: "🤝" },
+  { value: "recommandation_donnee", label: "Recommandation donnée", icon: "➡️" },
   { value: "autre", label: "Autre", icon: "…" },
   { value: "appel", label: "Appel", icon: "✆", legacy: true },
 ];
@@ -1131,7 +1269,8 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.5.7";
+const DEFAULT_CATS = ["Client", "Prospect", "Avocat / EC"];
+var APP_VERSION = "1.5.8";
 var RECUPERATION_DELAI_MS = 3000;
 var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
@@ -1173,6 +1312,8 @@ function migrateData(d) {
   if (!Array.isArray(d.contacts)) { d.contacts = []; changed = true; }
   if (!Array.isArray(d.deletedContacts)) { d.deletedContacts = []; changed = true; }
   if (!Array.isArray(d.deletedInteractions)) { d.deletedInteractions = []; changed = true; }
+  if (!Array.isArray(d.categories)) { d.categories = DEFAULT_CATS.slice(); changed = true; }
+  DEFAULT_CATS.forEach(function (cat) { if (d.categories.indexOf(cat) === -1) { d.categories.push(cat); changed = true; } });
   if (!d.settings) { d.settings = defaultSettings(); changed = true; }
   if (KIT_PURE.seedRecapHebdo(d.settings)) { changed = true; }
   if (!Array.isArray(d.templates)) { d.templates = defaultTemplates(); changed = true; }
@@ -1722,11 +1863,7 @@ function statusLabel(s) {
 
 // Interaction la plus récente (par date)
 function latestInteraction(c) {
-  var best = null;
-  (c.interactions || []).forEach(function (x) {
-    if (!best || x.date > best.date) best = x;
-  });
-  return best;
+  return KIT_PURE.derniereInteractionHorsSuivi(c.interactions);
 }
 
 // Le contact est-il en attente d'un retour ? (dernière interaction marquée "en attente")
@@ -1977,6 +2114,11 @@ function App(props) {
   var [logType, setLogType] = useState("appel_echange");
   var [logAwait, setLogAwait] = useState(false);
   var [logRetry, setLogRetry] = useState(false);
+  var [logLieId, setLogLieId] = useState("");
+  var [logLieLabel, setLogLieLabel] = useState("");
+  var [logLieQuery, setLogLieQuery] = useState("");
+  var [logLieErreur, setLogLieErreur] = useState("");
+  var [logLieInitial, setLogLieInitial] = useState(false);
   var [showLog, setShowLog] = useState(false);
   var [logId, setLogId] = useState(null);
   var [editIid, setEditIid] = useState(null);
@@ -2766,11 +2908,12 @@ function App(props) {
     var newInts = [entry].concat(c.interactions || []);
     newInts.sort(function (a, b) { return b.date.localeCompare(a.date); });
     var patch = Object.assign({ interactions: newInts }, contactUpdates || {});
+    var suivi = KIT_PURE.estSuivi(type);
     // Une rencontre conviviale réinitialise le cycle : on lève tout report en cours
     if (RENCONTRE_TYPES.indexOf(type) >= 0) patch.snoozedUntil = "";
     // Contacter la personne accomplit la relance planifiée éventuelle
-    if (c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
-    if (c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
+    if (!suivi && c.followUpDate) { patch.followUpDate = ""; patch.followUpNote = ""; }
+    if (!suivi && c.awaitingUntil && !(meta && meta.invitation)) patch.awaitingUntil = "";
     updContact(id, patch, rootUpdates);
   }
 
@@ -2817,8 +2960,8 @@ function App(props) {
   function archiveContact(id) { updContact(id, { archived: true }); }
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
-  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setEditIid(null); }
-  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setShowLog(true); }
+  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); setLogLieInitial(false); setEditIid(null); }
+  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); setLogLieInitial(false); setShowLog(true); }
   function openEditInteraction(id, entry) {
     var iid = entry.iid;
     /* Entrée sans iid (données créées avant la migration de la session) : rétro-remplir avant d'éditer, sinon la confirmation créerait un doublon */
@@ -2828,7 +2971,7 @@ function App(props) {
       if (!c) return;
       updContact(id, { interactions: (c.interactions || []).map(function (e) { return e === entry ? Object.assign({}, e, { iid: iid }) : e; }) });
     }
-    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setShowLog(true);
+    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setLogLieId(entry.lieId || ""); setLogLieLabel(entry.lieLabel || ""); setLogLieQuery(""); setLogLieErreur(""); setLogLieInitial(!!(entry.lieId || entry.lieLabel)); setShowLog(true);
   }
 
   function inviteMobile(c) {
@@ -2928,7 +3071,7 @@ function App(props) {
     var c = contacts.find(function (x) { return x.id === inviteId; });
     var t = selectedTemplate(inviteCanal, inviteRegister);
     if (!c || !t) return;
-    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor(c.interactions || [], RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType], entreprise: (c.company || "").trim() };
+    var vals = { prenom: c.firstName || displayName(c), accroche: KIT_PURE.accrocheFor((c.interactions || []).filter(function (x) { return !KIT_PURE.estSuivi(x.type); }), RENCONTRE_TYPES), dates: KIT_PURE.formatDatesList(inviteDates, inviteCanal === "mail" ? "puces" : "inline"), type: ({ petitdej: "petit-déjeuner", dejeuner: "déjeuner", diner: "dîner", verre: "verre" })[inviteType], entreprise: (c.company || "").trim() };
     setInviteObjet(KIT_PURE.cleanSubject(KIT_PURE.renderTemplate(t.objet || "", vals)));
     setInviteCorps(KIT_PURE.renderTemplate(t.corps || "", vals));
     setInviteStep("preview");
@@ -3099,7 +3242,7 @@ function App(props) {
       var lastRdvInt = null, lastContactInt = null;
       (c.interactions || []).forEach(function (x) {
         if (RENCONTRE_TYPES.indexOf(x.type) >= 0) { if (!lastRdvInt || x.date > lastRdvInt.date) lastRdvInt = x; }
-        else { if (!lastContactInt || x.date > lastContactInt.date) lastContactInt = x; }
+        else if (!KIT_PURE.estSuivi(x.type)) { if (!lastContactInt || x.date > lastContactInt.date) lastContactInt = x; }
       });
       return [
         (c.lastName || c.name || "").toUpperCase(), c.firstName || "", c.inTransition ? "Oui" : "Non",
@@ -3682,7 +3825,7 @@ function App(props) {
       var hay = KIT_PURE.contactHaystack(c);
       var hit = norm(hay).indexOf(q) >= 0;
       if (!hit) hit = KIT_PURE.matchesPhoneDigits(search, [c.phonePro, c.phonePerso, c.phone]);
-      if (!hit) hit = (c.interactions || []).some(function (x) { return x.comment && norm(x.comment).indexOf(q) >= 0; });
+      if (!hit) hit = (c.interactions || []).some(function (x) { return (x.comment && norm(x.comment).indexOf(q) >= 0) || (x.lieLabel && norm(x.lieLabel).indexOf(q) >= 0); });
       if (!hit) return false;
     }
     return true;
@@ -3762,7 +3905,8 @@ function App(props) {
     return k.contactName + " — " + k.label + (k.daysLeft === 0 ? " aujourd'hui" : " dans " + String(k.daysLeft) + " j");
   }));
   var procedureList = activeContacts.filter(function (c) { return c.procedureEtat === "en-cours"; });
-  var recapTotal = procedureList.length + followUpList.length + awaitingList.length + retryList.length + rencontreList.length + voeuxImminents.length;
+  var aRemercier = KIT_PURE.apporteurs(contacts, todayStr()).filter(function (a) { return a.aRemercier; });
+  var recapTotal = procedureList.length + followUpList.length + awaitingList.length + retryList.length + rencontreList.length + aRemercier.length + voeuxImminents.length;
   var recapVisible = KIT_PURE.recapGate(authed, data.settings.recapHebdo, recapFerme, localStorage.getItem("kitRecapSemaine"), cleSemaineCourante, recapTotal);
   var recapSections = KIT_PURE.recapSections([
     { titre: "⚠ Procédures collectives", items: procedureList.map(function (c) { return displayName(c) + " — " + (c.procedureNature || "Procédure collective") + " (" + (c.procedureDate || "date non renseignée") + ")"; }) },
@@ -3770,6 +3914,7 @@ function App(props) {
     { titre: "Relances en attente", items: awaitingList.map(function (c) { return displayName(c) + " — en attente depuis " + String(daysAwaiting(c)) + " j"; }) },
     { titre: "À recontacter", items: retryList.map(function (c) { return displayName(c) + " — dernier échange il y a " + String(daysRetry(c)) + " j"; }) },
     { titre: "Rencontres à programmer", items: rencontreList.map(function (c) { return displayName(c); }) },
+    { titre: "Apporteurs à remercier", items: aRemercier.map(function (a) { return a.label + " — " + KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") + " · dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase(); }) },
     { titre: "Vœux à prévoir", items: voeuxImminents }
   ], 5);
 
@@ -3809,7 +3954,7 @@ function App(props) {
     var mLabel = md.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
     var mCount = 0;
     activeContacts.forEach(function (c) {
-      (c.interactions || []).forEach(function (x) { if (x.date && x.date.indexOf(mKey) === 0) mCount++; });
+      (c.interactions || []).forEach(function (x) { if (x.date && x.date.indexOf(mKey) === 0 && !KIT_PURE.estSuivi(x.type)) mCount++; });
     });
     monthlyData.push({ key: mKey, label: mLabel, count: mCount });
   }
@@ -3939,38 +4084,63 @@ function App(props) {
     var c = null;
     for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === logId) { c = contacts[i]; break; } }
     if (!c) return null;
+    var suiviModal = KIT_PURE.estSuivi(logType);
+    var lieLibelle = logType === "recommandation_donnee" ? "RECOMMANDÉ À" : "APPORTEUR";
+    function suggestionsLie(query) {
+      return activeContacts.filter(function (x) { return x.id !== c.id && norm(displayName(x) + " " + (x.company || "")).indexOf(norm(query)) >= 0; });
+    }
+    function choisirType(t) {
+      setLogType(t.value); setLogRetry(t.value === "appel_message"); setLogLieErreur("");
+      if (KIT_PURE.estSuivi(t.value)) { setLogAwait(false); setLogRetry(false); }
+      else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); }
+      if (t.value === "dossier" && !editIid && !logLieId) {
+        var pre = KIT_PURE.apporteurDepuisOrigine(c.origin, activeContacts.filter(function (x) { return x.id !== c.id; }).map(function (x) { return { id: x.id, label: displayName(x), libelles: [displayName(x), contactLabel(x), x.name, x.lastName] }; }));
+        if (pre) { setLogLieId(pre.id); setLogLieLabel(pre.label); }
+      }
+    }
+    function boutonType(t) {
+      var active = logType === t.value;
+      return React.createElement("button", { key: t.value, onClick: function () { choisirType(t); }, style: { padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: active ? ac : "#64748B" } }, t.icon + " " + t.label);
+    }
     return (
       <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(15,23,42,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }} onClick={closeLogModal}>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%", position: "relative" }} onClick={function (e) { e.stopPropagation(); }}>
+        <div style={{ background: "#fff", borderRadius: 12, padding: 28, maxWidth: 460, width: "100%", position: "relative", maxHeight: "84vh", overflowY: "auto" }} onClick={function (e) { e.stopPropagation(); }}>
           <button title="Fermer" onClick={closeLogModal} style={{ position: "absolute", top: 12, right: 12, background: "transparent", border: "none", color: "#94A3B8", cursor: "pointer", fontSize: 18, lineHeight: 1, padding: 6, fontFamily: ff }}>{"✕"}</button>
           <h3 style={{ margin: "0 0 4px", fontSize: 18, color: ac }}>{editIid ? "Modifier l'interaction" : "Enregistrer un contact"}</h3>
           <p style={{ margin: "0 0 20px", color: "#64748B", fontSize: 14 }}>{displayName(c)}</p>
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>TYPE D'INTERACTION</label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-            {INTER_TYPES.filter(function (t) { return !t.legacy; }).map(function (t) {
-              var active = logType === t.value;
-              return React.createElement("button", {
-                key: t.value,
-                onClick: function () { setLogType(t.value); setLogRetry(t.value === "appel_message"); },
-                style: { padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: ff, border: active ? "2px solid " + ac : "1.5px solid " + bd, background: active ? "#EAF3F5" : "#fff", color: active ? ac : "#64748B" }
-              }, t.icon + " " + t.label);
-            })}
+            {INTER_TYPES.filter(function (t) { return !t.legacy && !KIT_PURE.estSuivi(t.value); }).map(boutonType)}
           </div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>SUIVI DU RÉSEAU</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{INTER_TYPES.filter(function (t) { return KIT_PURE.estSuivi(t.value); }).map(boutonType)}</div>
+          {suiviModal ? (
+            <div style={{ position: "relative", marginBottom: 14 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{lieLibelle}</label>
+              {logLieId ? <button onClick={function () { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); }} style={{ background: "#EFE9EE", border: "1px solid #D7CAD4", borderRadius: 999, padding: "6px 10px", color: "#475569", cursor: "pointer", fontFamily: ff }}>{logLieLabel + "  ✕"}</button> : (
+                <React.Fragment>
+                  <input value={logLieQuery} onChange={function (e) { setLogLieQuery(e.target.value); setLogLieErreur(""); }} placeholder="Nom d'une fiche de votre réseau…" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
+                  {norm(logLieQuery).length >= 1 ? <div style={{ position: "absolute", left: 0, right: 0, top: 58, maxHeight: 210, overflowY: "auto", background: "#fff", border: "1px solid " + bd, borderRadius: 8, zIndex: 2, boxShadow: "0 6px 18px rgba(15,23,42,0.12)" }}>{suggestionsLie(logLieQuery).sort(function (a, b) { return sortName(a) < sortName(b) ? -1 : sortName(a) > sortName(b) ? 1 : 0; }).slice(0, 8).map(function (x) { return <div key={x.id} onMouseDown={function () { setLogLieId(x.id); setLogLieLabel(displayName(x)); setLogLieQuery(""); setLogLieErreur(""); }} style={{ padding: "9px 10px", cursor: "pointer", borderBottom: "1px solid #ECE9E3", fontSize: 13 }}>{displayName(x) + (x.company ? " — " + x.company : "")}</div>; })}</div> : null}
+                </React.Fragment>
+              )}
+              <p style={{ margin: "5px 0 0", fontSize: 12, color: logLieErreur ? "#B45309" : "#64748B" }}>{logLieErreur || "Laissez vide si la personne n'est pas dans votre réseau."}</p>
+            </div>
+          ) : null}
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATE</label>
           <input type="date" value={logDate} onChange={function (e) { setLogDate(e.target.value); }} style={{ width: "100%", maxWidth: 200, padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", marginBottom: 14 }} />
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>COMMENTAIRE (OPTIONNEL)</label>
           <textarea value={logCmt} onChange={function (e) { setLogCmt(e.target.value); }} placeholder="Ex: Parlé du dossier X…" rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box", resize: "vertical" }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogAwait(!logAwait); }}>
+          {suiviModal ? null : (<React.Fragment><label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogAwait(!logAwait); }}>
             <span style={{ width: 18, height: 18, borderRadius: 4, border: "1.5px solid " + (logAwait ? "#2F7C8C" : bd), background: logAwait ? "#2F7C8C" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>{logAwait ? "✓" : ""}</span>
             {"⏳ En attente d'un retour (relance conseillée après " + String(FOLLOWUP_DAYS) + " jours)"}
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, cursor: "pointer", fontSize: 13, color: "#475569" }} onClick={function () { setLogRetry(!logRetry); }}>
             <span style={{ width: 18, height: 18, borderRadius: 4, border: "1.5px solid " + (logRetry ? "#2F7C8C" : bd), background: logRetry ? "#2F7C8C" : "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 12, fontWeight: 700 }}>{logRetry ? "✓" : ""}</span>
             {"🔁 Tentative de nouvel échange (relance conseillée après " + String(FOLLOWUP_RETRY_DAYS) + " jours)"}
-          </label>
+          </label></React.Fragment>)}
           <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
             <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeLogModal}>Annuler</button>
-            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { if (editIid) updateInteraction(logId, editIid, { comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: !!logAwait, retryPending: !!logRetry }); else logInteraction(logId, logCmt, logDate, logType, logAwait, logRetry); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { var awaiting = suiviModal ? false : !!logAwait; var retry = suiviModal ? false : !!logRetry; var lieId = logLieId, lieLabel = logLieLabel; if (suiviModal && !lieId && logLieQuery.trim()) { var suggestions = suggestionsLie(logLieQuery); if (suggestions.length === 1) { lieId = suggestions[0].id; lieLabel = displayName(suggestions[0]); setLogLieId(lieId); setLogLieLabel(lieLabel); } else { setLogLieErreur("Choisissez une fiche dans la liste, ou videz le champ si la personne n'est pas dans votre réseau."); return; } } var lie = suiviModal && lieId ? { lieId: lieId, lieLabel: lieLabel } : { lieId: "", lieLabel: "" }; var patchLie = suiviModal || logLieInitial ? lie : {}; if (editIid) updateInteraction(logId, editIid, Object.assign({ comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: awaiting, retryPending: retry }, patchLie)); else logInteraction(logId, logCmt, logDate, logType, awaiting, retry, suiviModal && lieId ? lie : undefined); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
           </div>
         </div>
       </div>
@@ -4220,7 +4390,7 @@ function App(props) {
               )}
             </div>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{"ORIGINE / APPORTEUR"}</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{"ORIGINE DE LA FICHE"}</label>
               <input list="kit-origins" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fOrigin} onChange={function (e) { setFOrigin(e.target.value); }} placeholder="Ex : ANDRH, Me Dupont, formation…" />
               <datalist id="kit-origins">{allOrigins.map(function (o) { return <option key={o} value={o} />; })}</datalist>
             </div>
@@ -4316,6 +4486,12 @@ function App(props) {
     var retrying = retryDays >= 0;
     var retryWarn = retryDays >= FOLLOWUP_RETRY_DAYS;
     var rawOverdue = !!cycC && rdvMonths >= cycC.warn;
+    var rec = KIT_PURE.reciprocite(c, contacts);
+    var segs = [];
+    if (rec.dossiersRecus) segs.push(KIT_PURE.pluriel(rec.dossiersRecus, "confié", "confiés"));
+    if (rec.dossiersApportes) segs.push(KIT_PURE.pluriel(rec.dossiersApportes, "apporté", "apportés"));
+    if (rec.recoDonneesParMoi) segs.push(KIT_PURE.pluriel(rec.recoDonneesParMoi, "recommandation donnée", "recommandations données"));
+    if (rec.recoRecuesDeLui) segs.push(KIT_PURE.pluriel(rec.recoRecuesDeLui, "recommandation reçue", "recommandations reçues"));
 
     return (
       <div>
@@ -4460,6 +4636,7 @@ function App(props) {
           ) : null}
 
           {c.origin ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Origine : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{c.origin}</span></p> : null}
+          {segs.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Dossiers : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{segs.join(" · ")}</span></p> : null}
           {c.notes ? <div style={{ marginTop: 14, padding: 14, background: "#FAF0D4", borderRadius: 8, borderLeft: "3px solid #B5790B" }}><p style={{ margin: 0, fontSize: 11, color: "#8A5E08", fontWeight: 600 }}>NOTES</p><p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{c.notes}</p></div> : null}
         </div>
 
@@ -4483,8 +4660,9 @@ function App(props) {
                 var typeInfo = null;
                 for (var ti = 0; ti < INTER_TYPES.length; ti++) { if (INTER_TYPES[ti].value === x.type) { typeInfo = INTER_TYPES[ti]; break; } }
                 var isRepas = RENCONTRE_TYPES.indexOf(x.type) >= 0;
-                var pillBg = isRepas ? "#FAF0D4" : "#EAF3F5";
-                var pillBorder = isRepas ? "#F1E3B4" : "#C7E0E6";
+                var isSuivi = KIT_PURE.estSuivi(x.type);
+                var pillBg = isSuivi ? "#EFE9EE" : isRepas ? "#FAF0D4" : "#EAF3F5";
+                var pillBorder = isSuivi ? "#D7CAD4" : isRepas ? "#F1E3B4" : "#C7E0E6";
                 return (
                   <div key={idx} style={{ display: "flex", gap: 14, padding: "8px 0", position: "relative" }}>
                     <div style={{ width: 32, height: 32, borderRadius: "50%", background: pillBg, border: "2px solid " + pillBorder, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0, zIndex: 1 }}>{typeInfo ? typeInfo.icon : "•"}</div>
@@ -4495,6 +4673,7 @@ function App(props) {
                         {x.awaitingResponse ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"⏳ en attente"}</span> : null}
                         {x.retryPending ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"🔁 nouvel échange"}</span> : null}
                       </p>
+                      {(x.lieId || x.lieLabel) ? <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748B" }}>{(x.type === "recommandation_donnee" ? "→ " : "via ") + (x.lieLabel || "") + (contacts.some(function (k) { return k.id === x.lieId; }) ? "" : " (fiche supprimée)")}</p> : null}
                       {x.comment ? <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#475569" }}>{x.comment}</p> : null}
                     </div>
                     <div style={{ display: "flex", alignItems: "flex-start", flexShrink: 0 }}>
@@ -4696,10 +4875,31 @@ function App(props) {
   }
 
   function renderStats() {
+    var sd = KIT_PURE.statsDossiers(contacts, todayStr(), 365);
+    var lignesApporteurs = KIT_PURE.apporteurs(contacts, todayStr());
     return (
       <div>
         {renderNav()}
         <h2 style={{ margin: "0 0 20px", fontSize: 20, color: ac }}>Statistiques</h2>
+        {(function () {
+          return (
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: 15, color: ac }}>Apporteurs</h3>
+              {lignesApporteurs.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#64748B" }}>Aucun dossier journalisé pour l'instant. Sur la fiche du client (créez-la d'abord si besoin), « Je l'ai contacté » → « Dossier confié » → indiquez l'apporteur.</p> :
+                <div style={{ overflowX: "auto" }}><div>{lignesApporteurs.map(function (a) {
+                  return (
+                    <div key={a.id} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 2fr) repeat(4, minmax(100px, 1fr))", minWidth: 560, alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
+                      <span onClick={a.existe ? function () { setSelId(a.id); setView("contact"); } : undefined} style={{ fontWeight: 600, color: a.existe ? ac : "#64748B", cursor: a.existe ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.label + (a.archivee ? " (archivée)" : "") + (a.existe ? "" : " (fiche supprimée)")}</span>
+                      <span style={{ color: "#64748B" }}>{a.dossiers > 0 ? KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") : KIT_PURE.pluriel(a.recommandationsRecues, "recommandation reçue", "recommandations reçues")}</span>
+                      <span style={{ color: "#64748B" }}>{a.dernierDossierISO ? "dernier dossier " + fmtDate(a.dernierDossierISO) : ""}</span>
+                      <span style={{ color: "#64748B" }}>{"dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase()}</span>
+                      <span>{a.aRemercier ? <span title={"aucun échange depuis le dossier du " + fmtDate(a.dernierDossierISO)} style={{ display: "inline-block", background: "#FEF3C7", color: "#92400E", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>à remercier</span> : null}</span>
+                    </div>
+                  );
+                })}</div></div>}
+            </div>
+          );
+        })()}
         {(function () {
           var og = {};
           activeContacts.forEach(function (c) { var nm = (c.origin || "").trim(); if (!nm) return; var k = norm(nm); if (!og[k]) og[k] = { name: nm, n: 0, cli: 0 }; og[k].n++; if (isClient(c)) og[k].cli++; });
@@ -4708,7 +4908,8 @@ function App(props) {
           if (!rows.length) return null;
           return (
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
-              <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: ac }}>{"Origines / apporteurs"}</p>
+              <h3 style={{ margin: "0 0 4px", fontSize: 15, color: ac }}>Origines des fiches</h3>
+              <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748B" }}>Par où la fiche est entrée dans votre réseau — les dossiers se lisent dans « Apporteurs ».</p>
               {rows.map(function (r) {
                 return (
                   <div key={r.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
@@ -4724,6 +4925,7 @@ function App(props) {
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(stTotal)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Contacts</p></div>
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: coverage >= 70 ? "#2F6055" : coverage >= 40 ? "#B5790B" : "#BE3C1A" }}>{String(coverage) + "%"}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{"Couverture (fiches suivies)"}</p></div>
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: "#BE3C1A" }}>{String(stOverdue)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>En retard</p></div>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(sd.dossiers)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Dossiers (12 mois)</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{KIT_PURE.pluriel(sd.recommandationsRecues, "recommandation reçue", "recommandations reçues") + " · " + KIT_PURE.pluriel(sd.recommandationsDonnees, "donnée", "données")}</p></div>
         </div>
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, marginBottom: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, color: ac }}>Interactions / mois</h3>
