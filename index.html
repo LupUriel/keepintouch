@@ -677,7 +677,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.6["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v48["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.7["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v49["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("stockage : niveaux et plafond", function () { kitAssert(JSON.stringify(KIT_PURE.niveauStockage(3650434)) === JSON.stringify({ pct: 70, niveau: "attention" })); kitAssert(KIT_PURE.niveauStockage(3093299).pct === 59 && KIT_PURE.niveauStockage(3093299).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage(3145728).pct === 60 && KIT_PURE.niveauStockage(3145728).niveau === "attention"); kitAssert(KIT_PURE.niveauStockage(4194304).pct === 80 && KIT_PURE.niveauStockage(4194304).niveau === "critique"); kitAssert(KIT_PURE.niveauStockage(50, 100).pct === 50 && KIT_PURE.niveauStockage(50, 100).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage("x").pct === 0 && KIT_PURE.niveauStockage("x").niveau === "ok"); });
 KIT_TESTS.add("stockage : détection du quota dépassé", function () { kitAssert(KIT_PURE.estQuotaDepasse({ name: "QuotaExceededError" })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 22 })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 1014 })); kitAssert(KIT_PURE.estQuotaDepasse({ name: "NS_ERROR_DOM_QUOTA_REACHED" })); kitAssert(!KIT_PURE.estQuotaDepasse({ name: "TypeError" })); kitAssert(!KIT_PURE.estQuotaDepasse(null)); kitAssert(!KIT_PURE.estQuotaDepasse("x")); });
 KIT_TESTS.add("récupération : dernière modification", function () { var d = { savedAt: "2026-01-01T00:00:00.000Z", contacts: [{ updatedAt: "2026-09-01T00:00:00.000Z" }] }; kitAssert(KIT_PURE.derniereModification(d) === d.savedAt); kitAssert(KIT_PURE.derniereModification({ contacts: [{ updatedAt: "2026-09-01T00:00:00.000Z" }], deletedContacts: [{ deletedAt: "2026-09-02T00:00:00.000Z" }], deletedInteractions: [{ deletedAt: "2026-09-03T00:00:00.000Z" }], settings: { updatedAt: "2026-09-04T00:00:00.000Z" } }) === "2026-09-04T00:00:00.000Z"); kitAssert(KIT_PURE.derniereModification({}) === "2000-01-01T00:00:00.000Z"); kitAssert(KIT_PURE.derniereModification(null) === "2000-01-01T00:00:00.000Z"); });
@@ -691,6 +691,14 @@ KIT_TESTS.add("retour : réglages, modèles, catégories, non-mutation", functio
 KIT_TESTS.add("retour : aller-retour avec la fusion (miroir de test)", function () { /* miroir de test des règles de mergeData ; à mettre à jour si mergeData change */ function kitFusionMini(local, importe, champs) { var tombes = {}; (local.deletedInteractions || []).concat(importe.deletedInteractions || []).forEach(function (t) { tombes[t.cid + "|" + t.iid] = true; }); var lm = {}, im = {}, out = JSON.parse(JSON.stringify(local)); (local.contacts || []).forEach(function (c) { lm[c.id] = c; }); (importe.contacts || []).forEach(function (c) { im[c.id] = c; }); out.deletedInteractions = (local.deletedInteractions || []).concat((importe.deletedInteractions || []).filter(function (t) { return !(local.deletedInteractions || []).some(function (x) { return x.cid === t.cid && x.iid === t.iid; }); })); out.contacts = []; (local.contacts || []).concat((importe.contacts || []).filter(function (c) { return !lm[c.id]; })).forEach(function (base) { var lc = lm[base.id], ic = im[base.id]; if (!lc || !ic) { out.contacts.push(JSON.parse(JSON.stringify(lc || ic))); return; } var merged = JSON.parse(JSON.stringify(lc)); merged.fieldsUpdatedAt = merged.fieldsUpdatedAt || {}; champs.forEach(function (f) { var lt = (lc.fieldsUpdatedAt || {})[f] || "", it = (ic.fieldsUpdatedAt || {})[f] || ""; if (it >= lt) { merged[f] = ic[f]; merged.fieldsUpdatedAt[f] = it; } }); var seen = {}; merged.interactions = []; (lc.interactions || []).concat(ic.interactions || []).forEach(function (x) { if (!x || seen[x.iid] || tombes[base.id + "|" + x.iid]) return; seen[x.iid] = true; merged.interactions.push(JSON.parse(JSON.stringify(x))); }); out.contacts.push(merged); }); return out; } var now = "2026-09-03T11:00:00.000Z"; var courantChamp = { contacts: [{ id: "A", notes: "", fieldsUpdatedAt: { notes: "2026-09-03T10:00:00.000Z" }, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var instChamp = { contacts: [{ id: "A", notes: "Vieille note", fieldsUpdatedAt: { notes: "2026-09-01T00:00:00.000Z" }, interactions: [] }], deletedContacts: [] }; var retourChamp = KIT_PURE.revenirAVersion(courantChamp, instChamp, now, ["notes"]).data; var exportAvecErreur = JSON.parse(JSON.stringify(courantChamp)); kitAssert(kitFusionMini(retourChamp, exportAvecErreur, ["notes"]).contacts[0].notes === "Vieille note"); kitAssert(kitFusionMini(exportAvecErreur, retourChamp, ["notes"]).contacts[0].notes === "Vieille note"); var courantInter = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [{ cid: "A", iid: "X" }], categories: [] }; var instInter = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "X" }] }], deletedContacts: [] }; var retourInter = KIT_PURE.revenirAVersion(courantInter, instInter, now, []).data; var exportOuXVit = { contacts: [{ id: "A", fieldsUpdatedAt: {}, interactions: [{ iid: "X" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; [kitFusionMini(retourInter, exportOuXVit, []), kitFusionMini(exportOuXVit, retourInter, [])].forEach(function (fusion) { kitAssert(fusion.contacts[0].interactions.length === 1 && fusion.contacts[0].interactions[0].iid === "X~r20260903110000000"); }); });
 KIT_TESTS.add("catégories après import : union ordonnée sans doublon", function () { var r = KIT_PURE.categoriesApresImport(["Client", "Prospect"], ["Confrère", "Confrère", "Client", "", "  Partenaire  ", null]); kitAssert(JSON.stringify(r) === JSON.stringify(["Client", "Prospect", "Confrère", "Partenaire"])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(["A"], [])) === JSON.stringify(["A"])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport([], ["B"])) === JSON.stringify(["B"])); var src = ["X"]; KIT_PURE.categoriesApresImport(src, ["Y"]); kitAssert(src.length === 1, "la liste d'entrée ne doit pas être mutée"); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(["Client"], ["client", "CLIENT"])) === JSON.stringify(["Client", "client", "CLIENT"]), "comparaison sensible à la casse, comme le reste de l'application"); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(null, null)) === JSON.stringify([])); kitAssert(JSON.stringify(KIT_PURE.categoriesApresImport(undefined, ["A"])) === JSON.stringify(["A"])); });
 KIT_TESTS.add("câblage import : catégories dérivées des fiches réellement enregistrées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var iImp = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("); var iFin = KIT_SOURCE_HTML.indexOf("setShowImp(false)", iImp); var corps = KIT_SOURCE_HTML.slice(iImp, iFin); kitAssert(iImp > 0 && iFin > iImp); kitAssert(/var retenues = dupes\.length > 0 \? uniques : nc;/.test(corps), "retenues = fiches effectivement enregistrées selon la branche"); kitAssert(/KIT_PURE\.categoriesApresImport\(categories, retenues\.map\(function \(c\) \{ return c\.category; \}\)\)/.test(corps), "catégories dérivées des fiches retenues, jamais des lignes rejetées"); kitAssert(corps.indexOf("var retenues =") > corps.lastIndexOf("uniques.push(newC)"), "retenues calculées après le dédoublonnage"); kitAssert(corps.indexOf("categoriesRencontrees") === -1, "plus d'accumulation parallèle"); kitAssert(corps.indexOf("addCategory(") === -1, "plus d'appel addCategory dans l'import"); kitAssert((corps.match(/categories: categoriesFinales/g) || []).length === 2, "les deux branches d'enregistrement utilisent categoriesFinales"); });
+KIT_TESTS.add("câblage save : instantané de début de journée, quota isolé, jauge", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("var save = useCallback" + "(function (partial, opts)"); var d1 = KIT_SOURCE_HTML.indexOf("}, [data]);", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert((corps.match(/saveDailySnapshot\(precedent \|\| serialized\)/g) || []).length === 2); kitAssert(corps.indexOf("saveDailySnapshot(serialized)") === -1); var s1 = corps.indexOf("localStorage.setItem(STORAGE_KEY, serialized)"); var s2 = corps.lastIndexOf("localStorage.setItem(STORAGE_KEY, serialized)"); kitAssert(s1 > 0 && s2 > s1); kitAssert(corps.lastIndexOf("var precedent", s1) >= 0 && corps.lastIndexOf("var precedent", s2) > s1); kitAssert(/KIT_PURE\.estQuotaDepasse\(/.test(corps)); kitAssert((corps.match(/KIT_STORAGE_STATUS\.notify\(serialized\.length\)/g) || []).length === 2); kitAssert((corps.match(/nd\.savedAt = nowTS\(\)/g) || []).length === 2); var c1 = corps.indexOf("} catch (eQ)"); kitAssert(c1 > 0 && corps.indexOf("KIT_TRACKED_FILE.queue(serialized)", c1) > c1, "le fichier suivi est alimenté même si setItem échoue"); });
+KIT_TESTS.add("câblage saveDailySnapshot : une écriture par jour", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("function saveDaily" + "Snapshot("); var d1 = KIT_SOURCE_HTML.indexOf("var KIT_TRACKED_FILE", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(/snapshotJourEnCours === today/.test(corps)); kitAssert(/snapshotJourEnCours = today/.test(corps)); kitAssert(KIT_SOURCE_HTML.lastIndexOf("var snapshotJourEnCours = null;", d0) >= 0); });
+KIT_TESTS.add("câblage KIT_SAVE_STATUS : raison publiée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("var KIT_SAVE_" + "STATUS"); var d1 = KIT_SOURCE_HTML.indexOf("var KIT_STORAGE_" + "STATUS", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(/function notify\(nextOk, raison\)/.test(corps)); kitAssert(/KIT_SAVE_STATUS\.subscribe\(function \(ok, raison\)/.test(KIT_SOURCE_HTML)); });
+KIT_TESTS.add("câblage Remplacer tout : sauvegarde avant écrasement, vouvoiement", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("function handleRestore" + "JSON("); var d1 = KIT_SOURCE_HTML.indexOf("reader.readAsText(file)", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(corps.indexOf("downloadJSON(") >= 0 && corps.indexOf("downloadJSON(") < corps.indexOf("save(restorePartial)")); kitAssert(corps.indexOf("kit-sauvegarde-avant-remplacement-") >= 0); kitAssert(corps.indexOf("utilise plutôt") === -1); });
+KIT_TESTS.add("câblage Revenir : un seul geste, essai à blanc, sauvegarde avant retour", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_SOURCE_HTML.indexOf("importJSONText" + "(snapshot.raw)") === -1); var d0 = KIT_SOURCE_HTML.indexOf("function revenir" + "Version("); var d1 = KIT_SOURCE_HTML.indexOf("setShowBackup(false);", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(corps.indexOf("KIT_PURE.revenirAVersion(data, inst, nowTS(), MERGE_FIELDS)") >= 0); kitAssert(corps.indexOf("kit-sauvegarde-avant-retour-") >= 0 && corps.indexOf("kit-sauvegarde-avant-retour-") < corps.indexOf("save(essai.data)")); kitAssert(corps.indexOf("confirm(") < corps.indexOf("downloadJSON(")); kitAssert(corps.indexOf("Sauvegarde de l'état précédent") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("état au début du") >= 0); });
+KIT_TESTS.add("câblage load : récupération bornée sans écriture avant décision", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d0 = KIT_SOURCE_HTML.indexOf("async function " + "load()"); var d1 = KIT_SOURCE_HTML.indexOf("load();", d0); var corps = KIT_SOURCE_HTML.slice(d0, d1); kitAssert(d0 > 0 && d1 > d0); kitAssert(/KIT_PURE\.choisirRecuperation\(/.test(corps)); kitAssert(/KIT_PURE\.candidatRecuperation\(/.test(corps)); kitAssert(/RECUPERATION_DELAI_MS/.test(corps)); kitAssert(corps.indexOf("Promise.race(") >= 0); kitAssert(corps.indexOf("KIT_PURE.derniereModification(mig.d)") < corps.indexOf('idbSet("data", mig.d)')); var q0 = corps.indexOf("if (raw && !lisible) mettreEnQuarantaine(raw)"); var q1 = corps.indexOf("setData(migrateData({ contacts: []", q0); kitAssert(q0 > 0 && q1 > q0 && corps.slice(q0, q1).indexOf("localStorage.setItem") === -1); kitAssert(KIT_SOURCE_HTML.indexOf("if (recuperationRef.current) return;") >= 0); });
+KIT_TESTS.add("câblage récupération : écran avant la garde de chargement, gestes", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var r = KIT_SOURCE_HTML.indexOf("if (recuperation) return"); var l = KIT_SOURCE_HTML.indexOf("if (loading || !data)"); kitAssert(r > 0 && l > 0 && r < l); kitAssert(KIT_SOURCE_HTML.indexOf("function Ecran" + "Recuperation(") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("kit-sauvegarde-avant-remise-a-zero-") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("quarantaine:") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("kit-crm-recup-vue") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("Vos exports et votre fichier suivi ne sont pas touchés") >= 0); });
+KIT_TESTS.add("textes d'alerte : sans « archi" + "vez », conduite à tenir", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_SOURCE_HTML.indexOf("archi" + "vez") === -1); kitAssert(KIT_SOURCE_HTML.indexOf("Espace de stockage plein") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("Espace de stockage presque plein") >= 0); kitAssert((KIT_SOURCE_HTML.match(/archiver ne libère pas d'espace/g) || []).length >= 2); kitAssert(KIT_SOURCE_HTML.indexOf("kit-crm-critique-ferme") >= 0); });
 KIT_TESTS.add("câblage Stats : répartitions sur les fiches actives", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var iStats = KIT_SOURCE_HTML.indexOf("function render" + "Stats("); var zone = KIT_SOURCE_HTML.slice(iStats, iStats + 12000); kitAssert(/Par catégorie<\/h3>[\s\S]{0,300}activeContacts\.filter\(function \(c\) \{ return c\.category === catName; \}\)/.test(zone)); kitAssert(/Par priorité<\/h3>[\s\S]{0,300}activeContacts\.filter\(function \(c\) \{ return \(c\.priority \|\| "low"\) === p\.value; \}\)/.test(zone)); kitAssert(!/\bcontacts\.filter\(function \(c\) \{ return c\.category === catName; \}\)/.test(zone)); kitAssert(/var activeContacts = contacts\.filter\(function \(c\) \{ return !c\.archived; \}\);/.test(KIT_SOURCE_HTML), "activeContacts = fiches non archivées"); });
 KIT_TESTS.add("retours de mise à jour et propagation câblés dans le document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/window\.__kitMajPrete = true/.test(KIT_SOURCE_HTML)); kitAssert(/if \(window\.__kitMajPrete\) setUpdReady\(true\);/.test(KIT_SOURCE_HTML)); kitAssert(/w\.state === "activated" && etaitControlee/.test(KIT_SOURCE_HTML), "le signal de mise à jour exige une page déjà contrôlée (jamais à la première installation)"); kitAssert(/else \{ setEffectifResults\(\[\]\); setEffectifMessage\("Rattachée\. Aucune autre fiche ne porte ce nom d'entreprise\."\); \}/.test(KIT_SOURCE_HTML), "la branche vide de la propagation doit afficher son message, jamais fermer en silence"); });
 KIT_TESTS.add("câblage : la balise Babel porte data-presets=react", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var tag = KIT_SOURCE_HTML.match(/<script[^>]*type="text\/babel"[^>]*>/); kitAssert(!!tag && /data-presets="react"/.test(tag[0]) && /data-type="module"/.test(tag[0])); });
@@ -1112,7 +1120,9 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.5.6";
+var APP_VERSION = "1.5.7";
+var RECUPERATION_DELAI_MS = 3000;
+var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
@@ -1366,21 +1376,35 @@ function idbDelete(key) {
     } catch (e) { res(); }
   });
 }
+function mettreEnQuarantaine(valeur) {
+  return idbKeys().then(function (keys) { var q = keys.filter(function (k) { return /^quarantaine:/.test(String(k)); }).sort(); var drop = q.slice(0, Math.max(0, q.length + 1 - 3)); return Promise.all(drop.map(function (k) { return idbDelete(k); })).then(function () { return idbSet("quarantaine:" + nowTS(), valeur); }); }).catch(function () {});
+}
 var KIT_SAVE_STATUS = (function () {
   var ok = true;
+  var derniereRaison = "";
   var listeners = [];
-  function notify(nextOk) { ok = !!nextOk; listeners.slice().forEach(function (cb) { cb(ok); }); }
+  function notify(nextOk, raison) { ok = !!nextOk; derniereRaison = raison || ""; listeners.slice().forEach(function (cb) { cb(ok, derniereRaison); }); }
   function subscribe(cb) {
-    listeners.push(cb); cb(ok);
+    listeners.push(cb); cb(ok, derniereRaison);
     return function () { listeners = listeners.filter(function (item) { return item !== cb; }); };
   }
+  return { notify: notify, subscribe: subscribe };
+}());
+var KIT_STORAGE_STATUS = (function () {
+  var etat = { chars: 0, pct: 0, niveau: "ok" };
+  var listeners = [];
+  function notify(chars) { var n = KIT_PURE.niveauStockage(chars); etat = { chars: Number(chars) || 0, pct: n.pct, niveau: n.niveau }; listeners.slice().forEach(function (cb) { cb(etat); }); }
+  function subscribe(cb) { listeners.push(cb); cb(etat); return function () { listeners = listeners.filter(function (x) { return x !== cb; }); }; }
   return { notify: notify, subscribe: subscribe };
 }());
 function localDateISO(date) {
   return String(date.getFullYear()).padStart(4, "0") + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
 }
+var snapshotJourEnCours = null;
 function saveDailySnapshot(serialized) {
   var today = localDateISO(new Date());
+  if (snapshotJourEnCours === today) return Promise.resolve();
+  snapshotJourEnCours = today;
   return idbKeys().then(function (keys) {
     var dates = keys.filter(function (key) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(key)); }).map(function (key) { return String(key).slice(5); });
     var plan = KIT_PURE.snapshotPlan(dates, today, 14);
@@ -1388,10 +1412,10 @@ function saveDailySnapshot(serialized) {
     return idbSet("snap:" + today, serialized).then(function () {
       return idbGet("snap:" + today);
     }).then(function (written) {
-      if (written !== serialized) return;
+      if (written !== serialized) { snapshotJourEnCours = null; return; }
       return Promise.all(plan.drop.map(function (date) { return idbDelete("snap:" + date); }));
     });
-  }).catch(function () {});
+  }).catch(function () { snapshotJourEnCours = null; });
 }
 var KIT_TRACKED_FILE = (function () {
   var handle = null;
@@ -1880,6 +1904,32 @@ function Avatar(props) {
 }
 
 /* ═══════ APP ═══════ */
+function EcranRecuperation(props) {
+  var [voirAutres, setVoirAutres] = useState(false);
+  var rec = props.recuperation;
+  function carte(cand, principale) {
+    var dateModification = String(cand.derniereModification || "").slice(0, 10);
+    return <div key={cand.key || cand.source} style={{ background: "#fff", border: "1px solid #9FCAD3", borderRadius: 10, padding: 14, marginTop: 10 }}>
+      <p style={{ margin: "0 0 5px", fontWeight: 700, color: "#235C68" }}>{cand.source === "miroir" ? "Copie de sécurité" : "Version du " + fmtDate(cand.date)}</p>
+      <p style={{ margin: "0 0 4px", fontSize: 13 }}>Dernière modification : {fmtDate(dateModification)}</p>
+      <p style={{ margin: "0 0 10px", fontSize: 13 }}>{String(cand.nbContacts) + " fiche(s)"}</p>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={function () { props.onRestaurer(cand); }} style={{ background: principale ? "#235C68" : "#fff", color: principale ? "#fff" : "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", fontWeight: 600, cursor: "pointer" }}>Restaurer cette copie</button>
+        <button onClick={function () { props.onExporter(cand); }} style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: "pointer" }}>Exporter cette copie</button>
+      </div>
+    </div>;
+  }
+  return <div style={{ minHeight: "100vh", background: "#F6F7F9", padding: "24px 16px", boxSizing: "border-box", fontFamily: "system-ui", color: "#1E293B" }}><div style={{ maxWidth: 620, margin: "40px auto", background: "#EAF3F5", border: "1px solid #9FCAD3", borderRadius: 14, padding: 20 }}>
+    <h1 style={{ margin: "0 0 12px", fontSize: 22, color: "#235C68" }}>{rec.mode === "a" ? "Vos données locales sont absentes ou illisibles" : "Vos dernières modifications n'avaient pas pu être enregistrées (espace de stockage plein) : une copie de sécurité plus récente a été conservée."}</h1>
+    <p style={{ fontSize: 14 }}>Vos exports et votre fichier suivi ne sont pas touchés tant que vous n'avez pas choisi.</p>
+    {carte(rec.choix, true)}
+    {rec.liste.length > 1 ? <button onClick={function () { setVoirAutres(!voirAutres); }} style={{ marginTop: 12, border: "none", background: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer" }}>Voir les autres copies</button> : null}
+    {voirAutres ? rec.liste.filter(function (cand) { return cand !== rec.choix; }).map(function (cand) { return carte(cand, false); }) : null}
+    {rec.mode === "b" ? <button onClick={props.onContinuer} style={{ display: "block", marginTop: 16, background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: "pointer" }}>Continuer sans restaurer</button> : null}
+    <button onClick={props.onRepartirAVide} style={{ display: "block", marginTop: 22, border: "none", background: "none", color: "#64748B", textDecoration: "underline", cursor: "pointer", fontSize: 12 }}>Repartir à vide</button>
+  </div></div>;
+}
+
 function App(props) {
   var authed = !!(props && props.authed);
   var [data, setData] = useState(null);
@@ -1899,8 +1949,16 @@ function App(props) {
   var [swBuild, setSwBuild] = useState("");
   var [mergePrev, setMergePrev] = useState(null);
   var [saveOk, setSaveOk] = useState(true);
+  var [saveRaison, setSaveRaison] = useState("");
+  var [stockage, setStockage] = useState({ chars: 0, pct: 0, niveau: "ok" });
+  var [bandeauCritiqueFerme, setBandeauCritiqueFerme] = useState(function () { try { return sessionStorage.getItem("kit-crm-critique-ferme") === "1"; } catch (e) { return false; } });
+  var [recuperation, setRecuperation] = useState(null);
+  var recuperationRef = useRef(null);
+  useEffect(function () { recuperationRef.current = recuperation; }, [recuperation]);
+  var [copiesInaccessibles, setCopiesInaccessibles] = useState(false);
   var [trackedFile, setTrackedFile] = useState({ supported: "showSaveFilePicker" in window, name: "", lastWrite: "", failed: false });
   var [snapshots, setSnapshots] = useState([]);
+  var [voirAnciennes, setVoirAnciennes] = useState(false);
   var [logCmt, setLogCmt] = useState("");
   var [logDate, setLogDate] = useState("");
   var [logType, setLogType] = useState("appel_echange");
@@ -1998,20 +2056,43 @@ function App(props) {
   useEffect(function () {
     async function load() {
       try { if (navigator.storage && navigator.storage.persist) { navigator.storage.persist().then(function (v) { setPersistOk(v); }).catch(function () {}); } } catch (e0) {}
-      try {
-        var raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          var parsed = JSON.parse(raw);
-          var mig = migrateData(parsed);
-          setData(mig.d);
-          if (mig.changed) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mig.d)); } catch (e2) { /* silent */ } }
-          idbSet("data", mig.d);
-        } else {
-          setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
+      function borne(p) { return Promise.race([p, new Promise(function (res) { setTimeout(function () { res(RECUPERATION_INDISPO); }, RECUPERATION_DELAI_MS); })]); }
+      var raw = null, parsed = null, lisible = false;
+      try { raw = localStorage.getItem(STORAGE_KEY); if (raw) { parsed = JSON.parse(raw); lisible = true; } } catch (e1) { lisible = false; }
+      var miroir = await borne(idbGet("data"));
+      var cles = await borne(idbKeys());
+      var indispo = miroir === RECUPERATION_INDISPO || cles === RECUPERATION_INDISPO;
+      if (indispo) setCopiesInaccessibles(true);
+      if (lisible) {
+        var mig = migrateData(parsed);
+        var dejaVue = false; try { dejaVue = sessionStorage.getItem("kit-crm-recup-vue") === "1"; } catch (e2) {}
+        if (!indispo && miroir && !dejaVue) {
+          var candMiroir = KIT_PURE.candidatRecuperation("miroir", "data", miroir);
+          if (candMiroir && candMiroir.nbContacts > 0 && candMiroir.derniereModification > KIT_PURE.derniereModification(mig.d)) {
+            setRecuperation({ mode: "b", choix: candMiroir, liste: [candMiroir], courant: mig.d });
+            return; /* aucune écriture, data reste null, loading reste true */
+          }
         }
-      } catch (e) {
-        setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
+        setData(mig.d);
+        if (mig.changed) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mig.d)); } catch (e3) {} }
+        idbSet("data", mig.d);
+        KIT_STORAGE_STATUS.notify(raw.length);
+        setLoading(false);
+        return;
       }
+      if (raw && !lisible) mettreEnQuarantaine(raw);
+      if (!indispo) {
+        var candidats = [];
+        if (miroir) candidats.push(KIT_PURE.candidatRecuperation("miroir", "data", miroir));
+        var clesSnap = (cles || []).filter(function (k) { return /^snap:\d{4}-\d{2}-\d{2}$/.test(String(k)); }).sort().reverse();
+        for (var i = 0; i < clesSnap.length; i++) {
+          var brut = await borne(idbGet(clesSnap[i]));
+          if (brut !== RECUPERATION_INDISPO) candidats.push(KIT_PURE.candidatRecuperation("instantane", String(clesSnap[i]), brut));
+        }
+        var choix = KIT_PURE.choisirRecuperation(candidats);
+        if (choix.choix) { setRecuperation({ mode: "a", choix: choix.choix, liste: choix.liste, courant: null }); return; }
+      }
+      setData(migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d);
       setLoading(false);
     }
     load();
@@ -2024,7 +2105,8 @@ function App(props) {
     return function () { window.removeEventListener("kit-sw-updated", hUpd); };
   }, []);
 
-  useEffect(function () { return KIT_SAVE_STATUS.subscribe(setSaveOk); }, []);
+  useEffect(function () { return KIT_SAVE_STATUS.subscribe(function (ok, raison) { setSaveOk(ok); setSaveRaison(raison || ""); }); }, []);
+  useEffect(function () { return KIT_STORAGE_STATUS.subscribe(setStockage); }, []);
 
   useEffect(function () {
     var unsubscribe = KIT_TRACKED_FILE.subscribe(setTrackedFile);
@@ -2090,28 +2172,33 @@ function App(props) {
     var verify = opts && opts.verify;
     if (verify) {
       var nd = Object.assign({}, data || {}, partial);
-      try {
-        var serialized = JSON.stringify(nd);
-        localStorage.setItem(STORAGE_KEY, serialized);
-        var back = localStorage.getItem(STORAGE_KEY) || "";
-        var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
-        if (!ok) return false;
-        KIT_SAVE_STATUS.notify(true);
-        saveDailySnapshot(serialized);
-        KIT_TRACKED_FILE.queue(serialized);
-      } catch (e) { KIT_SAVE_STATUS.notify(false); return false; }
+      nd.savedAt = nowTS();
+      var serialized = JSON.stringify(nd);
+      var precedent = null; try { precedent = localStorage.getItem(STORAGE_KEY); } catch (e0) {}
+      var ecritureOk = true, quota = false;
+      try { localStorage.setItem(STORAGE_KEY, serialized); } catch (eQ) { ecritureOk = false; quota = KIT_PURE.estQuotaDepasse(eQ); }
+      KIT_STORAGE_STATUS.notify(serialized.length);
+      if (!ecritureOk) { KIT_SAVE_STATUS.notify(false, quota ? "quota" : ""); return false; }
+      var back = localStorage.getItem(STORAGE_KEY) || "";
+      var ok = typeof verify === "function" ? !!verify(JSON.parse(back)) : back === serialized;
+      if (!ok) return false;
+      KIT_SAVE_STATUS.notify(true, "");
+      saveDailySnapshot(precedent || serialized);
+      KIT_TRACKED_FILE.queue(serialized);
       setData(nd); idbSet("data", nd);
       return true;
     }
     setData(function (prev) {
       var nd = Object.assign({}, prev || {}, partial);
-      try {
-        var serialized = JSON.stringify(nd);
-        localStorage.setItem(STORAGE_KEY, serialized);
-        KIT_SAVE_STATUS.notify(true);
-        saveDailySnapshot(serialized);
-        KIT_TRACKED_FILE.queue(serialized);
-      } catch (e) { KIT_SAVE_STATUS.notify(false); }
+      nd.savedAt = nowTS();
+      var serialized = JSON.stringify(nd);
+      var precedent = null; try { precedent = localStorage.getItem(STORAGE_KEY); } catch (e0) {}
+      var ecritureOk = true, quota = false;
+      try { localStorage.setItem(STORAGE_KEY, serialized); } catch (eQ) { ecritureOk = false; quota = KIT_PURE.estQuotaDepasse(eQ); }
+      KIT_STORAGE_STATUS.notify(serialized.length);
+      KIT_SAVE_STATUS.notify(ecritureOk, ecritureOk ? "" : (quota ? "quota" : ""));
+      saveDailySnapshot(precedent || serialized);
+      KIT_TRACKED_FILE.queue(serialized);
       idbSet("data", nd);
       return nd;
     });
@@ -2124,6 +2211,7 @@ function App(props) {
 
   useEffect(function () {
     KIT_AGENDA.setRestoreHandler(function (checkpoint) {
+      if (recuperationRef.current) return;
       try {
         var current = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
         setData(current);
@@ -2196,6 +2284,48 @@ function App(props) {
     }
   }
 
+  function exporterCopie(cand, nomPersonnalise) {
+    var backup = { version: "kit-crm-v5", exportDate: todayStr(), data: cand.data };
+    var filename = nomPersonnalise || "kit-copie-securite-" + todayStr() + ".json";
+    var json = JSON.stringify(backup, null, 2);
+    var file = null;
+    try { file = new File([json], filename, { type: "application/json" }); } catch (e) {}
+    var canShareFiles = false;
+    try { canShareFiles = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e2) {}
+    if (KIT_PURE.exportModeFor(canShareFiles) === "partage") {
+      navigator.share({ files: [file], title: "Copie de sécurité Keep In Touch" }).catch(function (error) { if (!error || error.name !== "AbortError") downloadJSON(backup, filename); });
+      return;
+    }
+    downloadJSON(backup, filename);
+  }
+
+  function restaurerCopie(cand) {
+    var mig = migrateData(JSON.parse(JSON.stringify(cand.data)));
+    setRecuperation(null);
+    save(mig.d);
+    setLoading(false);
+  }
+
+  function continuerSansRestaurer() {
+    try { sessionStorage.setItem("kit-crm-recup-vue", "1"); } catch (e) {}
+    var d = recuperation.courant;
+    setRecuperation(null);
+    setData(d);
+    setLoading(false);
+  }
+
+  function repartirAVide() {
+    if (!confirm("Repartir avec une base vide ? La copie proposée sera d'abord exportée et conservée en quarantaine.")) return;
+    if (!confirm("Dernière confirmation : toutes les fiches de cet appareil seront effacées" + (trackedFile.name ? ". Le fichier " + trackedFile.name + " sera lui aussi remplacé par une base vide" : "") + ".")) return;
+    exporterCopie(recuperation.choix, "kit-sauvegarde-avant-remise-a-zero-" + todayStr() + ".json");
+    mettreEnQuarantaine(recuperation.choix.data);
+    var vide = migrateData({ contacts: [], categories: DEFAULT_CATS.slice(), deletedContacts: [], deletedInteractions: [] }).d;
+    setRecuperation(null);
+    save(vide);
+    setLoading(false);
+  }
+
+  if (recuperation) return <EcranRecuperation recuperation={recuperation} trackedFileName={trackedFile.name} onRestaurer={restaurerCopie} onExporter={exporterCopie} onContinuer={continuerSansRestaurer} onRepartirAVide={repartirAVide} />;
   if (loading || !data) {
     return React.createElement("div", {
       style: { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "system-ui", color: "#64748B" }
@@ -3130,13 +3260,14 @@ function App(props) {
         var restored = parsed.data || parsed;
         if (!restored.contacts || !Array.isArray(restored.contacts)) { alert("Fichier invalide."); return; }
         if (!confirm("Remplacer vos " + String(contacts.length) + " contacts par " + String(restored.contacts.length) + " contacts du fichier ?")) return;
-        if (!confirm("Derni\u00e8re confirmation : cette op\u00e9ration \u00e9crase TOUT sur cet appareil (fiches, historiques, suppressions m\u00e9moris\u00e9es). Pour une synchronisation sans perte, utilise plut\u00f4t \u00ab Importer / fusionner \u00bb.")) return;
+        if (!confirm("Derni\u00e8re confirmation : cette op\u00e9ration \u00e9crase TOUT sur cet appareil (fiches, historiques, suppressions m\u00e9moris\u00e9es). Une sauvegarde de l'état actuel est d'abord téléchargée. Pour une synchronisation sans perte, utilisez plut\u00f4t \u00ab Importer / fusionner \u00bb.")) return;
         var restoreHasSettings = Object.prototype.hasOwnProperty.call(restored, "settings");
         var restoreHasTemplates = Object.prototype.hasOwnProperty.call(restored, "templates");
         var mig = migrateData(restored);
         var restorePartial = { contacts: mig.d.contacts, categories: mig.d.categories || DEFAULT_CATS.slice(), deletedContacts: mig.d.deletedContacts, deletedInteractions: mig.d.deletedInteractions };
         if (restoreHasSettings) restorePartial.settings = mig.d.settings;
         if (restoreHasTemplates) restorePartial.templates = mig.d.templates;
+        downloadJSON({ version: "kit-crm-v5", exportDate: todayStr(), data: data }, "kit-sauvegarde-avant-remplacement-" + todayStr() + ".json");
         save(restorePartial);
         alert(String(mig.d.contacts.length) + " contact(s) restaur\u00e9(s).");
         setShowBackup(false);
@@ -3155,6 +3286,21 @@ function App(props) {
       res.report.pending.forEach(function (p) { checked[p.id] = true; });
       setMergePrev({ res: res, checked: checked });
     } catch (err) { alert("Erreur: " + err.message); }
+  }
+
+  function revenirVersion(snapshot) {
+    var inst;
+    try { inst = migrateData(JSON.parse(snapshot.raw)).d; } catch (e) { alert("Cette version est illisible."); return; }
+    var essai = KIT_PURE.revenirAVersion(data, inst, nowTS(), MERGE_FIELDS);
+    var r = essai.rapport;
+    var noms = r.contactsRevenus.slice(0, 5).map(function (x) { return x.label; }).join(", ") + (r.contactsRevenus.length > 5 ? "…" : "");
+    var quand = fmtDate(snapshot.date);
+    if (!confirm("Revenir à l'état du début du " + quand + " ? Vos fiches et historiques reprendront cet état : " + String(r.champsRetablis) + " champ(s) rétabli(s), " + String(r.contactsRevenus.length) + " fiche(s) supprimée(s) depuis reviendront" + (noms ? " (" + noms + ")" : "") + ", " + String(r.interactionsRetirees) + " interaction(s) saisie(s) depuis seront retirées. Les " + String(r.contactsConserves) + " fiche(s) créée(s) depuis, vos réglages, modèles et catégories sont conservés. Une sauvegarde de l'état actuel est d'abord téléchargée.")) return;
+    var nomFichier = "kit-sauvegarde-avant-retour-" + todayStr() + ".json";
+    downloadJSON({ version: "kit-crm-v5", exportDate: todayStr(), data: data }, nomFichier);
+    save(essai.data);
+    alert("Retour effectué : " + String(r.contactsRestaures) + " fiches à l'état du " + quand + ". Sauvegarde de l'état précédent : " + nomFichier + " (dossier Téléchargements). Pour annuler ce retour, utilisez « Remplacer tout » avec ce fichier (« Importer / fusionner » ne le ré-appliquerait pas).");
+    setShowBackup(false);
   }
 
   function handleImportJSON(e) {
@@ -4768,6 +4914,9 @@ function App(props) {
         {showBackup ? (
           <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
             <p style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 600, color: "#235C68" }}>Sauvegarde et restauration</p>
+            <p style={{ margin: "0 0 5px", fontSize: 12.5, color: "#235C68" }}>{"Espace de stockage utilisé : " + stockage.pct + " % (" + stockage.chars.toLocaleString("fr-FR") + " caractères sur ~5,2 millions)."}</p>
+            {stockage.niveau !== "ok" ? <p style={{ color: "#B7791F", margin: "0 0 10px", fontSize: 12.5 }}>{"Espace de stockage utilisé à " + stockage.pct + " %. Exportez une sauvegarde régulièrement."}</p> : null}
+            {copiesInaccessibles ? <p style={{ color: "#9A3115", fontSize: 12.5 }}>Copies de sécurité inaccessibles sur cet appareil (IndexedDB ne répond pas).</p> : null}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
               <button style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={backupJSON}>{"Sauvegarder tout (JSON)"}</button>
               <button style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={shareBackupJSON}>{"Partager la sauvegarde"}</button>
@@ -4788,12 +4937,13 @@ function App(props) {
               <input type="file" accept=".json" onChange={handleImportJSON} style={{ fontSize: 13 }} />
               <div style={{ borderTop: "1px solid #9FCAD3", marginTop: 14, paddingTop: 12 }}>
                 <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#235C68" }}>Restaurer une version</p>
-                {snapshots.length ? snapshots.map(function (snapshot) { return (
+                {snapshots.length ? (voirAnciennes ? snapshots : snapshots.slice(0, 3)).map(function (snapshot) { return (
                   <div key={snapshot.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 0", borderTop: "1px solid rgba(159,202,211,0.55)" }}>
-                    <span style={{ fontSize: 12.5, color: "#235C68" }}>{fmtDate(snapshot.date) + " · " + String(snapshot.contacts) + " contact(s)"}</span>
-                    <button disabled={!snapshot.raw} onClick={function () { importJSONText(snapshot.raw); }} style={{ border: "1px solid #235C68", borderRadius: 7, background: "#fff", color: "#235C68", padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: snapshot.raw ? "pointer" : "default", fontFamily: ff }}>Restaurer</button>
+                    <span style={{ fontSize: 12.5, color: "#235C68" }}>{"état au début du " + fmtDate(snapshot.date) + " · " + String(snapshot.contacts) + " contact(s)"}</span>
+                    <button disabled={!snapshot.raw} onClick={function () { revenirVersion(snapshot); }} style={{ border: "1px solid #235C68", borderRadius: 7, background: "#fff", color: "#235C68", padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: snapshot.raw ? "pointer" : "default", fontFamily: ff }}>Revenir à cette version</button>
                   </div>
                 ); }) : <p style={{ margin: 0, fontSize: 12, color: "#64748B" }}>Aucune version quotidienne disponible.</p>}
+                {snapshots.length > 3 && !voirAnciennes ? <button onClick={function () { setVoirAnciennes(true); }} style={{ border: "none", background: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "8px 0" }}>Voir les versions plus anciennes</button> : null}
               </div>
               <p style={{ margin: "16px 0 6px", fontSize: 12.5, fontWeight: 600, color: "#9A3115" }}>{"Remplacer tout (avancé)"}</p>
               <p style={{ margin: "0 0 6px", fontSize: 11.5, color: "#9A3115" }}>{"⚠ Écrase toutes les données de cet appareil par le fichier."}</p>
@@ -4810,6 +4960,8 @@ function App(props) {
               <p style={{ margin: 0 }}>{"Application conçue par Uriel S. · © 2026"}</p>
               <p style={{ margin: 0 }}>{lastExport ? "Dernier export JSON : " + fmtDate(lastExport) : "Aucun export JSON effectué sur cet appareil."}</p>
               <p style={{ margin: 0 }}>{"Stockage persistant : " + (persistOk === true ? "accordé ✓" : persistOk === false ? "non accordé" : "—")}</p>
+              <p style={{ margin: 0 }}>{"Espace de stockage utilisé : " + stockage.pct + " % (" + stockage.chars.toLocaleString("fr-FR") + " caractères sur ~5,2 millions)."}</p>
+              {stockage.niveau !== "ok" ? <p style={{ color: "#B7791F", margin: 0 }}>{"Espace de stockage utilisé à " + stockage.pct + " %. Exportez une sauvegarde régulièrement."}</p> : null}
             </div>
           </div>
         ) : null}
@@ -4982,11 +5134,13 @@ function App(props) {
     );
   }
 
+  var nbBandeaux = ((!saveOk || trackedFile.failed) ? 1 : 0) + ((stockage.niveau === "critique" && !bandeauCritiqueFerme) ? 1 : 0);
   return (
-    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: (saveOk && !trackedFile.failed ? "16px" : "64px") + " 16px 80px" }}>
+    <div className="kit-shell" style={{ fontFamily: ff, background: "#F6F7F9", minHeight: "100vh", color: "#1E293B", maxWidth: 900, margin: "0 auto", padding: (16 + 48 * nbBandeaux) + "px 16px 80px" }}>
       <style>{KIT_CSS}</style>
-      {!saveOk ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Vos dernières modifications n'ont pas pu être enregistrées — exportez une sauvegarde</div> : null}
+      {!saveOk ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>{saveRaison === "quota" ? "Espace de stockage plein : vos dernières modifications n'ont pas été enregistrées. Exportez une sauvegarde maintenant (⋯ > Sauvegarde), puis supprimez quelques fiches inutiles — archiver ne libère pas d'espace." : "Vos dernières modifications n'ont pas pu être enregistrées — exportez une sauvegarde"}</div> : null}
       {saveOk && trackedFile.failed ? <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1100, background: "#BE3C1A", color: "#fff", padding: "12px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Le fichier suivi n'est plus accessible — re-choisissez-le</div> : null}
+      {stockage.niveau === "critique" && !bandeauCritiqueFerme ? <div role="status" style={{ position: "fixed", top: (!saveOk || trackedFile.failed) ? 48 : 0, left: 0, right: 0, zIndex: 1090, background: "#B7791F", color: "#fff", padding: "10px 16px", textAlign: "center", fontSize: 13, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>Espace de stockage presque plein ({stockage.pct} %). Exportez une sauvegarde maintenant, puis supprimez des fiches devenues inutiles — archiver ne libère pas d'espace. <button onClick={function () { try { sessionStorage.setItem("kit-crm-critique-ferme", "1"); } catch (e) {} setBandeauCritiqueFerme(true); }} style={{ marginLeft: 10, border: "1px solid #fff", borderRadius: 6, background: "transparent", color: "#fff", cursor: "pointer" }}>Fermer</button></div> : null}
       {bulkProgress ? <div role="alert" style={{ position: "fixed", inset: 0, background: "rgba(27,27,36,0.55)", zIndex: 1300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}><div style={{ background: "#fff", borderRadius: 12, padding: 24, maxWidth: 420, textAlign: "center" }}><p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: ac }}>Mise à jour des effectifs…</p><p style={{ margin: 0, fontSize: 13, color: "#475569" }}>{String(bulkProgress.done) + " / " + String(bulkProgress.total) + " — les fiches sont verrouillées pendant le lot pour éviter tout conflit."}</p></div></div> : null}
       {renderRecapModal()}
       {renderLogModal()}
