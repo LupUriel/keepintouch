@@ -86,6 +86,27 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
 
+## Dossiers et apporteurs
+
+Un dossier se note sur la fiche du CLIENT, pas sur celle de la personne qui vous l'a envoyé :
+ouvrez la fiche du client, « Je l'ai contacté », choisissez « Dossier confié » (rangée « Suivi
+du réseau »), puis indiquez l'apporteur dans le champ APPORTEUR (une fiche de votre réseau ;
+laissez vide s'il n'y est pas).
+« Recommandation reçue » se note de la même façon, sur la fiche de la personne recommandée
+(créez-la d'abord si elle n'existe pas). « Recommandation donnée » se note sur la fiche de la
+personne que vous avez recommandée, en indiquant à qui (champ RECOMMANDÉ À).
+Ces trois types ne comptent pas comme une prise de contact : ils n'effacent pas une relance,
+ne remettent pas le cycle de rencontres à zéro, ne servent pas d'accroche aux invitations et
+ne changent pas la catégorie de la fiche (passer une fiche de Prospect à Client reste votre
+geste, par « Modifier »).
+Dans Stats, le bloc « Apporteurs » montre qui vous apporte des dossiers ; la marque
+« à remercier » signale un apporteur avec qui vous n'avez eu aucun échange depuis son dernier
+dossier — un appel, un mail ou un déjeuner enregistré sur SA fiche la fait disparaître.
+Le champ « Origine de la fiche » reste libre et ne sert qu'à dire par où la fiche est entrée.
+Mettez à jour les deux appareils avant la première synchronisation contenant des dossiers.
+Une interaction modifiée après une synchronisation (commentaire, type, apporteur) ne se
+propage pas encore à l'autre appareil : ressaisissez-la ou attendez la prochaine version.
+
 ## Récapitulatif hebdomadaire
 
 À la première ouverture de chaque semaine, un récapitulatif présente les actions prioritaires

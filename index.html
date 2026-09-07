@@ -787,7 +787,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.7["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v49["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.8["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v50["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("stockage : niveaux et plafond", function () { kitAssert(JSON.stringify(KIT_PURE.niveauStockage(3650434)) === JSON.stringify({ pct: 70, niveau: "attention" })); kitAssert(KIT_PURE.niveauStockage(3093299).pct === 59 && KIT_PURE.niveauStockage(3093299).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage(3145728).pct === 60 && KIT_PURE.niveauStockage(3145728).niveau === "attention"); kitAssert(KIT_PURE.niveauStockage(4194304).pct === 80 && KIT_PURE.niveauStockage(4194304).niveau === "critique"); kitAssert(KIT_PURE.niveauStockage(50, 100).pct === 50 && KIT_PURE.niveauStockage(50, 100).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage("x").pct === 0 && KIT_PURE.niveauStockage("x").niveau === "ok"); });
 KIT_TESTS.add("stockage : détection du quota dépassé", function () { kitAssert(KIT_PURE.estQuotaDepasse({ name: "QuotaExceededError" })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 22 })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 1014 })); kitAssert(KIT_PURE.estQuotaDepasse({ name: "NS_ERROR_DOM_QUOTA_REACHED" })); kitAssert(!KIT_PURE.estQuotaDepasse({ name: "TypeError" })); kitAssert(!KIT_PURE.estQuotaDepasse(null)); kitAssert(!KIT_PURE.estQuotaDepasse("x")); });
 KIT_TESTS.add("récupération : dernière modification", function () { var d = { savedAt: "2026-01-01T00:00:00.000Z", contacts: [{ updatedAt: "2026-09-01T00:00:00.000Z" }] }; kitAssert(KIT_PURE.derniereModification(d) === d.savedAt); kitAssert(KIT_PURE.derniereModification({ contacts: [{ updatedAt: "2026-09-01T00:00:00.000Z" }], deletedContacts: [{ deletedAt: "2026-09-02T00:00:00.000Z" }], deletedInteractions: [{ deletedAt: "2026-09-03T00:00:00.000Z" }], settings: { updatedAt: "2026-09-04T00:00:00.000Z" } }) === "2026-09-04T00:00:00.000Z"); kitAssert(KIT_PURE.derniereModification({}) === "2000-01-01T00:00:00.000Z"); kitAssert(KIT_PURE.derniereModification(null) === "2000-01-01T00:00:00.000Z"); });
@@ -894,6 +894,10 @@ KIT_TESTS.add("câblage suivi : modal", function () { if (typeof KIT_SOURCE_HTML
 KIT_TESTS.add("câblage suivi : export Dernier contact hors suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), rows = KIT_SOURCE_HTML.indexOf("var rows =", debut), tranche = KIT_SOURCE_HTML.slice(debut, rows + 1500); kitAssert(tranche.indexOf("else if (!KIT_PURE." + "estSuivi(x.type))") >= 0); });
 KIT_TESTS.add("câblage suivi : accroche, graphique mensuel, recherche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), a = KIT_SOURCE_HTML.indexOf("KIT_PURE.accroche" + "For(", app), accroche = KIT_SOURCE_HTML.slice(a, a + 200), m = KIT_SOURCE_HTML.indexOf("var monthly" + "Data", app), mensuel = KIT_SOURCE_HTML.slice(m, m + 600), r = KIT_SOURCE_HTML.indexOf("if (search)", app), recherche = KIT_SOURCE_HTML.slice(r, r + 700); kitAssert(accroche.indexOf(".filter(function (x) { return !KIT_PURE." + "estSuivi(x.type); })") >= 0); kitAssert(mensuel.indexOf("!KIT_PURE." + "estSuivi(x.type)) mCount++") >= 0); kitAssert(recherche.indexOf("x." + "lieLabel") >= 0); });
 KIT_TESTS.add("câblage suivi : fiche — ligne Dossiers et historique via", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE." + "reciprocite(c, contacts)") >= 0); kitAssert(tranche.indexOf("Dossiers" + " : ") >= 0 && tranche.indexOf('"via "') >= 0 && tranche.indexOf("(fiche " + "supprimée)") >= 0); });
+KIT_TESTS.add("câblage suivi : Stats — dossiers et apporteurs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), tranche = KIT_SOURCE_HTML.slice(debut, debut + 20000), apporteurs = tranche.indexOf(">Apporteurs<"), origines = tranche.indexOf("Origines des " + "fiches"); kitAssert(tranche.indexOf("KIT_PURE.stats" + "Dossiers(") >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteurs(" + "contacts") >= 0); kitAssert(tranche.indexOf("Dossiers (12 " + "mois)") >= 0); kitAssert(origines >= 0); kitAssert(tranche.indexOf("à " + "remercier") >= 0); kitAssert(tranche.indexOf("Aucun dossier " + "journalisé") >= 0); kitAssert(apporteurs >= 0 && apporteurs < origines); });
+KIT_TESTS.add("câblage suivi : récapitulatif — apporteurs à remercier", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), debut = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), fin = KIT_SOURCE_HTML.indexOf("], 5)", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), avant = KIT_SOURCE_HTML.slice(Math.max(0, debut - 1500), debut), rencontres = tranche.indexOf("Rencontres à " + "programmer"), apporteurs = tranche.indexOf("Apporteurs à " + "remercier"), voeux = tranche.indexOf("Vœux à " + "prévoir"); kitAssert(debut >= 0 && fin > debut); kitAssert(rencontres >= 0 && rencontres < apporteurs && apporteurs < voeux); kitAssert(avant.indexOf("aRemercier." + "length") >= 0); });
+KIT_TESTS.add("câblage suivi : formulaire — origine de la fiche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE DE LA " + "FICHE") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE / " + "APPORTEUR") === -1); });
+KIT_TESTS.add("câblage suivi : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Dossiers et " + "apporteurs") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossier " + "confié") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("RECOMMANDÉ " + "À") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossiers et apporteurs (v1.5." + "8)") >= 0); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -1254,7 +1258,7 @@ var INTER_TYPES = [
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
 
 /* ── KIT_SYNC_HELPERS ── */
-var APP_VERSION = "1.5.7";
+var APP_VERSION = "1.5.8";
 var RECUPERATION_DELAI_MS = 3000;
 var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
@@ -3885,7 +3889,8 @@ function App(props) {
     return k.contactName + " — " + k.label + (k.daysLeft === 0 ? " aujourd'hui" : " dans " + String(k.daysLeft) + " j");
   }));
   var procedureList = activeContacts.filter(function (c) { return c.procedureEtat === "en-cours"; });
-  var recapTotal = procedureList.length + followUpList.length + awaitingList.length + retryList.length + rencontreList.length + voeuxImminents.length;
+  var aRemercier = KIT_PURE.apporteurs(contacts, todayStr()).filter(function (a) { return a.aRemercier; });
+  var recapTotal = procedureList.length + followUpList.length + awaitingList.length + retryList.length + rencontreList.length + aRemercier.length + voeuxImminents.length;
   var recapVisible = KIT_PURE.recapGate(authed, data.settings.recapHebdo, recapFerme, localStorage.getItem("kitRecapSemaine"), cleSemaineCourante, recapTotal);
   var recapSections = KIT_PURE.recapSections([
     { titre: "⚠ Procédures collectives", items: procedureList.map(function (c) { return displayName(c) + " — " + (c.procedureNature || "Procédure collective") + " (" + (c.procedureDate || "date non renseignée") + ")"; }) },
@@ -3893,6 +3898,7 @@ function App(props) {
     { titre: "Relances en attente", items: awaitingList.map(function (c) { return displayName(c) + " — en attente depuis " + String(daysAwaiting(c)) + " j"; }) },
     { titre: "À recontacter", items: retryList.map(function (c) { return displayName(c) + " — dernier échange il y a " + String(daysRetry(c)) + " j"; }) },
     { titre: "Rencontres à programmer", items: rencontreList.map(function (c) { return displayName(c); }) },
+    { titre: "Apporteurs à remercier", items: aRemercier.map(function (a) { return a.label + " — " + KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") + " · dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase(); }) },
     { titre: "Vœux à prévoir", items: voeuxImminents }
   ], 5);
 
@@ -4365,7 +4371,7 @@ function App(props) {
               )}
             </div>
             <div>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{"ORIGINE / APPORTEUR"}</label>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{"ORIGINE DE LA FICHE"}</label>
               <input list="kit-origins" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} value={fOrigin} onChange={function (e) { setFOrigin(e.target.value); }} placeholder="Ex : ANDRH, Me Dupont, formation…" />
               <datalist id="kit-origins">{allOrigins.map(function (o) { return <option key={o} value={o} />; })}</datalist>
             </div>
@@ -4850,10 +4856,31 @@ function App(props) {
   }
 
   function renderStats() {
+    var sd = KIT_PURE.statsDossiers(contacts, todayStr(), 365);
+    var lignesApporteurs = KIT_PURE.apporteurs(contacts, todayStr());
     return (
       <div>
         {renderNav()}
         <h2 style={{ margin: "0 0 20px", fontSize: 20, color: ac }}>Statistiques</h2>
+        {(function () {
+          return (
+            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
+              <h3 style={{ margin: "0 0 10px", fontSize: 15, color: ac }}>Apporteurs</h3>
+              {lignesApporteurs.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#64748B" }}>Aucun dossier journalisé pour l'instant. Sur la fiche du client (créez-la d'abord si besoin), « Je l'ai contacté » → « Dossier confié » → indiquez l'apporteur.</p> :
+                <div>{lignesApporteurs.map(function (a) {
+                  return (
+                    <div key={a.id} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 2fr) repeat(4, minmax(100px, 1fr))", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
+                      <span onClick={a.existe ? function () { setSelId(a.id); setView("contact"); } : undefined} style={{ fontWeight: 600, color: a.existe ? ac : "#64748B", cursor: a.existe ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.label + (a.archivee ? " (archivée)" : "") + (a.existe ? "" : " (fiche supprimée)")}</span>
+                      <span style={{ color: "#64748B" }}>{a.dossiers > 0 ? KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") : KIT_PURE.pluriel(a.recommandationsRecues, "recommandation reçue", "recommandations reçues")}</span>
+                      <span style={{ color: "#64748B" }}>{a.dernierDossierISO ? "dernier dossier " + fmtDate(a.dernierDossierISO) : ""}</span>
+                      <span style={{ color: "#64748B" }}>{"dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase()}</span>
+                      <span>{a.aRemercier ? <span title={"aucun échange depuis le dossier du " + fmtDate(a.dernierDossierISO)} style={{ display: "inline-block", background: "#FEF3C7", color: "#92400E", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>à remercier</span> : null}</span>
+                    </div>
+                  );
+                })}</div>}
+            </div>
+          );
+        })()}
         {(function () {
           var og = {};
           activeContacts.forEach(function (c) { var nm = (c.origin || "").trim(); if (!nm) return; var k = norm(nm); if (!og[k]) og[k] = { name: nm, n: 0, cli: 0 }; og[k].n++; if (isClient(c)) og[k].cli++; });
@@ -4862,7 +4889,8 @@ function App(props) {
           if (!rows.length) return null;
           return (
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
-              <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: ac }}>{"Origines / apporteurs"}</p>
+              <h3 style={{ margin: "0 0 4px", fontSize: 15, color: ac }}>Origines des fiches</h3>
+              <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748B" }}>Par où la fiche est entrée dans votre réseau — les dossiers se lisent dans « Apporteurs ».</p>
               {rows.map(function (r) {
                 return (
                   <div key={r.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
@@ -4878,6 +4906,7 @@ function App(props) {
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(stTotal)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Contacts</p></div>
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: coverage >= 70 ? "#2F6055" : coverage >= 40 ? "#B5790B" : "#BE3C1A" }}>{String(coverage) + "%"}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{"Couverture (fiches suivies)"}</p></div>
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: "#BE3C1A" }}>{String(stOverdue)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>En retard</p></div>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(sd.dossiers)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Dossiers (12 mois)</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{KIT_PURE.pluriel(sd.recommandationsRecues, "recommandation reçue", "recommandations reçues") + " · " + KIT_PURE.pluriel(sd.recommandationsDonnees, "donnée", "données")}</p></div>
         </div>
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, marginBottom: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, color: ac }}>Interactions / mois</h3>
