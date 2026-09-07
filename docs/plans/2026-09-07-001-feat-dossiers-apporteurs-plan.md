@@ -87,6 +87,10 @@ Conséquences à ne pas introduire : un « dossier » n'est **pas** une prise de
 - Excel : l'export/import Excel ne transporte pas les dossiers (l'import ne recrée que « Dernière rencontre » et « Dernier contact ») ; seuls le fichier JSON / la fusion les portent.
 - Les dossiers antérieurs au chantier n'existent pas : les statistiques partent de zéro ; ressaisie manuelle possible avec date rétroactive.
 
+### R8 bis. Catégorie « Avocat / EC » (décision utilisateur du 2026-09-07 au soir, ajoutée en cours de chantier)
+
+- `DEFAULT_CATS = ["Client", "Prospect", "Avocat / EC"]` ; `migrateData` ajoute à `d.categories` toute catégorie par défaut manquante (à la fin, sans doublon, fiches inchangées ; `categories` absent → `DEFAULT_CATS`). Il n'existe aucune suppression de catégorie dans l'application, donc aucune ré-apparition indésirable. Tests : migration d'une liste `["Client", "Prospect"]` → ajout et `changed === true` ; liste complète → inchangée sans doublon ; `DEFAULT_CATS` contient la catégorie. LISEZMOI (phrase dans « Dossiers et apporteurs ») et RECETTE (une case). Unité DA-U4.
+
 ### R9. Versions
 
 Trois modifications, en DA-U2b seulement : `APP_VERSION = "1.5.8"` (index.html), `CACHE_NAME = "kit-crm-v50"` (sw.js), test « version applicative du document » → `/var APP_VERSION = ["']1\.5\.8["']/` et `/var CACHE_NAME = ["']kit-crm-v50["']/`. Aucune autre occurrence (LISEZMOI, RECETTE, manifest, footer dérivé).
