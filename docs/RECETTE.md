@@ -17,6 +17,7 @@
 - [ ] Sur une fiche cliente (données synthétiques), « Je l'ai contacté » → « Dossier confié » avec un apporteur : l'historique affiche « via <apporteur> », la relance planifiée et l'état « en attente » de la fiche sont conservés, « Dernière rencontre » inchangée
 - [ ] Stats > Apporteurs : l'apporteur apparaît avec « à remercier » ; un « Appel avec échange » enregistré sur SA fiche à une date ≥ celle du dossier fait disparaître la marque ; la section « Apporteurs à remercier » du récapitulatif suit
 - [ ] Dans le modal, taper le début du nom de l'apporteur sans cliquer la suggestion puis « Confirmer » : si une seule fiche correspond elle est retenue, sinon le message « Choisissez une fiche dans la liste… » s'affiche et rien n'est enregistré
+- [ ] Après mise à jour, le formulaire d'une fiche propose la catégorie « Avocat / EC » (PC et Samsung), sans doublon après synchronisation
 
 ## Récupération au démarrage (procédure de test, données synthétiques uniquement)
 

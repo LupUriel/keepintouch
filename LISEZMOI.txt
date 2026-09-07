@@ -106,6 +106,7 @@ Le champ « Origine de la fiche » reste libre et ne sert qu'à dire par où la 
 Mettez à jour les deux appareils avant la première synchronisation contenant des dossiers.
 Une interaction modifiée après une synchronisation (commentaire, type, apporteur) ne se
 propage pas encore à l'autre appareil : ressaisissez-la ou attendez la prochaine version.
+La catégorie « Avocat / EC » (avocats et experts-comptables, vos apporteurs habituels) est ajoutée automatiquement à vos catégories à la mise à jour ; vous pouvez toujours en créer d'autres depuis le formulaire d'une fiche.
 
 ## Récapitulatif hebdomadaire
 
