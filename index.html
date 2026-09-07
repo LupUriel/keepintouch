@@ -523,7 +523,7 @@ var KIT_PURE = (function () {
         var pToday = String(todayISO || "").split("-"), pEchange = ligne.dernierEchangeISO.split("-");
         ligne.joursDepuisEchange = Math.round((Date.UTC(Number(pToday[0]), Number(pToday[1]) - 1, Number(pToday[2])) - Date.UTC(Number(pEchange[0]), Number(pEchange[1]) - 1, Number(pEchange[2]))) / 86400000);
       }
-      ligne.aRemercier = ligne.dossiers > 0 && (ligne.dernierEchangeISO === null || ligne.dernierEchangeISO < ligne.dernierDossierISO);
+      ligne.aRemercier = ligne.existe && ligne.dossiers > 0 && (ligne.dernierEchangeISO === null || ligne.dernierEchangeISO < ligne.dernierDossierISO);
       delete ligne._labelDate;
     });
     return Object.keys(lignes).map(function (id) { return lignes[id]; }).sort(function (a, b) {
@@ -544,6 +544,7 @@ var KIT_PURE = (function () {
       if (interaction.type === "dossier") resultat.dossiersRecus += 1;
       if (interaction.type === "recommandation_donnee") resultat.recoDonneesParMoi += 1;
     });
+    if (typeof cibleId !== "string" || !cibleId) return resultat;
     (Array.isArray(contacts) ? contacts : []).forEach(function (fiche) {
       if (!fiche || fiche.id === cibleId) return;
       (Array.isArray(fiche.interactions) ? fiche.interactions : []).forEach(function (interaction) {
@@ -898,6 +899,15 @@ KIT_TESTS.add("câblage suivi : Stats — dossiers et apporteurs", function () {
 KIT_TESTS.add("câblage suivi : récapitulatif — apporteurs à remercier", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), debut = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), fin = KIT_SOURCE_HTML.indexOf("], 5)", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), avant = KIT_SOURCE_HTML.slice(Math.max(0, debut - 1500), debut), rencontres = tranche.indexOf("Rencontres à " + "programmer"), apporteurs = tranche.indexOf("Apporteurs à " + "remercier"), voeux = tranche.indexOf("Vœux à " + "prévoir"); kitAssert(debut >= 0 && fin > debut); kitAssert(rencontres >= 0 && rencontres < apporteurs && apporteurs < voeux); kitAssert(avant.indexOf("aRemercier." + "length") >= 0); });
 KIT_TESTS.add("câblage suivi : formulaire — origine de la fiche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE DE LA " + "FICHE") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE / " + "APPORTEUR") === -1); });
 KIT_TESTS.add("câblage suivi : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Dossiers et " + "apporteurs") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossier " + "confié") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("RECOMMANDÉ " + "À") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossiers et apporteurs (v1.5." + "8)") >= 0); });
+KIT_TESTS.add("suivi : correctifs apporteurs et réciprocité", function () { var base = [{ id: "A", interactions: [{ type: "email", date: "2026-06-01" }, { type: "dossier", date: "2026-08-01", lieId: "Q" }] }, { id: "X", interactions: [{ type: "dossier", date: "2026-06-15", lieId: "A" }, { type: "recommandation_donnee", date: "2026-08-01", lieId: "D", lieLabel: "Destinataire" }] }]; var lignes = KIT_PURE.apporteurs(base, "2026-09-07"); kitAssert(lignes.filter(function (x) { return x.id === "A"; })[0].aRemercier === true); kitAssert(!lignes.some(function (x) { return x.id === "D"; })); kitAssert(KIT_PURE.apporteurs([{ id: "X", interactions: [{ type: "dossier", date: "2026-01-01", lieId: "", lieLabel: "" }] }], "2026-09-07").length === 0); var disparue = KIT_PURE.apporteurs([{ id: "X", interactions: [{ type: "dossier", date: "2026-01-01", lieId: "Z", lieLabel: "Supprimée" }] }], "2026-09-07")[0]; kitAssert(disparue.existe === false && disparue.aRemercier === false); var contacts = [{ id: "X", interactions: [{ type: "dossier", lieId: "A" }, { type: "recommandation_recue", lieId: "X" }] }, { id: "A", interactions: [] }]; kitAssert(KIT_PURE.reciprocite(contacts[0], contacts).dossiersRecus === 1); kitAssert(KIT_PURE.reciprocite({ interactions: [] }, contacts).dossiersApportes === 0); });
+KIT_TESTS.add("suivi : apporteur depuis l'origine — libellé court", function () { var candidats = [{ id: "a", label: "Jean DUPONT", libelles: ["DUPONT"] }, { id: "c", label: "Du", libelles: ["Du"] }]; kitAssert(KIT_PURE.apporteurDepuisOrigine("Du", candidats) === null); kitAssert(KIT_PURE.apporteurDepuisOrigine("dupont", candidats).id === "a"); });
+KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
+KIT_TESTS.add("câblage suivi : édition conserve la fiche liée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function open" + "EditInteraction("), fin = KIT_SOURCE_HTML.indexOf("function invite" + "Mobile(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("setLogLieId(entry." + 'lieId || "")') >= 0); kitAssert(tranche.indexOf("setLogLieLabel(entry." + 'lieLabel || "")') >= 0); });
+KIT_TESTS.add("câblage suivi : édition sans lien n'ajoute pas de clés vides", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("logLieInitial") >= 0 && tranche.indexOf("logLieInitial") < tranche.indexOf("Mettre à " + "jour")); });
+KIT_TESTS.add("câblage suivi : Stats — apporteurs sans débordement", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), overflow = tranche.indexOf('overflowX: "' + 'auto"'), origines = tranche.indexOf("Origines des " + "fiches"); kitAssert(overflow >= 0 && overflow < origines); });
+KIT_TESTS.add("câblage suivi : détails renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var detailDebut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), detailFin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", detailDebut), detail = KIT_SOURCE_HTML.slice(detailDebut, detailFin), recus = detail.indexOf("rec." + 'dossiersRecus, "confié"'), apportes = detail.indexOf("rec." + 'dossiersApportes, "apporté"'); kitAssert(recus >= 0 && apportes > recus); kitAssert(detail.indexOf('recommandation_donnee" ? "' + '→ " : "via "') >= 0); var statsDebut = detailFin, statsFin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", statsDebut), stats = KIT_SOURCE_HTML.slice(statsDebut, statsFin); kitAssert(stats.indexOf("String(sd." + "dossiers)") >= 0); kitAssert(stats.indexOf("sd." + 'recommandationsRecues, "recommandation reçue"') > stats.indexOf("String(sd." + "dossiers)")); kitAssert(stats.indexOf("sd." + 'recommandationsDonnees, "donnée"') > stats.indexOf("sd." + 'recommandationsRecues, "recommandation reçue"')); kitAssert(stats.indexOf("KIT_PURE.statsDossiers(contacts, " + "todayStr(), 365)") >= 0); kitAssert(stats.indexOf("{a." + "aRemercier ? <span title=") >= 0); kitAssert(stats.indexOf("lignesApporteurs.length === " + "0 ?") >= 0); });
+KIT_TESTS.add("câblage suivi : modal et récapitulatif renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("!t.legacy && !KIT_PURE." + "estSuivi(t.value)") >= 0); kitAssert(tranche.indexOf('else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery("");') >= 0); kitAssert(tranche.indexOf('t.value === "dossier" && !editIid && !' + "logLieId") >= 0); kitAssert(tranche.indexOf("var lie = suiviModal && " + "lieId") >= 0); var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), recap = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), avant = KIT_SOURCE_HTML.slice(Math.max(0, recap - 1500), recap); kitAssert(avant.indexOf("KIT_PURE.apporteurs(contacts, todayStr()).filter(function (a) { return a." + "aRemercier; })") >= 0); });
+KIT_TESTS.add("suivi : fusion conserve la fiche liée", function () { if (typeof mergeData === "undefined") return; var pc = { contacts: [{ id: "X", updatedAt: "2026-09-02T00:00:00.000Z", interactions: [{ iid: "s1", type: "dossier", date: "2026-09-01", lieId: "ap1", lieLabel: "Jean DUPONT" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var android = { contacts: [{ id: "X", updatedAt: "2026-09-01T00:00:00.000Z", interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var fusion = mergeData(android, pc), interaction = fusion.contacts[0].interactions[0]; kitAssert(interaction.lieId === "ap1" && interaction.lieLabel === "Jean DUPONT"); android.deletedInteractions = [{ cid: "X", iid: "s1" }]; kitAssert(mergeData(android, pc).contacts[0].interactions.length === 0); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
 KIT_TESTS.add("AE1 trigramme CME libère le déjeuner", function () { var e = graphEvent("CME — RDV client", "busy", "2026-08-03T12:00:00.0000000", "2026-08-03T14:00:00.0000000"); kitAssert(KIT_PURE.candidateDates("2026-07-31", [e], "dejeuner", true, candidateSettings())[0] === "2026-08-03"); });
@@ -2103,6 +2113,8 @@ function App(props) {
   var [logLieId, setLogLieId] = useState("");
   var [logLieLabel, setLogLieLabel] = useState("");
   var [logLieQuery, setLogLieQuery] = useState("");
+  var [logLieErreur, setLogLieErreur] = useState("");
+  var [logLieInitial, setLogLieInitial] = useState(false);
   var [showLog, setShowLog] = useState(false);
   var [logId, setLogId] = useState(null);
   var [editIid, setEditIid] = useState(null);
@@ -2944,8 +2956,8 @@ function App(props) {
   function archiveContact(id) { updContact(id, { archived: true }); }
   function unarchiveContact(id) { updContact(id, { archived: false }); }
 
-  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setEditIid(null); }
-  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setShowLog(true); }
+  function closeLogModal() { setShowLog(false); setLogCmt(""); setLogDate(""); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); setLogLieInitial(false); setEditIid(null); }
+  function openLogModal(id) { setEditIid(null); setLogId(id); setLogCmt(""); setLogDate(todayStr()); setLogType("appel_echange"); setLogAwait(false); setLogRetry(false); setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); setLogLieInitial(false); setShowLog(true); }
   function openEditInteraction(id, entry) {
     var iid = entry.iid;
     /* Entrée sans iid (données créées avant la migration de la session) : rétro-remplir avant d'éditer, sinon la confirmation créerait un doublon */
@@ -2955,7 +2967,7 @@ function App(props) {
       if (!c) return;
       updContact(id, { interactions: (c.interactions || []).map(function (e) { return e === entry ? Object.assign({}, e, { iid: iid }) : e; }) });
     }
-    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setLogLieId(entry.lieId || ""); setLogLieLabel(entry.lieLabel || ""); setLogLieQuery(""); setShowLog(true);
+    setLogId(id); setEditIid(iid); setLogCmt(entry.comment || ""); setLogDate(entry.date || todayStr()); setLogType(entry.type || "autre"); setLogAwait(!!entry.awaitingResponse); setLogRetry(!!entry.retryPending); setLogLieId(entry.lieId || ""); setLogLieLabel(entry.lieLabel || ""); setLogLieQuery(""); setLogLieErreur(""); setLogLieInitial(!!(entry.lieId || entry.lieLabel)); setShowLog(true);
   }
 
   function inviteMobile(c) {
@@ -4070,10 +4082,13 @@ function App(props) {
     if (!c) return null;
     var suiviModal = KIT_PURE.estSuivi(logType);
     var lieLibelle = logType === "recommandation_donnee" ? "RECOMMANDÉ À" : "APPORTEUR";
+    function suggestionsLie(query) {
+      return activeContacts.filter(function (x) { return x.id !== c.id && norm(displayName(x) + " " + (x.company || "")).indexOf(norm(query)) >= 0; });
+    }
     function choisirType(t) {
-      setLogType(t.value); setLogRetry(t.value === "appel_message");
+      setLogType(t.value); setLogRetry(t.value === "appel_message"); setLogLieErreur("");
       if (KIT_PURE.estSuivi(t.value)) { setLogAwait(false); setLogRetry(false); }
-      else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); }
+      else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); }
       if (t.value === "dossier" && !editIid && !logLieId) {
         var pre = KIT_PURE.apporteurDepuisOrigine(c.origin, activeContacts.filter(function (x) { return x.id !== c.id; }).map(function (x) { return { id: x.id, label: displayName(x), libelles: [displayName(x), contactLabel(x), x.name, x.lastName] }; }));
         if (pre) { setLogLieId(pre.id); setLogLieLabel(pre.label); }
@@ -4098,13 +4113,13 @@ function App(props) {
           {suiviModal ? (
             <div style={{ position: "relative", marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{lieLibelle}</label>
-              {logLieId ? <button onClick={function () { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); }} style={{ background: "#EFE9EE", border: "1px solid #D7CAD4", borderRadius: 999, padding: "6px 10px", color: "#475569", cursor: "pointer", fontFamily: ff }}>{logLieLabel + "  ✕"}</button> : (
+              {logLieId ? <button onClick={function () { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); }} style={{ background: "#EFE9EE", border: "1px solid #D7CAD4", borderRadius: 999, padding: "6px 10px", color: "#475569", cursor: "pointer", fontFamily: ff }}>{logLieLabel + "  ✕"}</button> : (
                 <React.Fragment>
-                  <input value={logLieQuery} onChange={function (e) { setLogLieQuery(e.target.value); }} placeholder="Nom d'une fiche de votre réseau…" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
-                  {norm(logLieQuery).length >= 1 ? <div style={{ position: "absolute", left: 0, right: 0, top: 58, maxHeight: 210, overflowY: "auto", background: "#fff", border: "1px solid " + bd, borderRadius: 8, zIndex: 2, boxShadow: "0 6px 18px rgba(15,23,42,0.12)" }}>{activeContacts.filter(function (x) { return x.id !== c.id && norm(displayName(x) + " " + (x.company || "")).indexOf(norm(logLieQuery)) >= 0; }).sort(function (a, b) { return sortName(a) < sortName(b) ? -1 : sortName(a) > sortName(b) ? 1 : 0; }).slice(0, 8).map(function (x) { return <div key={x.id} onMouseDown={function () { setLogLieId(x.id); setLogLieLabel(displayName(x)); setLogLieQuery(""); }} style={{ padding: "9px 10px", cursor: "pointer", borderBottom: "1px solid #ECE9E3", fontSize: 13 }}>{displayName(x) + (x.company ? " — " + x.company : "")}</div>; })}</div> : null}
+                  <input value={logLieQuery} onChange={function (e) { setLogLieQuery(e.target.value); setLogLieErreur(""); }} placeholder="Nom d'une fiche de votre réseau…" style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }} />
+                  {norm(logLieQuery).length >= 1 ? <div style={{ position: "absolute", left: 0, right: 0, top: 58, maxHeight: 210, overflowY: "auto", background: "#fff", border: "1px solid " + bd, borderRadius: 8, zIndex: 2, boxShadow: "0 6px 18px rgba(15,23,42,0.12)" }}>{suggestionsLie(logLieQuery).sort(function (a, b) { return sortName(a) < sortName(b) ? -1 : sortName(a) > sortName(b) ? 1 : 0; }).slice(0, 8).map(function (x) { return <div key={x.id} onMouseDown={function () { setLogLieId(x.id); setLogLieLabel(displayName(x)); setLogLieQuery(""); setLogLieErreur(""); }} style={{ padding: "9px 10px", cursor: "pointer", borderBottom: "1px solid #ECE9E3", fontSize: 13 }}>{displayName(x) + (x.company ? " — " + x.company : "")}</div>; })}</div> : null}
                 </React.Fragment>
               )}
-              <p style={{ margin: "5px 0 0", fontSize: 12, color: "#64748B" }}>Laissez vide si la personne n'est pas dans votre réseau.</p>
+              <p style={{ margin: "5px 0 0", fontSize: 12, color: logLieErreur ? "#B45309" : "#64748B" }}>{logLieErreur || "Laissez vide si la personne n'est pas dans votre réseau."}</p>
             </div>
           ) : null}
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATE</label>
@@ -4121,7 +4136,7 @@ function App(props) {
           </label></React.Fragment>)}
           <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
             <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeLogModal}>Annuler</button>
-            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { var awaiting = suiviModal ? false : !!logAwait; var retry = suiviModal ? false : !!logRetry; var lie = suiviModal && logLieId ? { lieId: logLieId, lieLabel: logLieLabel } : { lieId: "", lieLabel: "" }; if (editIid) updateInteraction(logId, editIid, Object.assign({ comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: awaiting, retryPending: retry }, lie)); else logInteraction(logId, logCmt, logDate, logType, awaiting, retry, suiviModal && logLieId ? lie : undefined); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { var awaiting = suiviModal ? false : !!logAwait; var retry = suiviModal ? false : !!logRetry; var lieId = logLieId, lieLabel = logLieLabel; if (suiviModal && !lieId && logLieQuery.trim()) { var suggestions = suggestionsLie(logLieQuery); if (suggestions.length === 1) { lieId = suggestions[0].id; lieLabel = displayName(suggestions[0]); setLogLieId(lieId); setLogLieLabel(lieLabel); } else { setLogLieErreur("Choisissez une fiche dans la liste, ou videz le champ si la personne n'est pas dans votre réseau."); return; } } var lie = suiviModal && lieId ? { lieId: lieId, lieLabel: lieLabel } : { lieId: "", lieLabel: "" }; var patchLie = suiviModal || logLieInitial ? lie : {}; if (editIid) updateInteraction(logId, editIid, Object.assign({ comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: awaiting, retryPending: retry }, patchLie)); else logInteraction(logId, logCmt, logDate, logType, awaiting, retry, suiviModal && lieId ? lie : undefined); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
           </div>
         </div>
       </div>
@@ -4867,9 +4882,9 @@ function App(props) {
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
               <h3 style={{ margin: "0 0 10px", fontSize: 15, color: ac }}>Apporteurs</h3>
               {lignesApporteurs.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#64748B" }}>Aucun dossier journalisé pour l'instant. Sur la fiche du client (créez-la d'abord si besoin), « Je l'ai contacté » → « Dossier confié » → indiquez l'apporteur.</p> :
-                <div>{lignesApporteurs.map(function (a) {
+                <div style={{ overflowX: "auto" }}><div>{lignesApporteurs.map(function (a) {
                   return (
-                    <div key={a.id} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 2fr) repeat(4, minmax(100px, 1fr))", alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
+                    <div key={a.id} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 2fr) repeat(4, minmax(100px, 1fr))", minWidth: 560, alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
                       <span onClick={a.existe ? function () { setSelId(a.id); setView("contact"); } : undefined} style={{ fontWeight: 600, color: a.existe ? ac : "#64748B", cursor: a.existe ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.label + (a.archivee ? " (archivée)" : "") + (a.existe ? "" : " (fiche supprimée)")}</span>
                       <span style={{ color: "#64748B" }}>{a.dossiers > 0 ? KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") : KIT_PURE.pluriel(a.recommandationsRecues, "recommandation reçue", "recommandations reçues")}</span>
                       <span style={{ color: "#64748B" }}>{a.dernierDossierISO ? "dernier dossier " + fmtDate(a.dernierDossierISO) : ""}</span>
@@ -4877,7 +4892,7 @@ function App(props) {
                       <span>{a.aRemercier ? <span title={"aucun échange depuis le dossier du " + fmtDate(a.dernierDossierISO)} style={{ display: "inline-block", background: "#FEF3C7", color: "#92400E", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>à remercier</span> : null}</span>
                     </div>
                   );
-                })}</div>}
+                })}</div></div>}
             </div>
           );
         })()}
