@@ -727,6 +727,7 @@ KIT_TESTS.add("effectifs classement stable à scores non nuls égaux", function 
 KIT_TESTS.add("effectifs similarité : un code postal commun seul donne aussi le bonus (choix figé)", function () { kitAssert(KIT_PURE.adresseSimilarity("14 faubourg Reclus 73000 Chambéry", "9 impasse Voltaire 73000 Chambéry") === 4); });
 KIT_TESTS.add("effectifs URL : liste blanche stricte des paramètres", function () { [KIT_PURE.effectifSearchUrl("A & B"), KIT_PURE.effectifSearchUrl("A & B", "73000"), KIT_PURE.effectifSearchUrl("X", "bad")].forEach(function (url) { var query = url.split("?")[1] || ""; query.split("&").forEach(function (pair) { var key = pair.split("=")[0]; kitAssert(key === "q" || key === "per_page" || key === "code_postal", key); }); }); });
 KIT_TESTS.add("effectifs câblage : l'interface passe le code postal et classe les candidates", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || (/effectifSearchUrl\(c\.company, codePostal\)/.test(KIT_SOURCE_HTML) && /effectifSearchUrl\(target\.cle, codePostal\)/.test(KIT_SOURCE_HTML) && /setEffectifResults\(KIT_PURE\.rankEffectifCandidates\(results \|\| \[\]/.test(KIT_SOURCE_HTML) && /setEffectifResults\(KIT_PURE\.rankEffectifCandidates\(item\.results \|\| \[\]/.test(KIT_SOURCE_HTML))); });
+KIT_TESTS.add("câblage activité : hook contactsRef en tête du composant", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function App" + "("), fin = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("var contactsRef = " + "useRef(contacts)"), b = tranche.indexOf("var effectifReqSeq = " + "useRef(0)"), c = tranche.indexOf("if (recuperation) " + "return"), courant = tranche.indexOf("contactsRef.current = " + "(data && data.contacts) || [];"); kitAssert(a >= 0 && b >= 0 && c >= 0 && a > b && a - b < 400 && a < c); kitAssert(courant >= 0 && courant < c); });
 KIT_TESTS.add("effectifs dérivation rejette les entrées invalides", function () { kitAssert(KIT_PURE.trancheFromCount(-1) === "NN"); kitAssert(KIT_PURE.trancheFromCount(2.5) === "NN"); kitAssert(KIT_PURE.trancheFromCount(NaN) === "NN"); kitAssert(KIT_PURE.trancheFromCount("abc") === "NN"); });
 KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr; script-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' http://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' https://evilrecherche-entreprises.api.gouv.fr\">")); });
 KIT_TESTS.add("effectifs garde CSP sur le document réel", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || KIT_PURE.cspAllowsApi(KIT_SOURCE_HTML), "la CSP du document bloque l'API Recherche d'entreprises — ajouter le domaine au connect-src"); });
@@ -2138,6 +2139,8 @@ function App(props) {
   var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
   var candidateReqSeq = useRef(0);
   var effectifReqSeq = useRef(0);
+  var contactsRef = useRef(contacts);
+  contactsRef.current = (data && data.contacts) || [];
   var [effectifModal, setEffectifModal] = useState(null);
   var [effectifResults, setEffectifResults] = useState([]);
   var [effectifMessage, setEffectifMessage] = useState("");
@@ -2473,8 +2476,6 @@ function App(props) {
   }
 
   var contacts = data.contacts || [];
-  var contactsRef = useRef(contacts);
-  contactsRef.current = contacts;
   var activeContacts = contacts.filter(function (c) { return !c.archived; });
   var lastExportDays = lastExport ? Math.floor((Date.now() - new Date(lastExport).getTime()) / 86400000) : null;
   var categories = data.categories || DEFAULT_CATS.slice();
