@@ -15,7 +15,7 @@
 ## Activité de l'entreprise (v1.5.10)
 
 - [ ] Fiche à activité vide : « Rechercher l'effectif » → la liste affiche « Activité : … » sous chaque candidat → choix → message « Activité préremplie : « … » » → la carte ACTIVITÉ DE L'ENTREPRISE affiche le libellé ; dans « Modifier », le champ contient le libellé et la ligne « NAF 2025 … (SIRENE, <date>) »
-- [ ] Remplacer l'activité par « Études cliniques (CRO) » puis « Actualiser » : l'activité saisie est conservée (« Activité conservée (votre saisie). »), la carte affiche la saisie puis « NAF 2025 … — libellé officiel » ; « Reprendre le libellé officiel » remet le libellé
+- [ ] Remplacer l'activité par « Études cliniques (CRO) » puis « Actualiser » : l'activité saisie est conservée, la carte affiche la saisie puis « NAF 2025 … — libellé officiel · ancien code … » ; « Reprendre le libellé officiel » remet le libellé. (Le message « Activité conservée (votre saisie). » s'affiche lors du choix d'un candidat par « Rechercher l'effectif », pas sur « Actualiser ».)
 - [ ] Fiche préremplie jamais retouchée, rattachée ensuite à une autre entreprise : l'activité suit le nouveau libellé
 - [ ] ⋯ › Taille des entreprises › « Mettre à jour les effectifs » (données synthétiques) : compte rendu « Activité préremplie sur N fiche(s). » ; une fiche à activité saisie n'est pas modifiée
 - [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.5.10 · kit-crm-v52 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches

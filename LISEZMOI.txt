@@ -154,8 +154,9 @@ supplanter une saisie manuelle ; le rapport de fusion signale ce conflit.
 
 Chaque fiche portant une entreprise peut décrire son activité réelle : champ « Activité de
 l'entreprise » du formulaire (texte libre). Quand vous utilisez « Rechercher l'effectif » ou
-« Actualiser » sur une fiche, ou « Compléter / Mettre à jour les effectifs » dans ⋯ › Taille des
-entreprises, le code d'activité NAF de l'entreprise (dit code APE, attribué par l'INSEE) est
+« Actualiser » sur une fiche, ou « Compléter / Mettre à jour les effectifs »
+dans ⋯ › Taille des entreprises, le code d'activité NAF de l'entreprise
+(dit code APE, attribué par l'INSEE) est
 mémorisé et son libellé officiel prérempli dans le champ s'il était vide. Pour vos fiches déjà
 rattachées, une seule passe « Mettre à jour les effectifs » suffit.
 Une activité que vous avez saisie n'est jamais écrasée ; le bouton « Reprendre le libellé
