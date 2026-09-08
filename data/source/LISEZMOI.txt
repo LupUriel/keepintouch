@@ -1,0 +1,11 @@
+Fichier source de la table des libellés NAF 2025 embarquée dans l'application (data/naf-2025.js).
+
+- Fichier : Structure_NAF_2025_Maj_2024-10-04.xlsx (nom d'origine : « Structure NAF 2025 Maj 2024-10-04.xlsx »)
+- Éditeur : INSEE — page « Nomenclature d'activités française NAF 2025 » (https://www.insee.fr/fr/information/8617910)
+- URL de téléchargement : https://www.insee.fr/fr/statistiques/fichier/8617910/Structure%20NAF%202025%20Maj%202024-10-04.xlsx
+- Téléchargé le : 2026-09-08 (autorisation de l'utilisateur), 88 187 octets
+- SHA-256 : 6bbb9b9affc7d547f7b2b4a790043d6c942362d743bf38377d5e32bd7ceba2d7
+- Licence : réutilisation libre (Licence Ouverte / Etalab 2.0, conditions générales de l'INSEE), avec mention de la source.
+- Contenu utilisé : feuille « NAF 2025 », colonne B (code sous-classe NN.NNL) et colonne C (intitulé) — 747 sous-classes.
+- Calendrier : la NAF 2025 entre en vigueur en janvier 2027 ; la NAF rév. 2 reste en vigueur jusqu'à fin 2026 (source : INSEE).
+- Régénération : node scripts/build-naf.js
