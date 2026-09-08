@@ -159,8 +159,10 @@ dans ⋯ › Taille des entreprises, le code d'activité NAF de l'entreprise
 (dit code APE, attribué par l'INSEE) est
 mémorisé et son libellé officiel prérempli dans le champ s'il était vide. Pour vos fiches déjà
 rattachées, une seule passe « Mettre à jour les effectifs » suffit.
-Une activité que vous avez saisie n'est jamais écrasée ; le bouton « Reprendre le libellé
-officiel » remet le libellé INSEE. Le libellé officiel est parfois générique ou abrégé
+Une activité que vous avez saisie n'est jamais écrasée par une mise à jour SIRENE ; seule une
+modification que vous faites vous-même sur une autre fiche de la même entreprise peut la
+remplacer, et l'application vous le demande alors. Le bouton « Reprendre le libellé officiel »
+remet le libellé INSEE. Le libellé officiel est parfois générique ou abrégé
 (« n.c.a. » = non classé ailleurs) : remplacez-le par ce que fait réellement l'entreprise, en
 quelques mots.
 Les libellés sont ceux de la NAF 2025, qui entre en vigueur en janvier 2027 ; l'ancien code
@@ -171,6 +173,16 @@ Pour cibler un envoi, tapez un mot de l'activité dans la case « Rechercher… 
 bord (ex. « pharma ») : les fiches correspondantes s'affichent.
 Rien de nouveau ne sort de l'application : les codes NAF sont déjà dans la réponse SIRENE
 interrogée pour l'effectif, et la table des libellés (INSEE) est embarquée.
+
+L'activité décrit l'entreprise, pas la personne : quand vous la modifiez sur une fiche et que
+vous enregistrez, elle est recopiée sur les autres fiches de la même entreprise (nom identique,
+casse, accents et tirets ignorés ; le reste compte, « ORANGE » et « ORANGE SA » sont deux
+entreprises). Les fiches sans activité, archivées comprises, sont alignées sans rien demander.
+Celles qui portent déjà une activité différente ne sont remplacées qu'après une question qui
+les nomme ; répondre Annuler leur laisse la leur et enregistre quand même votre fiche. Vider
+le champ ne vide jamais les autres fiches sans cette question. Le formulaire indique, sous le
+champ, combien de fiches partagent l'entreprise. Une fiche ainsi alignée porte désormais votre
+texte : les mises à jour d'effectif ne la remplaceront plus par le libellé officiel.
 
 ## Procédures collectives
 
