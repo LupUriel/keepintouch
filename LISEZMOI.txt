@@ -114,8 +114,10 @@ Les recommandations saisies avant cette version étaient notées dans l'autre se
 supprimez-les (✕ dans l'historique) et ressaisissez-les sur la fiche de l'apporteur.
 Mettez à jour les deux appareils : un appareil resté en version précédente lirait les
 nouvelles recommandations à l'envers.
-La catégorie « Avocat / EC » (avocats et experts-comptables) est disponible dans vos catégories.
-Une interaction modifiée après une synchronisation ne se propage pas encore à l'autre appareil.
+La catégorie « Avocat / EC » (avocats et experts-comptables) est disponible dans vos
+catégories.
+Une interaction modifiée après une synchronisation ne se propage pas encore à l'autre
+appareil.
 
 ## Récapitulatif hebdomadaire
 

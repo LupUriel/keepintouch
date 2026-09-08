@@ -21,6 +21,8 @@
 - [ ] Recommandation sans fiche liée : « Vous a recommandé : une personne sans fiche » ; ✏ permet de rattacher une fiche ensuite
 - [ ] Le formulaire d'une fiche propose la catégorie « Avocat / EC » (PC et Samsung), sans doublon après synchronisation
 - [ ] Données réelles : supprimer puis ressaisir les recommandations de la v1.5.8 sur la fiche de l'apporteur ; la fiche de la personne recommandée affiche « Recommandé(e) par : … »
+- [ ] Six recommandations d'un même apporteur : la fiche affiche cinq noms puis « … et 1 autre » ; le clic déplie
+- [ ] ✏ sur un « Dossier confié » déjà saisi : le champ s'intitule « APPORTEUR », aucun bouton de type n'est actif
 
 ## Récupération au démarrage (procédure de test, données synthétiques uniquement)
 
