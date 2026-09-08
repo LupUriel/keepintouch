@@ -864,6 +864,10 @@ KIT_TESTS.add("activité : table NAF 2025 chargée", function () { var codes = O
 KIT_TESTS.add("activité : normalisation et libellé NAF", function () { kitAssert(KIT_PURE.normaliseNaf("5310y") === "53.10Y"); kitAssert(KIT_PURE.normaliseNaf(" 53.10Y ") === "53.10Y"); kitAssert(KIT_PURE.normaliseNaf(null) === ""); kitAssert(KIT_PURE.libelleNaf("5310y", KIT_NAF) === KIT_NAF.libelles["53.10Y"]); kitAssert(KIT_PURE.libelleNaf("00.00X", KIT_NAF) === ""); kitAssert(KIT_PURE.libelleNaf("53.10Y", null) === ""); kitAssert(KIT_PURE.libelleNaf("53.10Y", {}) === ""); });
 KIT_TESTS.add("activité : préremplissage depuis un candidat SIRENE", function () { var t = { libelles: { "53.10Y": "Poste", "62.10Y": "Programmation" } }; var cand = { activite_principale: "53.10Z", activite_principale_naf25: "53.10Y" }; var patch = KIT_PURE.patchActivite({}, cand, t, "2026-09-08"); kitAssert(JSON.stringify(patch) === JSON.stringify({ nafCode: "53.10Y", nafRev2Code: "53.10Z", nafLibelle: "Poste", nafSource: "api", nafDate: "2026-09-08", activite: "Poste" })); kitAssert(!Object.prototype.hasOwnProperty.call(KIT_PURE.patchActivite({ activite: "Études cliniques" }, cand, t, "2026-09-08"), "activite")); kitAssert(KIT_PURE.patchActivite({ activite: "Poste", nafLibelle: "Poste" }, { activite_principale_naf25: "62.10Y" }, t, "2026-09-08").activite === "Programmation"); var ancien = KIT_PURE.patchActivite({}, { activite_principale: "53.10Z" }, t, "2026-09-08"); kitAssert(ancien.nafCode === "" && ancien.nafRev2Code === "53.10Z" && ancien.nafLibelle === "" && !Object.prototype.hasOwnProperty.call(ancien, "activite")); kitAssert(JSON.stringify(KIT_PURE.patchActivite({}, {}, t, "2026-09-08")) === "{}"); kitAssert(KIT_PURE.patchActivite(undefined, cand, t, "2026-09-08").activite === "Poste"); });
 KIT_TESTS.add("activité : recherche plein texte sur l'activité", function () { var texte = KIT_PURE.contactHaystack({ name: "X", activite: "études cliniques", nafCode: "72.11Y", nafLibelle: "Recherche" }); kitAssert(texte.indexOf("études cliniques") >= 0); kitAssert(texte.indexOf("72.11Y") >= 0); kitAssert(texte.indexOf("Recherche") >= 0); });
+KIT_TESTS.add("câblage activité : champs fusionnables et horodatage groupé", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var MERGE_" + "FIELDS = ["), fin = KIT_SOURCE_HTML.indexOf(";", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); ['"activite"', '"nafCode"', '"nafLibelle"', '"nafRev2Code"', '"nafSource"', '"nafDate"'].forEach(function (champ) { kitAssert(tranche.indexOf(champ) >= 0, champ); }); var updDebut = KIT_SOURCE_HTML.indexOf("function upd" + "Contact("), updFin = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch(", updDebut), upd = KIT_SOURCE_HTML.slice(updDebut, updFin); kitAssert(upd.indexOf("var naf" + "Fields = [") >= 0); kitAssert(upd.indexOf("nafFields.forEach(function (key) { fu[key] = " + "now; })") >= 0); });
+KIT_TESTS.add("câblage activité : capture SIRENE avec fiche cible", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch("), fin = KIT_SOURCE_HTML.indexOf("function init" + "Form(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.patch" + "Activite(") >= 0); kitAssert(tranche.indexOf("effectifPatch(" + "candidate)") === -1 && tranche.indexOf("effectifPatch(" + "match)") === -1); kitAssert(tranche.indexOf("effectifPatch(candidate, " + "contact)") >= 0); kitAssert(tranche.indexOf("working.filter(function (x) { return x.id === " + "id; })[0]") >= 0); kitAssert(tranche.indexOf("working.filter(function (x) { return x.id === target." + "id; })[0]") >= 0); kitAssert(tranche.indexOf("Activité " + "préremplie : «") >= 0 && tranche.indexOf("Activité conservée (votre " + "saisie)") >= 0); var panneau = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("Taille des " + "entreprises")); kitAssert(panneau.indexOf("Activité préremplie sur") >= 0); });
+KIT_TESTS.add("câblage activité : création et formulaire", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var add = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function add" + "Contact("), KIT_SOURCE_HTML.indexOf("function upd" + "Contact(")); kitAssert(add.indexOf("activite: payload." + "activite") >= 0); var debut = KIT_SOURCE_HTML.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), formulaire = KIT_SOURCE_HTML.slice(debut, debut + 3000); kitAssert(formulaire.indexOf("maxLength: " + "200") >= 0 && formulaire.indexOf("CCN de " + "branche)") >= 0 && formulaire.indexOf("Reprendre le libellé " + "officiel") >= 0 && formulaire.indexOf("NAF 2025 ") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("activite: fAct.trim().slice(0, " + "200)") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("consensus(function (c) { return c." + "activite; })") >= 0); });
+KIT_TESTS.add("câblage activité : fiche, candidats, Entreprises", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), detail = KIT_SOURCE_HTML.slice(debut, fin), act = detail.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), eff = detail.indexOf("EFFECTIF " + "ENTREPRISE"); kitAssert(act >= 0 && detail.indexOf("Activité non " + "renseignée") >= 0 && detail.indexOf("« Actualiser » l'effectif récupère le code " + "NAF.") >= 0 && act < eff); var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "EffectifModal("), debut); kitAssert(modal.indexOf('"Activité : " + ' + "lib") >= 0); var entreprises = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Companies("), KIT_SOURCE_HTML.indexOf("function render" + "Stats(")); kitAssert(entreprises.indexOf("c." + "activite || \"\").trim()") >= 0); });
 KIT_TESTS.add("suivi : liens d'une fiche — tri stable et auto-exclusion", function () { var egales = KIT_PURE.liensFiche({ id: "T", interactions: [{ iid: "premier", type: "recommandation_donnee", date: "2026-08-01", lieId: "A" }, { iid: "second", type: "recommandation_donnee", date: "2026-08-01", lieId: "B" }] }, [{ id: "A" }, { id: "B" }]).recoDonnees; kitAssert(egales[0].iid === "premier" && egales[1].iid === "second"); kitAssert(KIT_PURE.liensFiche({ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }, [{ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }]).recommandePar.length === 0); });
 KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
 KIT_TESTS.add("câblage suivi : édition conserve la fiche liée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function open" + "EditInteraction("), fin = KIT_SOURCE_HTML.indexOf("function invite" + "Mobile(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("setLogLieId(entry." + 'lieId || "")') >= 0); kitAssert(tranche.indexOf("setLogLieLabel(entry." + 'lieLabel || "")') >= 0); });
@@ -1239,7 +1243,7 @@ var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "activite", "nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
@@ -2151,6 +2155,7 @@ function App(props) {
   var [fMet, setFMet] = useState("");
   var [fNotes, setFNotes] = useState("");
   var [fSec2, setFSec2] = useState("");
+  var [fAct, setFAct] = useState("");
   var [fNxt, setFNxt] = useState("");
   var [fFollowDate, setFFollowDate] = useState("");
   var [fFollowNote, setFFollowNote] = useState("");
@@ -2508,7 +2513,7 @@ function App(props) {
       followUpDate: payload.followUpDate || "", followUpNote: payload.followUpNote || "",
       tags: payload.tags, keyDates: payload.keyDates,
       birthday: payload.birthday || "",
-      company: payload.company || "", jobTitle: payload.jobTitle || "",
+      company: payload.company || "", activite: payload.activite || "", jobTitle: payload.jobTitle || "",
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
@@ -2528,6 +2533,8 @@ function App(props) {
       var now = nowTS(); var fu = Object.assign({}, c.fieldsUpdatedAt || {}); var touched = false;
       var effectifFields = ["effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis"];
       var effectifWrite = effectifFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
+      var nafFields = ["nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate"];
+      var nafWrite = nafFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
       var procedureFields = ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
       var procedureWrite = procedureFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
       Object.keys(updates).forEach(function (k) {
@@ -2536,6 +2543,7 @@ function App(props) {
         if (JSON.stringify(oldV === undefined ? null : oldV) !== JSON.stringify(newV === undefined ? null : newV)) { fu[k] = now; touched = true; }
       });
       if (effectifWrite) { effectifFields.forEach(function (key) { fu[key] = now; }); touched = true; }
+      if (nafWrite) { nafFields.forEach(function (key) { fu[key] = now; }); touched = true; }
       if (procedureWrite) { procedureFields.forEach(function (key) { fu[key] = now; }); touched = true; }
       if (touched) { copy.updatedAt = now; copy.fieldsUpdatedAt = fu; }
       return copy;
@@ -2544,8 +2552,8 @@ function App(props) {
     return newContacts;
   }
 
-  function effectifPatch(candidate) {
-    return {
+  function effectifPatch(candidate, cible) {
+    var patch = {
       effectifTranche: candidate.tranche_effectif_salarie || "NN",
       effectifAnnee: candidate.annee_tranche_effectif_salarie || "",
       effectifSiren: candidate.siren || "",
@@ -2553,6 +2561,7 @@ function App(props) {
       effectifDate: todayStr(),
       effectifPrecis: null
     };
+    return Object.assign(patch, KIT_PURE.patchActivite(cible || {}, candidate, typeof KIT_NAF !== "undefined" ? KIT_NAF : null, todayStr()));
   }
 
   function procedurePatch(procedures) {
@@ -2678,11 +2687,12 @@ function App(props) {
       fermerEffectifModal();
       return;
     }
-    var working = updContact(effectifModal.id, effectifPatch(candidate), null, contacts);
+    var patchChoisi = effectifPatch(candidate, contact);
+    var working = updContact(effectifModal.id, patchChoisi, null, contacts);
     /* Les fiches sœurs partagent le nom saisi sur la fiche source — pas la raison sociale officielle SIRENE de la candidate. */
     var propagation = KIT_PURE.propagationCibles(contacts, effectifModal.id, (contact && contact.company) || effectifModal.company, candidate.siren);
-    propagation.aRattacher.forEach(function (id) { working = updContact(id, effectifPatch(candidate), null, working); });
-    var messages = [];
+    propagation.aRattacher.forEach(function (id) { working = updContact(id, effectifPatch(candidate, working.filter(function (x) { return x.id === id; })[0]), null, working); });
+    var messages = [patchChoisi.activite ? "Activité préremplie : « " + patchChoisi.activite + " »." : (contact && contact.activite ? "Activité conservée (votre saisie)." : "")].filter(Boolean);
     if (propagation.aRattacher.length) messages.push("Rattaché aussi à " + String(propagation.aRattacher.length) + " autre(s) fiche(s).");
     if (propagation.protegees.length) messages.push(String(propagation.protegees.length) + " protégée(s) (saisie manuelle).");
     if (propagation.autres.length) messages.push(String(propagation.autres.length) + " sur un autre SIREN, non modifiée(s).");
@@ -2714,7 +2724,7 @@ function App(props) {
 
   function refreshEffectif(c) {
     if (!c.effectifSiren) { openEffectifSearch(c); return; }
-    if (c.effectifSource === "manuel" && !confirm("Cette actualisation remplacera la valeur saisie manuellement. Continuer ?")) return;
+    if (c.effectifSource === "manuel" && !confirm("Cette actualisation remplacera l'effectif saisi manuellement (l'activité que vous avez saisie est conservée). Continuer ?")) return;
     if (!navigator.onLine) return;
     setEffectifModal({ id: c.id, company: c.company, refresh: true });
     setEffectifResults([]); setEffectifMessage(""); setEffectifLoading(true);
@@ -2731,7 +2741,7 @@ function App(props) {
       if (seq !== effectifReqSeq.current) return;
       var candidate = (body.results || []).filter(function (x) { return x.siren === c.effectifSiren; })[0];
       if (!candidate || candidate.etat_administratif !== "A") { setEffectifMessage("Entreprise introuvable ou cessée : l'ancien effectif est conservé."); return; }
-      updContact(c.id, effectifPatch(candidate)); fermerEffectifModal();
+      updContact(c.id, effectifPatch(candidate, c)); fermerEffectifModal();
     }).catch(function (error) {
       if (seq !== effectifReqSeq.current) return;
       var msg = String(error && error.message || "");
@@ -2754,7 +2764,7 @@ function App(props) {
 
   function runBulkEffectifs() {
     if (!bulkPreview || !navigator.onLine) return;
-    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], procedures: [], bodaccKo: [], stopped: "" };
+    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], procedures: [], bodaccKo: [], activites: 0, stopped: "" };
     setBulkPreview(null); setBulkProgress({ done: 0, total: lot.targets.length });
     function next(index) {
       if (index >= lot.targets.length) { setBulkProgress(null); setBulkReport(report); setBulkResume(null); return; }
@@ -2793,7 +2803,7 @@ function App(props) {
       }).then(function (results) {
         if (target.mode === "denomination") {
           var candidate = results.length === 1 && KIT_PURE.denominationMatch(results[0].nom_complet, target.cle) ? results[0] : null;
-          if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label + (cpUtilise ? " (affiné par " + cpUtilise + ")" : "")); }
+          if (candidate && candidate.etat_administratif === "A") { var candidatePatch = effectifPatch(candidate, working.filter(function (x) { return x.id === target.id; })[0]); working = updContact(target.id, candidatePatch, null, working); if (candidatePatch.activite) report.activites += 1; report.updated.push(target.label + (cpUtilise ? " (affiné par " + cpUtilise + ")" : "")); }
           else report.ambiguous.push({ id: target.id, company: target.cle, results: results, cp: cpUtilise });
         } else if (target.mode === "secondaire") {
           var secondaryMatch = results.filter(function (x) { return x.siren === target.cle; })[0];
@@ -2808,7 +2818,7 @@ function App(props) {
         } else {
           var match = results.filter(function (x) { return x.siren === target.cle; })[0];
           if (!match || match.etat_administratif !== "A") report.preserved.push(target.label);
-          else { working = updContact(target.id, effectifPatch(match), null, working); report.updated.push(target.label); }
+          else { var matchPatch = effectifPatch(match, working.filter(function (x) { return x.id === target.id; })[0]); working = updContact(target.id, matchPatch, null, working); if (matchPatch.activite) report.activites += 1; report.updated.push(target.label); }
         }
         if (target.mode !== "siren") return null;
         var bodaccContact = working.filter(function (c) { return c.id === target.id; })[0];
@@ -3154,6 +3164,7 @@ function App(props) {
     setFMet(ex ? (ex.metAt || "") : "");
     setFNotes(ex ? (ex.notes || "") : "");
     setFSec2(ex ? (ex.sector || "") : "");
+    setFAct(ex ? (ex.activite || "") : "");
     setFNxt(ex ? (ex.nextAction || "") : "");
     setFFollowDate(ex ? (ex.followUpDate || "") : "");
     setFFollowNote(ex ? (ex.followUpNote || "") : "");
@@ -3186,7 +3197,7 @@ function App(props) {
       metAt: fMet, notes: fNotes,
       sector: fSec2, nextAction: fNxt, tags: tagsArr, keyDates: fKds,
       followUpDate: fFollowDate, followUpNote: fFollowNote,
-      birthday: fBday, company: fCompany, jobTitle: fJobTitle, workLocation: fWorkLoc,
+      birthday: fBday, company: fCompany, activite: fAct.trim().slice(0, 200), jobTitle: fJobTitle, workLocation: fWorkLoc,
       email: fEmail, phonePro: fPhonePro, phonePerso: fPhonePerso,
       address: fAddress, linkedin: fLinkedin, origin: fOrigin
     };
@@ -4016,6 +4027,7 @@ function App(props) {
               <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontWeight: 700, color: ac }}>{candidate.nom_complet || "Entreprise sans nom"}{candidate.etat_administratif !== "A" ? <span style={{ padding: "2px 7px", borderRadius: 9, background: "#FBEAE5", color: "#9A3115", fontSize: 10.5 }}>cessée</span> : null}</span>
               <span style={{ display: "block", marginTop: 4, color: "#64748B", fontSize: 12 }}>{"SIREN " + (candidate.siren || "non renseigné") + (place ? " · " + place : "")}</span>
               <span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 12 }}>{effectif + (candidate.annee_tranche_effectif_salarie ? " · " + String(candidate.annee_tranche_effectif_salarie) : "")}</span>
+              {(function () { var lib = KIT_PURE.libelleNaf(candidate.activite_principale_naf25, typeof KIT_NAF !== "undefined" ? KIT_NAF : null); return lib ? <span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 12 }}>{"Activité : " + lib}</span> : null; })()}
             </button>;
           })}
           <button onClick={fermerEffectifModal} style={{ marginTop: 16, background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button>
@@ -4245,9 +4257,11 @@ function App(props) {
     var wl = consensus(function (c) { return c.workLocation; });
     var ad = consensus(function (c) { return c.address; });
     var sc = consensus(function (c) { return c.sector; });
+    var act = consensus(function (c) { return c.activite; });
     if (wl) setFWorkLoc(wl);
     if (ad) setFAddress(ad);
     if (sc) setFSec2(sc);
+    if (act && !fAct.trim()) setFAct(act);
   }
 
   function renderForm() {
@@ -4303,6 +4317,13 @@ function App(props) {
                   })
                 ) : null
               )
+            ),
+            React.createElement("div", { style: { marginBottom: 16 } },
+              React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "ACTIVITÉ DE L'ENTREPRISE"),
+              React.createElement("input", { style: { width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }, value: fAct, maxLength: 200, onChange: function (e) { setFAct(e.target.value); }, placeholder: "Ex: études cliniques pour l'industrie pharmaceutique" }),
+              React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } }, "Ce que fait l'entreprise, pour cibler vos actualités. La convention collective se choisit plus bas (CCN de branche)."),
+              existing && existing.nafCode ? React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } }, "NAF 2025 " + existing.nafCode + " — " + existing.nafLibelle + " (SIRENE, " + fmtDate(existing.nafDate) + ")" + (existing.nafRev2Code ? " · ancien code " + existing.nafRev2Code : "")) : null,
+              existing && existing.nafLibelle && fAct !== existing.nafLibelle ? React.createElement("button", { type: "button", onClick: function () { setFAct(existing.nafLibelle); }, style: { background: "none", border: "none", color: abl, fontSize: 12, cursor: "pointer", fontFamily: ff, padding: 0, marginTop: 5 } }, "Reprendre le libellé officiel") : null
             ),
             React.createElement("div", { style: { marginBottom: 16 } },
               React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "LIEU D'EXERCICE"),
@@ -4519,6 +4540,12 @@ function App(props) {
             {c.metAt ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>LIEU DE RENCONTRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.metAt}</p></div> : null}
             {c.sector ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>CCN DE BRANCHE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.sector}</p></div> : null}
             {c.birthday ? <div style={{ padding: 14, background: "#FDF2F8", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#9D174D", fontWeight: 600 }}>ANNIVERSAIRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{fmtDate(c.birthday)}</p></div> : null}
+            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}>
+              <p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>ACTIVITÉ DE L'ENTREPRISE</p>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: c.activite ? undefined : "#94A3B8" }}>{c.activite || "Activité non renseignée"}</p>
+              {c.nafLibelle && c.nafLibelle !== c.activite ? <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#6E6A64" }}>{"NAF 2025 " + c.nafCode + " — " + c.nafLibelle + (c.nafRev2Code ? " · ancien code " + c.nafRev2Code : "")}</p> : c.nafRev2Code ? <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#6E6A64" }}>{"ancien code " + c.nafRev2Code}</p> : null}
+              {!c.nafCode ? <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#6E6A64" }}>{c.effectifSiren ? "« Actualiser » l'effectif récupère le code NAF." : "« Rechercher l'effectif » la préremplit."}</p> : null}
+            </div> : null}
             {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}>
               <p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p>
               <p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c)) ? (c.effectifPrecis != null ? String(c.effectifPrecis) + " sal. · " : "") + KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c)) + ((c.effectifsSecondaires || []).length ? " (groupe)" : "") + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p>
@@ -4834,6 +4861,7 @@ function App(props) {
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: "#1B1B24", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</p>
                 <p style={{ margin: "3px 0 0", fontSize: 12, color: "#86837C" }}>{String(g.list.length) + " fiche(s)"}{(g.list.length === 1 && g.list.some(function (c) { return isClient(c); })) ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#9A3115", background: "#FBEAE5", padding: "1px 7px", borderRadius: 10, border: "1px solid #F4D6CB", fontWeight: 600 }}>{"compte mono-contact"}</span> : null}</p>
+                {(function () { var a = g.list.map(function (c) { return (c.activite || "").trim(); }).filter(Boolean)[0]; return a ? <p style={{ margin: "2px 0 0", fontSize: 12, color: "#86837C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a}</p> : null; })()}
               </div>
               <div style={{ display: "flex", gap: 10, flexShrink: 0, fontSize: 12, fontWeight: 600 }}>
                 {counts.overdue ? <span style={{ color: "#BE3C1A" }}>{"\u25cf " + String(counts.overdue)}</span> : null}
@@ -5027,11 +5055,13 @@ function App(props) {
         {showEffectifsPanel ? <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
           <p style={{ margin: "0 0 5px", fontSize: 14, fontWeight: 700, color: "#235C68" }}>Taille des entreprises</p>
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "#2F7C8C" }}>Toutes les dénominations ci-dessous sont toujours affichées avant tout envoi.</p>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748B" }}>Ces actions mémorisent aussi le code d'activité NAF et préremplissent l'activité des fiches où elle est vide.</p>
           <label style={{ display: "block", marginBottom: 10, fontSize: 12.5, color: "#235C68" }}><input type="checkbox" checked={bulkIncludeManual} onChange={function (e) { setBulkIncludeManual(e.target.checked); }} /> Inclure les valeurs saisies manuellement</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("complete"); }} style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Compléter les effectifs</button><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("update"); }} style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Mettre à jour les effectifs</button></div>
           {!navigator.onLine ? <p role="alert" style={{ margin: "9px 0 0", fontSize: 12, color: "#9A3115" }}>Actions indisponibles hors ligne.</p> : null}
           {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id + "-" + target.mode + "-" + target.cle}>{target.label}{target.mode !== "denomination" ? " · SIREN " + target.cle + (target.mode === "secondaire" ? " (groupe)" : "") : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
           {bulkProgress ? <p role="status" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#235C68" }}>Progression : {bulkProgress.done} / {bulkProgress.total}</p> : null}
+          {bulkReport ? <p style={{ margin: "10px 0 0", fontSize: 12.5, color: "#64748B" }}>Activité préremplie sur {bulkReport.activites || 0} fiche(s).</p> : null}
           {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.procedures.length ? <p style={{ margin: "4px 0", color: "#BE3C1A", fontWeight: 600 }}>⚠ Procédures collectives : {bulkReport.procedures.join(", ")}</p> : null}{(bulkReport.bodaccKo || []).length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>BODACC injoignable — à revérifier depuis la fiche : {bulkReport.bodaccKo.join(", ")}</p> : null}{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
         </div> : null}
 
