@@ -741,7 +741,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.9["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v51["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.10["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v52["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("KIT_PURE : fonctions retirées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var KIT_" + "PURE"), fin = KIT_SOURCE_HTML.indexOf("var KIT_" + "TESTS", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut); kitAssert(tranche.indexOf("stats" + "Dossiers") === -1); kitAssert(tranche.indexOf("recipro" + "cite") === -1); kitAssert(tranche.indexOf("apporteurDepuis" + "Origine") === -1); });
 KIT_TESTS.add("stockage : niveaux et plafond", function () { kitAssert(JSON.stringify(KIT_PURE.niveauStockage(3650434)) === JSON.stringify({ pct: 70, niveau: "attention" })); kitAssert(KIT_PURE.niveauStockage(3093299).pct === 59 && KIT_PURE.niveauStockage(3093299).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage(3145728).pct === 60 && KIT_PURE.niveauStockage(3145728).niveau === "attention"); kitAssert(KIT_PURE.niveauStockage(4194304).pct === 80 && KIT_PURE.niveauStockage(4194304).niveau === "critique"); kitAssert(KIT_PURE.niveauStockage(50, 100).pct === 50 && KIT_PURE.niveauStockage(50, 100).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage("x").pct === 0 && KIT_PURE.niveauStockage("x").niveau === "ok"); });
 KIT_TESTS.add("stockage : détection du quota dépassé", function () { kitAssert(KIT_PURE.estQuotaDepasse({ name: "QuotaExceededError" })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 22 })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 1014 })); kitAssert(KIT_PURE.estQuotaDepasse({ name: "NS_ERROR_DOM_QUOTA_REACHED" })); kitAssert(!KIT_PURE.estQuotaDepasse({ name: "TypeError" })); kitAssert(!KIT_PURE.estQuotaDepasse(null)); kitAssert(!KIT_PURE.estQuotaDepasse("x")); });
@@ -868,6 +868,8 @@ KIT_TESTS.add("câblage activité : champs fusionnables et horodatage groupé", 
 KIT_TESTS.add("câblage activité : capture SIRENE avec fiche cible", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch("), fin = KIT_SOURCE_HTML.indexOf("function init" + "Form(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.patch" + "Activite(") >= 0); kitAssert(tranche.indexOf("effectifPatch(" + "candidate)") === -1 && tranche.indexOf("effectifPatch(" + "match)") === -1); kitAssert(tranche.indexOf("effectifPatch(candidate, " + "contact)") >= 0); kitAssert(tranche.indexOf("working.filter(function (x) { return x.id === " + "id; })[0]") >= 0); kitAssert(tranche.indexOf("working.filter(function (x) { return x.id === target." + "id; })[0]") >= 0); kitAssert(tranche.indexOf("Activité " + "préremplie : «") >= 0 && tranche.indexOf("Activité conservée (votre " + "saisie)") >= 0); var panneau = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("Taille des " + "entreprises")); kitAssert(panneau.indexOf("Activité préremplie sur") >= 0); });
 KIT_TESTS.add("câblage activité : création et formulaire", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var add = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function add" + "Contact("), KIT_SOURCE_HTML.indexOf("function upd" + "Contact(")); kitAssert(add.indexOf("activite: payload." + "activite") >= 0); var debut = KIT_SOURCE_HTML.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), formulaire = KIT_SOURCE_HTML.slice(debut, debut + 3000); kitAssert(formulaire.indexOf("maxLength: " + "200") >= 0 && formulaire.indexOf("CCN de " + "branche)") >= 0 && formulaire.indexOf("Reprendre le libellé " + "officiel") >= 0 && formulaire.indexOf("NAF 2025 ") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("activite: fAct.trim().slice(0, " + "200)") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("consensus(function (c) { return c." + "activite; })") >= 0); });
 KIT_TESTS.add("câblage activité : fiche, candidats, Entreprises", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), detail = KIT_SOURCE_HTML.slice(debut, fin), act = detail.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), eff = detail.indexOf("EFFECTIF " + "ENTREPRISE"); kitAssert(act >= 0 && detail.indexOf("Activité non " + "renseignée") >= 0 && detail.indexOf("« Actualiser » l'effectif récupère le code " + "NAF.") >= 0 && act < eff); var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "EffectifModal("), debut); kitAssert(modal.indexOf('"Activité : " + ' + "lib") >= 0); var entreprises = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Companies("), KIT_SOURCE_HTML.indexOf("function render" + "Stats(")); kitAssert(entreprises.indexOf("c." + "activite || \"\").trim()") >= 0); });
+KIT_TESTS.add("câblage activité : export et import", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var exportDebut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), exportTranche = KIT_SOURCE_HTML.slice(exportDebut, exportDebut + 4000), nbInteractions = exportTranche.indexOf("Nb " + "interactions"), codeNaf = exportTranche.indexOf('"Code NAF ' + '2025"'); kitAssert(exportDebut >= 0 && nbInteractions >= 0 && nbInteractions < codeNaf); kitAssert(exportTranche.indexOf("c.activite || " + '"", c.nafCode || ""') >= 0); var importDebut = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("), importTranche = KIT_SOURCE_HTML.slice(importDebut, importDebut + 7000); kitAssert(importDebut >= 0 && importTranche.indexOf('findCol(hd, ["' + 'activite"])') >= 0); kitAssert(importTranche.indexOf("activite: ((iAct >= 0 ? vals[iAct] : " + '"") || "").slice(0, 200)') >= 0); });
+KIT_TESTS.add("câblage activité : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Activité de l'" + "entreprise") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Reprendre le libellé " + "officiel") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Activité de l'entreprise (v1.5." + "10)") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("NAF " + "2025") >= 0); });
 KIT_TESTS.add("suivi : liens d'une fiche — tri stable et auto-exclusion", function () { var egales = KIT_PURE.liensFiche({ id: "T", interactions: [{ iid: "premier", type: "recommandation_donnee", date: "2026-08-01", lieId: "A" }, { iid: "second", type: "recommandation_donnee", date: "2026-08-01", lieId: "B" }] }, [{ id: "A" }, { id: "B" }]).recoDonnees; kitAssert(egales[0].iid === "premier" && egales[1].iid === "second"); kitAssert(KIT_PURE.liensFiche({ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }, [{ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }]).recommandePar.length === 0); });
 KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
 KIT_TESTS.add("câblage suivi : édition conserve la fiche liée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function open" + "EditInteraction("), fin = KIT_SOURCE_HTML.indexOf("function invite" + "Mobile(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("setLogLieId(entry." + 'lieId || "")') >= 0); kitAssert(tranche.indexOf("setLogLieLabel(entry." + 'lieLabel || "")') >= 0); });
@@ -1237,7 +1239,7 @@ var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repa
 
 /* ── KIT_SYNC_HELPERS ── */
 const DEFAULT_CATS = ["Client", "Prospect", "Avocat / EC"];
-var APP_VERSION = "1.5.9";
+var APP_VERSION = "1.5.10";
 var RECUPERATION_DELAI_MS = 3000;
 var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
@@ -1389,7 +1391,7 @@ function mergeData(localData, importedData) {
 
 /* ═══════ EXPORT FORMAT (forme maison) ═══════ */
 // Largeurs de colonnes (forme maison) ; null = largeur Excel par défaut
-var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null];
+var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null, 40, 12];
 // Listes déroulantes : { colonne Excel : formule } ; la CCN de branche pointe vers l'onglet CCN de branche
 var EXPORT_DV = {
   M: '"Nulle,Faible,Moyen,Élevé"',
@@ -3211,7 +3213,7 @@ function App(props) {
 
   /* ── CSV Export ── */
   function exportExcel() {
-    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions"];
+    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions", "Activité", "Code NAF 2025"];
     var rows = contacts.map(function (c) {
       var kdStr = (c.keyDates || []).map(function (k) { return k.label + ": " + k.date; }).join("; ");
       var lastRdvInt = null, lastContactInt = null;
@@ -3228,7 +3230,8 @@ function App(props) {
         lastContactInt ? lastContactInt.date : "", lastContactInt ? typeLabel(lastContactInt.type) : "",
         c.birthday || "", (c.tags || []).join("; "),
         c.nextAction || "", c.metAt || "", c.notes || "", kdStr, c.origin || "",
-        statusLabel(getStatus(c)), c.archived ? "Oui" : "Non", (c.interactions || []).length
+        statusLabel(getStatus(c)), c.archived ? "Oui" : "Non", (c.interactions || []).length,
+        c.activite || "", c.nafCode || ""
       ];
     });
 
@@ -3620,6 +3623,7 @@ function App(props) {
     var iPrenom = findCol(hd, ["prénom", "prenom", "firstname", "first name"]);
     var iFonc = findCol(hd, ["fonction", "titre", "poste", "job", "title"]);
     var iEntr = findCol(hd, ["entreprise", "company", "societe", "société"]);
+    var iAct = findCol(hd, ["activite"]);
     var iLieuEx = findCol(hd, ["lieu d'exercice", "lieu d exercice", "work location", "ville exercice"]);
     var iEmail = findCol(hd, ["email", "mail", "e-mail", "courriel"]);
     var iPhonePro = findCol(hd, ["tel. pro", "tel pro", "telephone pro", "phone pro"]);
@@ -3703,6 +3707,7 @@ function App(props) {
         category: catN,
         priority: parsePriority(iPrio >= 0 ? vals[iPrio] : ""),
         sector: (iSect >= 0 ? vals[iSect] : "") || "",
+        activite: ((iAct >= 0 ? vals[iAct] : "") || "").slice(0, 200),
         birthday: birthdayVal,
         tags: tagsArr,
         nextAction: (iNext >= 0 ? vals[iNext] : "") || "",

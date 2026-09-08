@@ -12,6 +12,16 @@
 
 ## Lignes spécifiques de la version
 
+## Activité de l'entreprise (v1.5.10)
+
+- [ ] Fiche à activité vide : « Rechercher l'effectif » → la liste affiche « Activité : … » sous chaque candidat → choix → message « Activité préremplie : « … » » → la carte ACTIVITÉ DE L'ENTREPRISE affiche le libellé ; dans « Modifier », le champ contient le libellé et la ligne « NAF 2025 … (SIRENE, <date>) »
+- [ ] Remplacer l'activité par « Études cliniques (CRO) » puis « Actualiser » : l'activité saisie est conservée (« Activité conservée (votre saisie). »), la carte affiche la saisie puis « NAF 2025 … — libellé officiel » ; « Reprendre le libellé officiel » remet le libellé
+- [ ] Fiche préremplie jamais retouchée, rattachée ensuite à une autre entreprise : l'activité suit le nouveau libellé
+- [ ] ⋯ › Taille des entreprises › « Mettre à jour les effectifs » (données synthétiques) : compte rendu « Activité préremplie sur N fiche(s). » ; une fiche à activité saisie n'est pas modifiée
+- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.5.10 · kit-crm-v52 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
+- [ ] Samsung : la carte ACTIVITÉ DE L'ENTREPRISE et la ligne NAF s'affichent sans infobulle ; le formulaire montre le champ en pleine largeur sous FONCTION/ENTREPRISE
+- [ ] Synchroniser PC ↔ Samsung : l'activité saisie sur un appareil apparaît sur l'autre
+
 ## Recommandations et apporteurs (v1.5.9)
 
 - [ ] Fiche d'un apporteur (données synthétiques) : « Je l'ai contacté » → « M'a recommandé quelqu'un » → personne recommandée choisie : la fiche affiche « Vous a recommandé : <nom> » (souligné, clic → fiche), la fiche de la personne recommandée affiche « Recommandé(e) par : <apporteur> », l'historique « → <nom> » ; relance planifiée et état d'attente de l'apporteur inchangés
