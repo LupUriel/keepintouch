@@ -884,12 +884,12 @@ KIT_TESTS.add("suivi : patch d'interaction avec fiche liée", function () { var 
 KIT_TESTS.add("câblage suivi : types dans INTER_TYPES", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var INTER_" + "TYPES = ["), fin = KIT_SOURCE_HTML.indexOf("var RENCONTRE_" + "TYPES", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), autre = tranche.indexOf('value: "' + "autre" + '"'); KIT_PURE.SUIVI_TYPES.forEach(function (v) { var pos = tranche.indexOf('value: "' + v + '"'); kitAssert(pos >= 0 && pos < autre, v); }); kitAssert(tranche.indexOf("suivi" + ":") === -1); });
 KIT_TESTS.add("câblage suivi : logInteraction n'efface pas les relances pour un type de suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function log" + "Interaction("), fin = KIT_SOURCE_HTML.indexOf("function update" + "Interaction(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("var suivi = KIT_PURE." + "estSuivi(type)"), b = tranche.indexOf("if (!suivi && c." + "followUpDate)"), c = tranche.indexOf("if (!suivi && c." + "awaitingUntil"); kitAssert(a >= 0 && a < b && b < c); });
 KIT_TESTS.add("câblage suivi : latestInteraction ignore les types de suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function latest" + "Interaction("), fin = KIT_SOURCE_HTML.indexOf("function is" + "Awaiting(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.derniere" + "InteractionHorsSuivi(") >= 0); });
-KIT_TESTS.add("câblage suivi : modal", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suivi = tranche.indexOf("var suiviModal = KIT_PURE." + "estSuivi(logType)"), attente = tranche.indexOf("En attente d'un " + "retour"); kitAssert(suivi >= 0 && suivi < attente); kitAssert(tranche.indexOf("suiviModal ? false : !!" + "logAwait") >= 0 && tranche.indexOf("suiviModal ? false : !!" + "logRetry") >= 0); kitAssert(tranche.indexOf("SUIVI DU " + "RÉSEAU") >= 0 && tranche.indexOf('maxHeight: "' + '84vh"') >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteur" + "DepuisOrigine(") >= 0 && tranche.indexOf("RECOMMANDÉ " + "À") >= 0); });
+KIT_TESTS.add("câblage suivi : modal", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suivi = tranche.indexOf("var suiviModal = KIT_PURE." + "estSuivi(logType)"), attente = tranche.indexOf("En attente d'un " + "retour"); kitAssert(suivi >= 0 && suivi < attente); kitAssert(tranche.indexOf("suiviModal ? false : !!" + "logAwait") >= 0 && tranche.indexOf("suiviModal ? false : !!" + "logRetry") >= 0); kitAssert(tranche.indexOf("RECOMMANDA" + "TIONS") >= 0 && tranche.indexOf('maxHeight: "' + '84vh"') >= 0); kitAssert(tranche.indexOf("PERSONNE RECOMMANDÉE (par " + "vous)") >= 0); });
 KIT_TESTS.add("câblage suivi : export Dernier contact hors suivi", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), rows = KIT_SOURCE_HTML.indexOf("var rows =", debut), tranche = KIT_SOURCE_HTML.slice(debut, rows + 1500); kitAssert(tranche.indexOf("else if (!KIT_PURE." + "estSuivi(x.type))") >= 0); });
 KIT_TESTS.add("câblage suivi : accroche, graphique mensuel, recherche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), a = KIT_SOURCE_HTML.indexOf("KIT_PURE.accroche" + "For(", app), accroche = KIT_SOURCE_HTML.slice(a, a + 200), m = KIT_SOURCE_HTML.indexOf("var monthly" + "Data", app), mensuel = KIT_SOURCE_HTML.slice(m, m + 600), r = KIT_SOURCE_HTML.indexOf("if (search)", app), recherche = KIT_SOURCE_HTML.slice(r, r + 700); kitAssert(accroche.indexOf(".filter(function (x) { return !KIT_PURE." + "estSuivi(x.type); })") >= 0); kitAssert(mensuel.indexOf("!KIT_PURE." + "estSuivi(x.type)) mCount++") >= 0); kitAssert(recherche.indexOf("x." + "lieLabel") >= 0); });
-KIT_TESTS.add("câblage suivi : fiche — ligne Dossiers et historique via", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE." + "reciprocite(c, contacts)") >= 0); kitAssert(tranche.indexOf("Dossiers" + " : ") >= 0 && tranche.indexOf('"via "') >= 0 && tranche.indexOf("(fiche " + "supprimée)") >= 0); });
-KIT_TESTS.add("câblage suivi : Stats — dossiers et apporteurs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), tranche = KIT_SOURCE_HTML.slice(debut, debut + 20000), apporteurs = tranche.indexOf(">Apporteurs<"), origines = tranche.indexOf("Origines des " + "fiches"); kitAssert(tranche.indexOf("KIT_PURE.stats" + "Dossiers(") >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteurs(" + "contacts") >= 0); kitAssert(tranche.indexOf("Dossiers (12 " + "mois)") >= 0); kitAssert(origines >= 0); kitAssert(tranche.indexOf("à " + "remercier") >= 0); kitAssert(tranche.indexOf("Aucun dossier " + "journalisé") >= 0); kitAssert(apporteurs >= 0 && apporteurs < origines); });
-KIT_TESTS.add("câblage suivi : récapitulatif — apporteurs à remercier", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), debut = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), fin = KIT_SOURCE_HTML.indexOf("], 5)", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), avant = KIT_SOURCE_HTML.slice(Math.max(0, debut - 1500), debut), rencontres = tranche.indexOf("Rencontres à " + "programmer"), apporteurs = tranche.indexOf("Apporteurs à " + "remercier"), voeux = tranche.indexOf("Vœux à " + "prévoir"); kitAssert(debut >= 0 && fin > debut); kitAssert(rencontres >= 0 && rencontres < apporteurs && apporteurs < voeux); kitAssert(avant.indexOf("aRemercier." + "length") >= 0); });
+KIT_TESTS.add("câblage suivi : fiche — liens et historique", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("Vous a " + "recommandé :"), b = tranche.indexOf("Recommandé(e) " + "par :"), c = tranche.indexOf("Vous lui avez " + "recommandé :"), d = tranche.indexOf("Recommandé(e) " + "à :"); kitAssert(tranche.indexOf("KIT_PURE." + "liensFiche(c, contacts)") >= 0); kitAssert(a >= 0 && a < b && b < c && c < d); kitAssert(tranche.indexOf('"via "') >= 0 && tranche.indexOf('"→ "') >= 0); kitAssert(tranche.indexOf("(fiche " + "supprimée)") >= 0 && tranche.indexOf("une personne sans " + "fiche") >= 0 && tranche.indexOf("liens" + "Deplies") >= 0); });
+KIT_TESTS.add("câblage suivi : Stats — recommandations et apporteurs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.stats" + "Recommandations(") >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteurs(" + "contacts") >= 0); kitAssert(tranche.indexOf("Recommandations reçues (12 " + "mois)") >= 0); kitAssert(tranche.indexOf("Aucune recommandation " + "enregistrée") >= 0); kitAssert(tranche.indexOf("dernière recommandation " + "le") >= 0); kitAssert(tranche.indexOf("aucun échange " + "enregistré") >= 0); kitAssert(tranche.indexOf("Origines des " + "fiches") === -1 && tranche.indexOf("KIT_PURE.stats" + "Dossiers(") === -1); kitAssert(tranche.indexOf(">Apporteurs<") >= 0); });
+KIT_TESTS.add("câblage suivi : récapitulatif — apporteurs à remercier", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), debut = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), fin = KIT_SOURCE_HTML.indexOf("], 5)", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), avant = KIT_SOURCE_HTML.slice(Math.max(0, debut - 1500), debut), rencontres = tranche.indexOf("Rencontres à " + "programmer"), apporteurs = tranche.indexOf("Apporteurs à " + "remercier"), voeux = tranche.indexOf("Vœux à " + "prévoir"); kitAssert(debut >= 0 && fin > debut); kitAssert(rencontres >= 0 && rencontres < apporteurs && apporteurs < voeux); kitAssert(avant.indexOf("aRemercier." + "length") >= 0); kitAssert(tranche.indexOf('recommandation", "recommandations') >= 0 && tranche.indexOf("aucun échange " + "enregistré") >= 0); });
 KIT_TESTS.add("câblage suivi : formulaire — origine de la fiche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE DE LA " + "FICHE") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("ORIGINE / " + "APPORTEUR") === -1); });
 KIT_TESTS.add("câblage suivi : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Dossiers et " + "apporteurs") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossier " + "confié") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("RECOMMANDÉ " + "À") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dossiers et apporteurs (v1.5." + "8)") >= 0); });
 KIT_TESTS.add("suivi : correctifs apporteurs et réciprocité", function () { var base = [{ id: "A", interactions: [{ type: "email", date: "2026-06-01" }, { type: "recommandation_donnee", date: "2026-08-01", lieId: "Q" }] }, { id: "X", interactions: [{ type: "dossier", date: "2026-06-15", lieId: "A" }, { type: "recommandation_recue", date: "2026-08-01", lieId: "D" }] }], lignes = KIT_PURE.apporteurs(base, "2026-09-07"); kitAssert(lignes.length === 1 && lignes[0].id === "A" && lignes[0].aRemercier === true); kitAssert(KIT_PURE.apporteurs([{ id: "X", interactions: [{ type: "dossier", date: "2026-01-01", lieId: "" }] }], "2026-09-07").length === 0); var contacts = [{ id: "X", interactions: [{ type: "dossier", lieId: "A" }, { type: "recommandation_recue", lieId: "X" }] }, { id: "A", interactions: [] }]; kitAssert(KIT_PURE.reciprocite(contacts[0], contacts).dossiersRecus === 1); kitAssert(KIT_PURE.reciprocite({ interactions: [] }, contacts).dossiersApportes === 0); });
@@ -899,9 +899,10 @@ KIT_TESTS.add("suivi : apporteur depuis l'origine — libellé court", function 
 KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
 KIT_TESTS.add("câblage suivi : édition conserve la fiche liée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function open" + "EditInteraction("), fin = KIT_SOURCE_HTML.indexOf("function invite" + "Mobile(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("setLogLieId(entry." + 'lieId || "")') >= 0); kitAssert(tranche.indexOf("setLogLieLabel(entry." + 'lieLabel || "")') >= 0); });
 KIT_TESTS.add("câblage suivi : édition sans lien n'ajoute pas de clés vides", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("logLieInitial") >= 0 && tranche.indexOf("logLieInitial") < tranche.indexOf("Mettre à " + "jour")); });
-KIT_TESTS.add("câblage suivi : Stats — apporteurs sans débordement", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), overflow = tranche.indexOf('overflowX: "' + 'auto"'), origines = tranche.indexOf("Origines des " + "fiches"); kitAssert(overflow >= 0 && overflow < origines); });
-KIT_TESTS.add("câblage suivi : détails renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var detailDebut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), detailFin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", detailDebut), detail = KIT_SOURCE_HTML.slice(detailDebut, detailFin), recus = detail.indexOf("rec." + 'dossiersRecus, "confié"'), apportes = detail.indexOf("rec." + 'dossiersApportes, "apporté"'); kitAssert(recus >= 0 && apportes > recus); kitAssert(detail.indexOf('recommandation_donnee" ? "' + '→ " : "via "') >= 0); var statsDebut = detailFin, statsFin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", statsDebut), stats = KIT_SOURCE_HTML.slice(statsDebut, statsFin); kitAssert(stats.indexOf("String(sd." + "dossiers)") >= 0); kitAssert(stats.indexOf("sd." + 'recommandationsRecues, "recommandation reçue"') > stats.indexOf("String(sd." + "dossiers)")); kitAssert(stats.indexOf("sd." + 'recommandationsDonnees, "donnée"') > stats.indexOf("sd." + 'recommandationsRecues, "recommandation reçue"')); kitAssert(stats.indexOf("KIT_PURE.statsDossiers(contacts, " + "todayStr(), 365)") >= 0); kitAssert(stats.indexOf("{a." + "aRemercier ? <span title=") >= 0); kitAssert(stats.indexOf("lignesApporteurs.length === " + "0 ?") >= 0); });
-KIT_TESTS.add("câblage suivi : modal et récapitulatif renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("!t.legacy && !KIT_PURE." + "estSuivi(t.value)") >= 0); kitAssert(tranche.indexOf('else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery("");') >= 0); kitAssert(tranche.indexOf('t.value === "dossier" && !editIid && !' + "logLieId") >= 0); kitAssert(tranche.indexOf("var lie = suiviModal && " + "lieId") >= 0); var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), recap = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), avant = KIT_SOURCE_HTML.slice(Math.max(0, recap - 1500), recap); kitAssert(avant.indexOf("KIT_PURE.apporteurs(contacts, todayStr()).filter(function (a) { return a." + "aRemercier; })") >= 0); });
+KIT_TESTS.add("câblage suivi : Stats — apporteurs sans débordement", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Stats("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), overflow = tranche.indexOf('overflowX: "' + 'auto"'); kitAssert(overflow >= 0 && overflow < tranche.indexOf("Interactions / " + "mois")); });
+KIT_TESTS.add("câblage suivi : détails renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var detailDebut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), detailFin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", detailDebut), detail = KIT_SOURCE_HTML.slice(detailDebut, detailFin), a = detail.indexOf("Vous a " + "recommandé :"), b = detail.indexOf("Recommandé(e) " + "par :"), c = detail.indexOf("Vous lui avez " + "recommandé :"), d = detail.indexOf("Recommandé(e) " + "à :"); kitAssert(a >= 0 && a < b && b < c && c < d); var statsDebut = detailFin, statsFin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", statsDebut), stats = KIT_SOURCE_HTML.slice(statsDebut, statsFin), recues = stats.indexOf("String(sr." + "recuesDApporteurs)"), donnees = stats.indexOf('sr.donneesParVous, "donnée par vous"'), actifs = stats.indexOf('sr.apporteursActifs, "apporteur actif"'); kitAssert(recues >= 0 && recues < donnees && donnees < actifs); kitAssert(stats.indexOf("{a." + "aRemercier ? <span title=") >= 0); kitAssert(stats.indexOf("lignesApporteurs.length === " + "0 ?") >= 0); });
+KIT_TESTS.add("câblage suivi : modal et récapitulatif renforcés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("!t.legacy && !KIT_PURE." + "estSuivi(t.value)") >= 0); kitAssert(tranche.indexOf('else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery("");') >= 0); kitAssert(tranche.indexOf("KIT_PURE.apporteur" + "DepuisOrigine(") === -1); kitAssert(tranche.indexOf('&& t.value !== "' + 'dossier"') >= 0); kitAssert(tranche.indexOf("var lie = suiviModal && " + "lieId") >= 0); var babel = KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"'), recap = KIT_SOURCE_HTML.indexOf("KIT_PURE.recap" + "Sections([", babel), avant = KIT_SOURCE_HTML.slice(Math.max(0, recap - 1500), recap); kitAssert(avant.indexOf("KIT_PURE.apporteurs(contacts, todayStr()).filter(function (a) { return a." + "aRemercier; })") >= 0); });
+KIT_TESTS.add("câblage suivi : boutons de recommandation", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var INTER_" + "TYPES = ["), fin = KIT_SOURCE_HTML.indexOf("var RENCONTRE_" + "TYPES", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("M'a recommandé " + "quelqu'un"), b = tranche.indexOf("Je lui ai recommandé " + "quelqu'un"), autre = tranche.indexOf('value: "' + 'autre"'); kitAssert(a >= 0 && a < b && b < autre); kitAssert(tranche.indexOf('value: "recommandation_donnee", label: "M' + "'a recommandé quelqu'un" + '", icon: "🤝"') >= 0); kitAssert(tranche.indexOf('value: "recommandation_recue", label: "Je lui ai recommandé quelqu\'un", icon: "➡️"') >= 0); kitAssert(tranche.indexOf("Recommandation " + "donnée") === -1 && tranche.indexOf("Recommandation " + "reçue") === -1); });
 KIT_TESTS.add("suivi : fusion conserve la fiche liée", function () { if (typeof mergeData === "undefined") return; var pc = { contacts: [{ id: "X", updatedAt: "2026-09-02T00:00:00.000Z", interactions: [{ iid: "s1", type: "dossier", date: "2026-09-01", lieId: "ap1", lieLabel: "Jean DUPONT" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var android = { contacts: [{ id: "X", updatedAt: "2026-09-01T00:00:00.000Z", interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var fusion = mergeData(android, pc), interaction = fusion.contacts[0].interactions[0]; kitAssert(interaction.lieId === "ap1" && interaction.lieLabel === "Jean DUPONT"); android.deletedInteractions = [{ cid: "X", iid: "s1" }]; kitAssert(mergeData(android, pc).contacts[0].interactions.length === 0); });
 function candidateSettings(overrides) { var s = { trigrammes: ["CME", "CGI"], fenetres: { petitdej: { debut: "08:00", fin: "11:00" }, dejeuner: { debut: "11:30", fin: "15:30" }, diner: { debut: "18:30", fin: "23:59" }, verre: { debut: "18:30", fin: "23:59" } }, horizon: { minJours: 3, maxJours: 3, plafond: 10 }, exclusions: { aoutPlein: false, fetesFinAnnee: false } }; Object.keys(overrides || {}).forEach(function (key) { s[key] = overrides[key]; }); return s; }
 function graphEvent(subject, showAs, start, end, allDay) { return { subject: subject, showAs: showAs, start: { dateTime: start }, end: { dateTime: end }, isAllDay: !!allDay }; }
@@ -1252,8 +1253,8 @@ var INTER_TYPES = [
   { value: "formation", label: "Formation sans repas", icon: "🎓" },
   { value: "conference_repas", label: "Conférence avec verre / repas", icon: "🎤" },
   { value: "dossier", label: "Dossier confié", icon: "📁" },
-  { value: "recommandation_recue", label: "Recommandation reçue", icon: "🤝" },
-  { value: "recommandation_donnee", label: "Recommandation donnée", icon: "➡️" },
+  { value: "recommandation_donnee", label: "M'a recommandé quelqu'un", icon: "🤝" },
+  { value: "recommandation_recue", label: "Je lui ai recommandé quelqu'un", icon: "➡️" },
   { value: "autre", label: "Autre", icon: "…" },
   { value: "appel", label: "Appel", icon: "✆", legacy: true },
 ];
@@ -2123,6 +2124,7 @@ function App(props) {
   var [showMeetingSettings, setShowMeetingSettings] = useState(false);
   var [showEffectifsPanel, setShowEffectifsPanel] = useState(false);
   var [recapFerme, setRecapFerme] = useState(false);
+  var [liensDeplies, setLiensDeplies] = useState(null);
   useEffect(function () {
     /* Acquittement dans un autre onglet du même appareil : masque aussi ici. */
     function onRecapStorage(e) { if (e && e.key === "kitRecapSemaine") setRecapFerme(true); }
@@ -3907,7 +3909,7 @@ function App(props) {
     { titre: "Relances en attente", items: awaitingList.map(function (c) { return displayName(c) + " — en attente depuis " + String(daysAwaiting(c)) + " j"; }) },
     { titre: "À recontacter", items: retryList.map(function (c) { return displayName(c) + " — dernier échange il y a " + String(daysRetry(c)) + " j"; }) },
     { titre: "Rencontres à programmer", items: rencontreList.map(function (c) { return displayName(c); }) },
-    { titre: "Apporteurs à remercier", items: aRemercier.map(function (a) { return a.label + " — " + KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") + " · dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase(); }) },
+    { titre: "Apporteurs à remercier", items: aRemercier.map(function (a) { return a.label + " — " + KIT_PURE.pluriel(a.recommandations, "recommandation", "recommandations") + " · " + (a.dernierEchangeISO ? "dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase() : "aucun échange enregistré"); }) },
     { titre: "Vœux à prévoir", items: voeuxImminents }
   ], 5);
 
@@ -4078,7 +4080,7 @@ function App(props) {
     for (var i = 0; i < contacts.length; i++) { if (contacts[i].id === logId) { c = contacts[i]; break; } }
     if (!c) return null;
     var suiviModal = KIT_PURE.estSuivi(logType);
-    var lieLibelle = logType === "recommandation_donnee" ? "RECOMMANDÉ À" : "APPORTEUR";
+    var lieLibelle = logType === "dossier" ? "APPORTEUR" : logType === "recommandation_donnee" ? "PERSONNE RECOMMANDÉE (par ce contact)" : "PERSONNE RECOMMANDÉE (par vous)";
     function suggestionsLie(query) {
       return activeContacts.filter(function (x) { return x.id !== c.id && norm(displayName(x) + " " + (x.company || "")).indexOf(norm(query)) >= 0; });
     }
@@ -4086,10 +4088,6 @@ function App(props) {
       setLogType(t.value); setLogRetry(t.value === "appel_message"); setLogLieErreur("");
       if (KIT_PURE.estSuivi(t.value)) { setLogAwait(false); setLogRetry(false); }
       else { setLogLieId(""); setLogLieLabel(""); setLogLieQuery(""); setLogLieErreur(""); }
-      if (t.value === "dossier" && !editIid && !logLieId) {
-        var pre = KIT_PURE.apporteurDepuisOrigine(c.origin, activeContacts.filter(function (x) { return x.id !== c.id; }).map(function (x) { return { id: x.id, label: displayName(x), libelles: [displayName(x), contactLabel(x), x.name, x.lastName] }; }));
-        if (pre) { setLogLieId(pre.id); setLogLieLabel(pre.label); }
-      }
     }
     function boutonType(t) {
       var active = logType === t.value;
@@ -4105,8 +4103,8 @@ function App(props) {
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
             {INTER_TYPES.filter(function (t) { return !t.legacy && !KIT_PURE.estSuivi(t.value); }).map(boutonType)}
           </div>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>SUIVI DU RÉSEAU</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{INTER_TYPES.filter(function (t) { return KIT_PURE.estSuivi(t.value); }).map(boutonType)}</div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>RECOMMANDATIONS</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>{INTER_TYPES.filter(function (t) { return KIT_PURE.estSuivi(t.value) && t.value !== "dossier"; }).map(boutonType)}</div>
           {suiviModal ? (
             <div style={{ position: "relative", marginBottom: 14 }}>
               <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>{lieLibelle}</label>
@@ -4116,7 +4114,7 @@ function App(props) {
                   {norm(logLieQuery).length >= 1 ? <div style={{ position: "absolute", left: 0, right: 0, top: 58, maxHeight: 210, overflowY: "auto", background: "#fff", border: "1px solid " + bd, borderRadius: 8, zIndex: 2, boxShadow: "0 6px 18px rgba(15,23,42,0.12)" }}>{suggestionsLie(logLieQuery).sort(function (a, b) { return sortName(a) < sortName(b) ? -1 : sortName(a) > sortName(b) ? 1 : 0; }).slice(0, 8).map(function (x) { return <div key={x.id} onMouseDown={function () { setLogLieId(x.id); setLogLieLabel(displayName(x)); setLogLieQuery(""); setLogLieErreur(""); }} style={{ padding: "9px 10px", cursor: "pointer", borderBottom: "1px solid #ECE9E3", fontSize: 13 }}>{displayName(x) + (x.company ? " — " + x.company : "")}</div>; })}</div> : null}
                 </React.Fragment>
               )}
-              <p style={{ margin: "5px 0 0", fontSize: 12, color: logLieErreur ? "#B45309" : "#64748B" }}>{logLieErreur || "Laissez vide si la personne n'est pas dans votre réseau."}</p>
+              <p style={{ margin: "5px 0 0", fontSize: 12, color: logLieErreur ? "#B45309" : "#64748B" }}>{logLieErreur || "Laissez vide si cette personne n'a pas de fiche : la recommandation est comptée sans nom, rattachable plus tard avec ✏."}</p>
             </div>
           ) : null}
           <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>DATE</label>
@@ -4133,7 +4131,7 @@ function App(props) {
           </label></React.Fragment>)}
           <div style={{ display: "flex", gap: 10, marginTop: 18, justifyContent: "flex-end" }}>
             <button style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={closeLogModal}>Annuler</button>
-            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { var awaiting = suiviModal ? false : !!logAwait; var retry = suiviModal ? false : !!logRetry; var lieId = logLieId, lieLabel = logLieLabel; if (suiviModal && !lieId && logLieQuery.trim()) { var suggestions = suggestionsLie(logLieQuery); if (suggestions.length === 1) { lieId = suggestions[0].id; lieLabel = displayName(suggestions[0]); setLogLieId(lieId); setLogLieLabel(lieLabel); } else { setLogLieErreur("Choisissez une fiche dans la liste, ou videz le champ si la personne n'est pas dans votre réseau."); return; } } var lie = suiviModal && lieId ? { lieId: lieId, lieLabel: lieLabel } : { lieId: "", lieLabel: "" }; var patchLie = suiviModal || logLieInitial ? lie : {}; if (editIid) updateInteraction(logId, editIid, Object.assign({ comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: awaiting, retryPending: retry }, patchLie)); else logInteraction(logId, logCmt, logDate, logType, awaiting, retry, suiviModal && lieId ? lie : undefined); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
+            <button style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "10px 20px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff }} onClick={function () { var awaiting = suiviModal ? false : !!logAwait; var retry = suiviModal ? false : !!logRetry; var lieId = logLieId, lieLabel = logLieLabel; if (suiviModal && !lieId && logLieQuery.trim()) { var suggestions = suggestionsLie(logLieQuery); if (suggestions.length === 1) { lieId = suggestions[0].id; lieLabel = displayName(suggestions[0]); setLogLieId(lieId); setLogLieLabel(lieLabel); } else { setLogLieErreur("Choisissez une fiche dans la liste, ou videz le champ."); return; } } var lie = suiviModal && lieId ? { lieId: lieId, lieLabel: lieLabel } : { lieId: "", lieLabel: "" }; var patchLie = suiviModal || logLieInitial ? lie : {}; if (editIid) updateInteraction(logId, editIid, Object.assign({ comment: logCmt || "", date: logDate || todayStr(), type: logType || "autre", awaitingResponse: awaiting, retryPending: retry }, patchLie)); else logInteraction(logId, logCmt, logDate, logType, awaiting, retry, suiviModal && lieId ? lie : undefined); closeLogModal(); }}>{editIid ? "Mettre à jour" : "Confirmer"}</button>
           </div>
         </div>
       </div>
@@ -4479,12 +4477,24 @@ function App(props) {
     var retrying = retryDays >= 0;
     var retryWarn = retryDays >= FOLLOWUP_RETRY_DAYS;
     var rawOverdue = !!cycC && rdvMonths >= cycC.warn;
-    var rec = KIT_PURE.reciprocite(c, contacts);
-    var segs = [];
-    if (rec.dossiersRecus) segs.push(KIT_PURE.pluriel(rec.dossiersRecus, "confié", "confiés"));
-    if (rec.dossiersApportes) segs.push(KIT_PURE.pluriel(rec.dossiersApportes, "apporté", "apportés"));
-    if (rec.recoDonneesParMoi) segs.push(KIT_PURE.pluriel(rec.recoDonneesParMoi, "recommandation donnée", "recommandations données"));
-    if (rec.recoRecuesDeLui) segs.push(KIT_PURE.pluriel(rec.recoRecuesDeLui, "recommandation reçue", "recommandations reçues"));
+    var liens = KIT_PURE.liensFiche(c, contacts);
+    function rendreNoms(liste, cleId, cleLien) {
+      var deplies = liensDeplies === c.id;
+      var visibles = deplies ? liste : liste.slice(0, 5);
+      var elements = [];
+      visibles.forEach(function (el, index) {
+        var idFiche = el[cleId];
+        var existe = cleLien ? el.existe : true;
+        var nom = el.label || "une personne sans fiche";
+        var fiche = null;
+        for (var fi = 0; fi < contacts.length; fi++) { if (contacts[fi].id === idFiche) { fiche = contacts[fi]; break; } }
+        var archivee = existe && (cleLien ? !!(fiche && fiche.archived) : !!el.archivee);
+        if (index > 0) elements.push(<span key={"sep-" + String(index)} style={{ color: "#64748B", fontWeight: 400 }}> · </span>);
+        elements.push(<React.Fragment key={cleLien ? el.iid : el.id}>{existe ? <span onClick={function () { setSelId(idFiche); setView("contact"); }} style={{ color: "#235C68", textDecoration: "underline", cursor: "pointer", fontWeight: 600 }}>{nom}</span> : <span style={{ color: "#1B1B24", fontWeight: 600 }}>{nom}</span>}{el[cleLien] && !existe ? <span style={{ color: "#64748B", fontWeight: 400 }}> (fiche supprimée)</span> : null}{archivee ? <span style={{ color: "#64748B", fontWeight: 400 }}> (archivée)</span> : null}</React.Fragment>);
+      });
+      if (!deplies && liste.length > 5) elements.push(<span key="plus" onClick={function () { setLiensDeplies(c.id); }} style={{ color: "#235C68", textDecoration: "underline", cursor: "pointer" }}>{" … et " + String(liste.length - 5) + (liste.length - 5 > 1 ? " autres" : " autre")}</span>);
+      return elements;
+    }
 
     return (
       <div>
@@ -4629,7 +4639,10 @@ function App(props) {
           ) : null}
 
           {c.origin ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Origine : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{c.origin}</span></p> : null}
-          {segs.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Dossiers : "}<span style={{ color: "#1B1B24", fontWeight: 600 }}>{segs.join(" · ")}</span></p> : null}
+          {liens.recoDonnees.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Vous a recommandé : "}{rendreNoms(liens.recoDonnees, "lieId", "lieId")}</p> : null}
+          {liens.recommandePar.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Recommandé(e) par : "}{rendreNoms(liens.recommandePar, "id", null)}</p> : null}
+          {liens.recoRecues.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Vous lui avez recommandé : "}{rendreNoms(liens.recoRecues, "lieId", "lieId")}</p> : null}
+          {liens.recommandeA.length ? <p style={{ margin: "12px 0 0", fontSize: 12.5, color: "#64748B" }}>{"Recommandé(e) à : "}{rendreNoms(liens.recommandeA, "id", null)}</p> : null}
           {c.notes ? <div style={{ marginTop: 14, padding: 14, background: "#FAF0D4", borderRadius: 8, borderLeft: "3px solid #B5790B" }}><p style={{ margin: 0, fontSize: 11, color: "#8A5E08", fontWeight: 600 }}>NOTES</p><p style={{ margin: "6px 0 0", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{c.notes}</p></div> : null}
         </div>
 
@@ -4666,7 +4679,7 @@ function App(props) {
                         {x.awaitingResponse ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"⏳ en attente"}</span> : null}
                         {x.retryPending ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#235C68", background: "#EAF3F5", padding: "1px 6px", borderRadius: 8, fontWeight: 600 }}>{"🔁 nouvel échange"}</span> : null}
                       </p>
-                      {(x.lieId || x.lieLabel) ? <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748B" }}>{(x.type === "recommandation_donnee" ? "→ " : "via ") + (x.lieLabel || "") + (contacts.some(function (k) { return k.id === x.lieId; }) ? "" : " (fiche supprimée)")}</p> : null}
+                      {(x.lieId || x.lieLabel) ? <p style={{ margin: "3px 0 0", fontSize: 12, color: "#64748B" }}>{(function () { var fiche = contacts.find(function (k) { return k.id === x.lieId; }); var nom = fiche ? KIT_PURE.nomCourant(fiche) : x.lieLabel || ""; return (x.type === "dossier" ? "via " : "→ ") + nom + (x.lieId && !fiche ? " (fiche supprimée)" : ""); })()}</p> : null}
                       {x.comment ? <p style={{ margin: "3px 0 0", fontSize: 13.5, lineHeight: 1.5, color: "#475569" }}>{x.comment}</p> : null}
                     </div>
                     <div style={{ display: "flex", alignItems: "flex-start", flexShrink: 0 }}>
@@ -4868,7 +4881,7 @@ function App(props) {
   }
 
   function renderStats() {
-    var sd = KIT_PURE.statsDossiers(contacts, todayStr(), 365);
+    var sr = KIT_PURE.statsRecommandations(contacts, todayStr(), 365);
     var lignesApporteurs = KIT_PURE.apporteurs(contacts, todayStr());
     return (
       <div>
@@ -4878,39 +4891,21 @@ function App(props) {
           return (
             <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
               <h3 style={{ margin: "0 0 10px", fontSize: 15, color: ac }}>Apporteurs</h3>
-              {lignesApporteurs.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#64748B" }}>Aucun dossier journalisé pour l'instant. Sur la fiche du client (créez-la d'abord si besoin), « Je l'ai contacté » → « Dossier confié » → indiquez l'apporteur.</p> :
+              {lignesApporteurs.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#64748B" }}>Aucune recommandation enregistrée pour l'instant. Sur la fiche de la personne qui vous a recommandé quelqu'un : « Je l'ai contacté » → « M'a recommandé quelqu'un ».</p> :
                 <div style={{ overflowX: "auto" }}><div>{lignesApporteurs.map(function (a) {
                   return (
-                    <div key={a.id} style={{ display: "grid", gridTemplateColumns: "minmax(150px, 2fr) repeat(4, minmax(100px, 1fr))", minWidth: 560, alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
-                      <span onClick={a.existe ? function () { setSelId(a.id); setView("contact"); } : undefined} style={{ fontWeight: 600, color: a.existe ? ac : "#64748B", cursor: a.existe ? "pointer" : "default", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.label + (a.archivee ? " (archivée)" : "") + (a.existe ? "" : " (fiche supprimée)")}</span>
-                      <span style={{ color: "#64748B" }}>{a.dossiers > 0 ? KIT_PURE.pluriel(a.dossiers, "dossier", "dossiers") : KIT_PURE.pluriel(a.recommandationsRecues, "recommandation reçue", "recommandations reçues")}</span>
-                      <span style={{ color: "#64748B" }}>{a.dernierDossierISO ? "dernier dossier " + fmtDate(a.dernierDossierISO) : ""}</span>
-                      <span style={{ color: "#64748B" }}>{"dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase()}</span>
-                      <span>{a.aRemercier ? <span title={"aucun échange depuis le dossier du " + fmtDate(a.dernierDossierISO)} style={{ display: "inline-block", background: "#FEF3C7", color: "#92400E", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>à remercier</span> : null}</span>
+                    <React.Fragment key={a.id}>
+                    <div style={{ display: "grid", gridTemplateColumns: "minmax(150px, 2fr) repeat(4, minmax(100px, 1fr))", minWidth: 560, alignItems: "center", gap: 10, padding: "7px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
+                      <span onClick={function () { setSelId(a.id); setView("contact"); }} style={{ fontWeight: 600, color: "#235C68", textDecoration: "underline", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.label + (a.archivee ? " (archivée)" : "")}</span>
+                      <span style={{ color: "#64748B" }}>{KIT_PURE.pluriel(a.recommandations, "recommandation", "recommandations")}</span>
+                      <span style={{ color: "#64748B" }}>{a.derniereRecoISO ? "dernière recommandation le " + fmtDate(a.derniereRecoISO) : ""}</span>
+                      <span style={{ color: "#64748B" }}>{a.dernierEchangeISO ? "dernier échange " + fmtAgo(a.dernierEchangeISO).toLowerCase() : "aucun échange enregistré"}</span>
+                      <span>{a.aRemercier ? <span title={"aucun échange depuis la recommandation du " + fmtDate(a.derniereRecoISO)} style={{ display: "inline-block", background: "#FEF3C7", color: "#92400E", borderRadius: 999, padding: "2px 8px", fontSize: 11 }}>à remercier</span> : null}</span>
                     </div>
+                    <div style={{ fontSize: 12, color: "#64748B", padding: "0 0 6px" }}>{a.recommandes.map(function (r) { return r.label || "une personne sans fiche"; }).join(" · ")}</div>
+                    </React.Fragment>
                   );
                 })}</div></div>}
-            </div>
-          );
-        })()}
-        {(function () {
-          var og = {};
-          activeContacts.forEach(function (c) { var nm = (c.origin || "").trim(); if (!nm) return; var k = norm(nm); if (!og[k]) og[k] = { name: nm, n: 0, cli: 0 }; og[k].n++; if (isClient(c)) og[k].cli++; });
-          var rows = Object.keys(og).map(function (k) { return og[k]; });
-          rows.sort(function (a, b) { return b.cli - a.cli || b.n - a.n || a.name.localeCompare(b.name); });
-          if (!rows.length) return null;
-          return (
-            <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: "16px 18px", marginBottom: 18 }}>
-              <h3 style={{ margin: "0 0 4px", fontSize: 15, color: ac }}>Origines des fiches</h3>
-              <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748B" }}>Par où la fiche est entrée dans votre réseau — les dossiers se lisent dans « Apporteurs ».</p>
-              {rows.map(function (r) {
-                return (
-                  <div key={r.name} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderTop: "1px solid #F4F2EE", fontSize: 13 }}>
-                    <span style={{ fontWeight: 600, color: "#1B1B24", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
-                    <span style={{ color: "#64748B", flexShrink: 0 }}>{String(r.n) + " fiche(s) · " + String(r.cli) + " client(s)"}</span>
-                  </div>
-                );
-              })}
             </div>
           );
         })()}
@@ -4918,7 +4913,7 @@ function App(props) {
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(stTotal)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Contacts</p></div>
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: coverage >= 70 ? "#2F6055" : coverage >= 40 ? "#B5790B" : "#BE3C1A" }}>{String(coverage) + "%"}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{"Couverture (fiches suivies)"}</p></div>
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: "#BE3C1A" }}>{String(stOverdue)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>En retard</p></div>
-          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(sd.dossiers)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Dossiers (12 mois)</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{KIT_PURE.pluriel(sd.recommandationsRecues, "recommandation reçue", "recommandations reçues") + " · " + KIT_PURE.pluriel(sd.recommandationsDonnees, "donnée", "données")}</p></div>
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid " + bd, padding: 16, textAlign: "center" }}><p style={{ margin: 0, fontSize: 30, fontWeight: 800, color: ac }}>{String(sr.recuesDApporteurs)}</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>Recommandations reçues (12 mois)</p><p style={{ margin: "2px 0 0", fontSize: 12, color: "#64748B" }}>{KIT_PURE.pluriel(sr.donneesParVous, "donnée par vous", "données par vous") + " · " + KIT_PURE.pluriel(sr.apporteursActifs, "apporteur actif", "apporteurs actifs")}</p></div>
         </div>
         <div style={{ background: "#fff", borderRadius: 14, border: "1px solid #ECE9E3", padding: 20, marginBottom: 12, boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
           <h3 style={{ margin: "0 0 16px", fontSize: 15, color: ac }}>Interactions / mois</h3>
