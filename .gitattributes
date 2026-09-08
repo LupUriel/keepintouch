@@ -1,1 +1,2 @@
 lib/* -text
+data/*.js text eol=lf

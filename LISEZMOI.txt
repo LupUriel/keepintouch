@@ -150,6 +150,28 @@ Limite résiduelle entre appareils : lors d'une fusion, la donnée la plus réce
 par champ. Une actualisation API plus récente réalisée sur l'autre appareil peut donc
 supplanter une saisie manuelle ; le rapport de fusion signale ce conflit.
 
+## Activité de l'entreprise
+
+Chaque fiche portant une entreprise peut décrire son activité réelle : champ « Activité de
+l'entreprise » du formulaire (texte libre). Quand vous utilisez « Rechercher l'effectif » ou
+« Actualiser » sur une fiche, ou « Compléter / Mettre à jour les effectifs »
+dans ⋯ › Taille des entreprises, le code d'activité NAF de l'entreprise
+(dit code APE, attribué par l'INSEE) est
+mémorisé et son libellé officiel prérempli dans le champ s'il était vide. Pour vos fiches déjà
+rattachées, une seule passe « Mettre à jour les effectifs » suffit.
+Une activité que vous avez saisie n'est jamais écrasée ; le bouton « Reprendre le libellé
+officiel » remet le libellé INSEE. Le libellé officiel est parfois générique ou abrégé
+(« n.c.a. » = non classé ailleurs) : remplacez-le par ce que fait réellement l'entreprise, en
+quelques mots.
+Les libellés sont ceux de la NAF 2025, qui entre en vigueur en janvier 2027 ; l'ancien code
+(NAF rév. 2, lisible sur les documents jusqu'à fin 2026) est mémorisé et affiché à côté.
+La convention collective de branche reste un choix manuel : les données en ligne sont
+déclaratives et souvent inexactes.
+Pour cibler un envoi, tapez un mot de l'activité dans la case « Rechercher… » du tableau de
+bord (ex. « pharma ») : les fiches correspondantes s'affichent.
+Rien de nouveau ne sort de l'application : les codes NAF sont déjà dans la réponse SIRENE
+interrogée pour l'effectif, et la table des libellés (INSEE) est embarquée.
+
 ## Procédures collectives
 
 La vérification s'appuie sur la source officielle BODACC. Seuls les SIREN mémorisés sont envoyés ;

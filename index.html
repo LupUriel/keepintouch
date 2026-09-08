@@ -57,6 +57,7 @@
   <script src="./lib/babel.min.js"></script>
   <script src="./lib/xlsx.full.min.js"></script>
   <script src="./lib/exceljs.min.js"></script>
+  <script src="./data/naf-2025.js"></script>
   <script>
 var KIT_PURE = (function () {
   var DAYS = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
@@ -309,9 +310,27 @@ var KIT_PURE = (function () {
   }
   function shouldPurgeMsalKey(key) { return /^msal\./i.test(String(key || "")); }
   function digitsOf(value) { return String(value || "").replace(/\D/g, ""); }
+  function normaliseNaf(code) {
+    var normalise = String(code || "").toUpperCase().replace(/\s+/g, "");
+    if (/^\d{4}[A-Z]$/.test(normalise)) normalise = normalise.slice(0, 2) + "." + normalise.slice(2);
+    return normalise;
+  }
+  function libelleNaf(code, table) { return (table && table.libelles && table.libelles[normaliseNaf(code)]) || ""; }
+  function patchActivite(contact, candidate, table, todayISO) {
+    var c = contact || {};
+    var cand = candidate || {};
+    var nafCode = normaliseNaf(cand.activite_principale_naf25);
+    var nafRev2Code = normaliseNaf(cand.activite_principale);
+    if (!nafCode && !nafRev2Code) return {};
+    var patch = { nafCode: nafCode, nafRev2Code: nafRev2Code, nafLibelle: libelleNaf(nafCode, table), nafSource: "api", nafDate: String(todayISO || "") };
+    if (patch.nafLibelle && (String(c.activite || "").trim() === "" || c.activite === c.nafLibelle)) patch.activite = patch.nafLibelle;
+    if (!patch.nafLibelle && c.activite && c.activite === c.nafLibelle) patch.activite = "";
+    if (patch.activite) patch.activite = patch.activite.slice(0, 200);
+    return patch;
+  }
   function contactHaystack(contact) {
     var c = contact || {};
-    var values = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, (c.tags || []).join(" "), c.notes, c.email, c.phonePro, c.phonePerso, c.phone, c.address, c.workLocation, c.metAt, c.origin, c.nextAction, c.followUpNote];
+    var values = [c.name, c.firstName, c.lastName, c.company, c.jobTitle, c.sector, c.activite, c.nafCode, c.nafLibelle, (c.tags || []).join(" "), c.notes, c.email, c.phonePro, c.phonePerso, c.phone, c.address, c.workLocation, c.metAt, c.origin, c.nextAction, c.followUpNote];
     values.push((c.keyDates || []).map(function (entry) { return entry && entry.label; }).filter(Boolean).join(" "));
     return values.filter(function (value) { return value != null && String(value); }).map(String).join(" ");
   }
@@ -662,7 +681,7 @@ var KIT_PURE = (function () {
     });
     return targets;
   }
-  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, normaliseNaf: normaliseNaf, libelleNaf: libelleNaf, patchActivite: patchActivite, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -708,6 +727,7 @@ KIT_TESTS.add("effectifs classement stable à scores non nuls égaux", function 
 KIT_TESTS.add("effectifs similarité : un code postal commun seul donne aussi le bonus (choix figé)", function () { kitAssert(KIT_PURE.adresseSimilarity("14 faubourg Reclus 73000 Chambéry", "9 impasse Voltaire 73000 Chambéry") === 4); });
 KIT_TESTS.add("effectifs URL : liste blanche stricte des paramètres", function () { [KIT_PURE.effectifSearchUrl("A & B"), KIT_PURE.effectifSearchUrl("A & B", "73000"), KIT_PURE.effectifSearchUrl("X", "bad")].forEach(function (url) { var query = url.split("?")[1] || ""; query.split("&").forEach(function (pair) { var key = pair.split("=")[0]; kitAssert(key === "q" || key === "per_page" || key === "code_postal", key); }); }); });
 KIT_TESTS.add("effectifs câblage : l'interface passe le code postal et classe les candidates", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || (/effectifSearchUrl\(c\.company, codePostal\)/.test(KIT_SOURCE_HTML) && /effectifSearchUrl\(target\.cle, codePostal\)/.test(KIT_SOURCE_HTML) && /setEffectifResults\(KIT_PURE\.rankEffectifCandidates\(results \|\| \[\]/.test(KIT_SOURCE_HTML) && /setEffectifResults\(KIT_PURE\.rankEffectifCandidates\(item\.results \|\| \[\]/.test(KIT_SOURCE_HTML))); });
+KIT_TESTS.add("câblage activité : hook contactsRef en tête du composant", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function App" + "("), fin = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), a = tranche.indexOf("var contactsRef = " + "useRef(contacts)"), b = tranche.indexOf("var effectifReqSeq = " + "useRef(0)"), c = tranche.indexOf("if (recuperation) " + "return"), courant = tranche.indexOf("contactsRef.current = " + "(data && data.contacts) || [];"); kitAssert(a >= 0 && b >= 0 && c >= 0 && a > b && a - b < 400 && a < c); kitAssert(courant >= 0 && courant < c); });
 KIT_TESTS.add("effectifs dérivation rejette les entrées invalides", function () { kitAssert(KIT_PURE.trancheFromCount(-1) === "NN"); kitAssert(KIT_PURE.trancheFromCount(2.5) === "NN"); kitAssert(KIT_PURE.trancheFromCount(NaN) === "NN"); kitAssert(KIT_PURE.trancheFromCount("abc") === "NN"); });
 KIT_TESTS.add("effectifs garde CSP", function () { kitAssert(KIT_PURE.cspAllowsApi("<html></html>")); kitAssert(KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self' https://recherche-entreprises.api.gouv.fr; script-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'; connect-src 'self'\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' http://recherche-entreprises.api.gouv.fr\">")); kitAssert(!KIT_PURE.cspAllowsApi("<meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self' https://evilrecherche-entreprises.api.gouv.fr\">")); });
 KIT_TESTS.add("effectifs garde CSP sur le document réel", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || KIT_PURE.cspAllowsApi(KIT_SOURCE_HTML), "la CSP du document bloque l'API Recherche d'entreprises — ajouter le domaine au connect-src"); });
@@ -724,7 +744,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.9["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v51["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.10["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v52["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("KIT_PURE : fonctions retirées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var KIT_" + "PURE"), fin = KIT_SOURCE_HTML.indexOf("var KIT_" + "TESTS", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut); kitAssert(tranche.indexOf("stats" + "Dossiers") === -1); kitAssert(tranche.indexOf("recipro" + "cite") === -1); kitAssert(tranche.indexOf("apporteurDepuis" + "Origine") === -1); });
 KIT_TESTS.add("stockage : niveaux et plafond", function () { kitAssert(JSON.stringify(KIT_PURE.niveauStockage(3650434)) === JSON.stringify({ pct: 70, niveau: "attention" })); kitAssert(KIT_PURE.niveauStockage(3093299).pct === 59 && KIT_PURE.niveauStockage(3093299).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage(3145728).pct === 60 && KIT_PURE.niveauStockage(3145728).niveau === "attention"); kitAssert(KIT_PURE.niveauStockage(4194304).pct === 80 && KIT_PURE.niveauStockage(4194304).niveau === "critique"); kitAssert(KIT_PURE.niveauStockage(50, 100).pct === 50 && KIT_PURE.niveauStockage(50, 100).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage("x").pct === 0 && KIT_PURE.niveauStockage("x").niveau === "ok"); });
 KIT_TESTS.add("stockage : détection du quota dépassé", function () { kitAssert(KIT_PURE.estQuotaDepasse({ name: "QuotaExceededError" })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 22 })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 1014 })); kitAssert(KIT_PURE.estQuotaDepasse({ name: "NS_ERROR_DOM_QUOTA_REACHED" })); kitAssert(!KIT_PURE.estQuotaDepasse({ name: "TypeError" })); kitAssert(!KIT_PURE.estQuotaDepasse(null)); kitAssert(!KIT_PURE.estQuotaDepasse("x")); });
@@ -754,7 +774,7 @@ KIT_TESTS.add("câblage : la balise Babel porte data-presets=react", function ()
 KIT_TESTS.add("CSP du document réel : unsafe-eval retiré, unsafe-inline conservé", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "script-src", "'unsafe-eval'") === false); kitAssert(KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "script-src", "'unsafe-inline'") === true); kitAssert(KIT_PURE.cspDirectiveAllows(KIT_SOURCE_HTML, "connect-src", "https://graph.microsoft.com") === true); });
 KIT_TESTS.add("câblage : service worker enregistré avant le bloc Babel, plus dans le bloc", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var motif = "navigator.serviceWorker" + ".register("; var mB = KIT_SOURCE_HTML.match(/<script[^>]*type="text\/babel"[^>]*>/); var iBabel = mB ? KIT_SOURCE_HTML.indexOf(mB[0]) : -1; var avant = KIT_SOURCE_HTML.slice(0, iBabel), apres = KIT_SOURCE_HTML.slice(iBabel); kitAssert(iBabel > 0); kitAssert(avant.indexOf(motif) >= 0); kitAssert(apres.indexOf(motif) === -1); var iSw = avant.indexOf(motif); var blocSw = avant.slice(avant.lastIndexOf("<script", iSw), iSw + 900); kitAssert(blocSw.indexOf("DOMContent" + "Loaded") >= 0, "enregistrement différé à DOMContentLoaded, jamais à load"); kitAssert(blocSw.indexOf("addEventListener(\"load\"") === -1, "aucun écouteur load dans le bloc d'enregistrement"); kitAssert(blocSw.indexOf("etaitControlee") >= 0); ["updatefound", "kit-sw-" + "updated", "visibilitychange", "reg.update(", "__kitMajPrete = true"].forEach(function (m) { kitAssert(blocSw.indexOf(m) >= 0, m + " absent du bloc d'enregistrement"); }); kitAssert(avant.indexOf(motif) < KIT_SOURCE_HTML.indexOf('src="./lib/babel.min.js"'), "enregistrement du service worker avant le chargement de Babel"); });
 KIT_TESTS.add("écran d'attente statique dans #root", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var iRoot = KIT_SOURCE_HTML.indexOf('<div id="root">'); var iScript = KIT_SOURCE_HTML.indexOf("<script", iRoot); var zone = KIT_SOURCE_HTML.slice(iRoot, iScript); kitAssert(iRoot > 0 && zone.indexOf("Ouverture…") >= 0 && zone.indexOf("kit-boot-late") >= 0); var head = KIT_SOURCE_HTML.slice(0, iRoot); kitAssert(/\.kit-boot-late\s*\{[^}]*opacity:\s*0[^}]*animation:\s*kitBootLate[^}]*20s/.test(head), "le message tardif reste masqué 20 s"); kitAssert(/@keyframes kitBootLate/.test(head)); kitAssert(/\.kit-boot\s*\{[^}]*min-height:\s*100vh/.test(head)); kitAssert(!/\.kit-boot\s*\{[^}]*display:\s*none/.test(head), "l'écran d'attente ne doit pas être masqué"); });
-KIT_TESTS.add("précache : chaque bibliothèque chargée par le document est précachée par le service worker", function () { if (typeof KIT_SOURCE_HTML === "undefined" || typeof KIT_SOURCE_SW === "undefined") return; var srcs = []; var re = /<script src="(\.\/lib\/[^"]+)"/g; var m; while ((m = re.exec(KIT_SOURCE_HTML)) !== null) srcs.push(m[1]); kitAssert(srcs.length >= 6); var pre = KIT_SOURCE_SW.match(/var PRECACHE_URLS = \[([\s\S]*?)\];/); kitAssert(!!pre); srcs.forEach(function (s) { kitAssert(pre[1].indexOf('"' + s + '"') >= 0, s + " absent de PRECACHE_URLS"); }); kitAssert(pre[1].indexOf('"./index.html"') >= 0 && pre[1].indexOf('"./manifest.json"') >= 0); });
+KIT_TESTS.add("précache : chaque bibliothèque chargée par le document est précachée par le service worker", function () { if (typeof KIT_SOURCE_HTML === "undefined" || typeof KIT_SOURCE_SW === "undefined") return; var srcs = []; var re = /<script src="(\.\/(?:lib|data)\/[^"]+)"/g; var m; while ((m = re.exec(KIT_SOURCE_HTML)) !== null) srcs.push(m[1]); kitAssert(srcs.length >= 7); var pre = KIT_SOURCE_SW.match(/var PRECACHE_URLS = \[([\s\S]*?)\];/); kitAssert(!!pre); srcs.forEach(function (s) { kitAssert(pre[1].indexOf('"' + s + '"') >= 0, s + " absent de PRECACHE_URLS"); }); kitAssert(pre[1].indexOf('"./index.html"') >= 0 && pre[1].indexOf('"./manifest.json"') >= 0); });
 KIT_TESTS.add("effectifs groupe câblés dans le document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/KIT_PURE\.propagationCibles\(/.test(KIT_SOURCE_HTML)); kitAssert(/MERGE_FIELDS[^;]*[\"']effectifsSecondaires[\"']/.test(KIT_SOURCE_HTML)); kitAssert(KIT_SOURCE_HTML.indexOf("(groupe)") >= 0); kitAssert(/KIT_PURE\.procedureCombine\(/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("champs procédure et câblage BODACC du document réel", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"].forEach(function (field) { kitAssert(new RegExp("MERGE_FIELDS[^;]*[\\\"']" + field + "[\\\"']").test(KIT_SOURCE_HTML), field + " absent de MERGE_FIELDS"); }); var appelsSiren = KIT_SOURCE_HTML.match(/KIT_PURE\.bodaccSearchUrl\(siren\)/g) || []; kitAssert(appelsSiren.length >= 2, "la fiche ET le lot doivent chacun appeler bodaccSearchUrl pour chaque SIREN"); });
 KIT_TESTS.add("câblage BODACC : isolation d'échec du lot et récap alimenté", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; kitAssert(/if \(bodaccEchecs\) report\.bodaccKo\.push\(target\.label\)/.test(KIT_SOURCE_HTML), "l'échec BODACC du lot doit être isolé et signalé"); kitAssert(/procedureList\.length \+/.test(KIT_SOURCE_HTML), "procedureList doit compter dans recapTotal"); kitAssert(KIT_SOURCE_HTML.indexOf("⚠ Procédures collectives") >= 0, "la section du récap doit exister"); kitAssert(/if \(target\.mode !== "siren"\) return null;/.test(KIT_SOURCE_HTML), "la passe BODACC du lot ne doit tourner qu'une fois par fiche (cible principale)"); });
@@ -843,6 +863,17 @@ KIT_TESTS.add("câblage suivi : documentation", function () { if (typeof KIT_SOU
 KIT_TESTS.add("suivi : correctifs apporteurs", function () { var base = [{ id: "A", interactions: [{ type: "email", date: "2026-06-01" }, { type: "recommandation_donnee", date: "2026-08-01", lieId: "Q" }] }, { id: "X", interactions: [{ type: "dossier", date: "2026-06-15", lieId: "A" }, { type: "recommandation_recue", date: "2026-08-01", lieId: "D" }] }], lignes = KIT_PURE.apporteurs(base, "2026-09-07"); kitAssert(lignes.length === 1 && lignes[0].id === "A" && lignes[0].aRemercier === true); kitAssert(KIT_PURE.apporteurs([{ id: "X", interactions: [{ type: "dossier", date: "2026-01-01", lieId: "" }] }], "2026-09-07").length === 0); });
 KIT_TESTS.add("suivi : statistiques des recommandations", function () { var contacts = [{ id: "A", interactions: [{ type: "recommandation_donnee", date: "2025-09-07" }, { type: "recommandation_donnee", date: "2025-09-06" }, { type: "recommandation_donnee", date: "2026-09-08" }, { type: "recommandation_donnee", date: "mal-formee" }] }, { id: "B", archived: true, interactions: [{ type: "recommandation_donnee", date: "2026-08-10" }, { type: "recommandation_donnee", date: "2026-08-02" }, { type: "recommandation_recue", date: "2026-08-11" }] }, { id: "C", interactions: [{ type: "recommandation_recue", date: "2026-08-03" }] }], r = KIT_PURE.statsRecommandations(contacts, "2026-09-07", 0), r30 = KIT_PURE.statsRecommandations(contacts, "2026-09-07", 30); kitAssert(JSON.stringify(r) === JSON.stringify({ recuesDApporteurs: 3, donneesParVous: 2, apporteursActifs: 2 })); kitAssert(KIT_PURE.statsRecommandations(contacts, "2026-09-07").recuesDApporteurs === 3); kitAssert(JSON.stringify(r30) === JSON.stringify({ recuesDApporteurs: 1, donneesParVous: 1, apporteursActifs: 1 })); });
 KIT_TESTS.add("suivi : liens d'une fiche", function () { var a = { id: "A", firstName: "Jean", lastName: "Dupont", interactions: [{ iid: "a1", type: "recommandation_donnee", date: "2026-01-01", lieId: "X" }, { iid: "a2", type: "recommandation_donnee", date: "2026-05-01", lieId: "X" }, { iid: "a3", type: "recommandation_recue", date: "2026-04-01", lieId: "Z" }] }, x = { id: "X", firstName: "Claire", lastName: "Client", interactions: [{ iid: "x1", type: "recommandation_recue", date: "2026-03-01", lieId: "Y" }] }, y = { id: "Y", firstName: "Marie", lastName: "Martin", archived: true, interactions: [{ iid: "y1", type: "recommandation_donnee", date: "2026-06-01", lieId: "X" }] }, z = { id: "Z", firstName: "Paul", lastName: "Bernard", interactions: [] }, contacts = [a, x, y, z], lx = KIT_PURE.liensFiche(x, contacts), la = KIT_PURE.liensFiche(a, contacts); kitAssert(lx.recommandePar.length === 2 && lx.recommandePar[0].id === "Y" && lx.recommandePar[0].archivee === true && lx.recommandePar[1].id === "A" && lx.recommandePar[1].n === 2 && lx.recommandePar[1].date === "2026-05-01"); kitAssert(lx.recoRecues[0].lieId === "Y" && lx.recoRecues[0].existe === true && lx.recoRecues[0].label === "Marie MARTIN"); kitAssert(KIT_PURE.liensFiche(z, contacts).recommandeA[0].id === "A" && KIT_PURE.liensFiche(z, contacts).recommandeA[0].n === 1); kitAssert(la.recoDonnees.length === 2 && la.recoDonnees[0].date === "2026-05-01" && la.recoDonnees[0].label === "Claire CLIENT"); kitAssert(KIT_PURE.liensFiche({ id: "O", interactions: [{ type: "recommandation_donnee", lieId: "Q", lieLabel: "Ancien NOM" }] }, contacts).recoDonnees[0].existe === false); kitAssert(KIT_PURE.liensFiche({ interactions: [] }, contacts).recommandePar.length === 0 && KIT_PURE.liensFiche({ interactions: [] }, contacts).recommandeA.length === 0); });
+KIT_TESTS.add("activité : table NAF 2025 chargée", function () { var codes = Object.keys(KIT_NAF.libelles); kitAssert(codes.length === 747); kitAssert(KIT_NAF.nomenclature === "NAF 2025"); kitAssert(/^Culture de céréales/.test(KIT_NAF.libelles["01.11Y"])); kitAssert(/poste/i.test(KIT_NAF.libelles["53.10Y"])); kitAssert(!!KIT_NAF.libelles["99.00Y"]); kitAssert(codes.every(function (code) { return /^\d{2}\.\d{2}[A-Z]$/.test(code); })); kitAssert(codes.every(function (code) { return !!KIT_NAF.libelles[code] && KIT_NAF.libelles[code].indexOf("�") < 0; })); });
+KIT_TESTS.add("activité : normalisation et libellé NAF", function () { kitAssert(KIT_PURE.normaliseNaf("5310y") === "53.10Y"); kitAssert(KIT_PURE.normaliseNaf(" 53.10Y ") === "53.10Y"); kitAssert(KIT_PURE.normaliseNaf(null) === ""); kitAssert(KIT_PURE.libelleNaf("5310y", KIT_NAF) === KIT_NAF.libelles["53.10Y"]); kitAssert(KIT_PURE.libelleNaf("00.00X", KIT_NAF) === ""); kitAssert(KIT_PURE.libelleNaf("53.10Y", null) === ""); kitAssert(KIT_PURE.libelleNaf("53.10Y", {}) === ""); });
+KIT_TESTS.add("activité : préremplissage depuis un candidat SIRENE", function () { var t = { libelles: { "53.10Y": "Poste", "62.10Y": "Programmation" } }; var cand = { activite_principale: "53.10Z", activite_principale_naf25: "53.10Y" }; var patch = KIT_PURE.patchActivite({}, cand, t, "2026-09-08"); kitAssert(JSON.stringify(patch) === JSON.stringify({ nafCode: "53.10Y", nafRev2Code: "53.10Z", nafLibelle: "Poste", nafSource: "api", nafDate: "2026-09-08", activite: "Poste" })); kitAssert(!Object.prototype.hasOwnProperty.call(KIT_PURE.patchActivite({ activite: "Études cliniques" }, cand, t, "2026-09-08"), "activite")); kitAssert(KIT_PURE.patchActivite({ activite: "Poste", nafLibelle: "Poste" }, { activite_principale_naf25: "62.10Y" }, t, "2026-09-08").activite === "Programmation"); kitAssert(KIT_PURE.patchActivite({ activite: "Poste", nafLibelle: "Poste" }, { activite_principale: "62.01Z" }, t, "2026-09-08").activite === ""); kitAssert(KIT_PURE.patchActivite({ activite: "   ", nafLibelle: "Autre" }, cand, t, "2026-09-08").activite === "Poste"); var ancien = KIT_PURE.patchActivite({}, { activite_principale: "53.10Z" }, t, "2026-09-08"); kitAssert(ancien.nafCode === "" && ancien.nafRev2Code === "53.10Z" && ancien.nafLibelle === "" && !Object.prototype.hasOwnProperty.call(ancien, "activite")); kitAssert(JSON.stringify(KIT_PURE.patchActivite({}, {}, t, "2026-09-08")) === "{}"); kitAssert(KIT_PURE.patchActivite(undefined, cand, t, "2026-09-08").activite === "Poste"); });
+KIT_TESTS.add("activité : recherche plein texte sur l'activité", function () { var texte = KIT_PURE.contactHaystack({ name: "X", activite: "études cliniques", nafCode: "72.11Y", nafLibelle: "Recherche" }); kitAssert(texte.indexOf("études cliniques") >= 0); kitAssert(texte.indexOf("72.11Y") >= 0); kitAssert(texte.indexOf("Recherche") >= 0); });
+KIT_TESTS.add("câblage activité : champs fusionnables et horodatage groupé", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var MERGE_" + "FIELDS = ["), fin = KIT_SOURCE_HTML.indexOf(";", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); ['"activite"', '"nafCode"', '"nafLibelle"', '"nafRev2Code"', '"nafSource"', '"nafDate"'].forEach(function (champ) { kitAssert(tranche.indexOf(champ) >= 0, champ); }); var updDebut = KIT_SOURCE_HTML.indexOf("function upd" + "Contact("), updFin = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch(", updDebut), upd = KIT_SOURCE_HTML.slice(updDebut, updFin); kitAssert(upd.indexOf('var naf' + 'Fields = ["nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate"]') >= 0); kitAssert(upd.indexOf("nafFields.forEach(function (key) { fu[key] = " + "now; })") >= 0); });
+KIT_TESTS.add("câblage activité : capture SIRENE avec fiche cible", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch("), fin = KIT_SOURCE_HTML.indexOf("function init" + "Form(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), panneauDebut = KIT_SOURCE_HTML.indexOf("Taille des " + "entreprises"), panneauFin = KIT_SOURCE_HTML.indexOf("function render" + "BottomNav(", panneauDebut), panneau = KIT_SOURCE_HTML.slice(panneauDebut, panneauFin), compte = panneau.indexOf("Compte rendu :"), activite = panneau.indexOf("Activité préremplie sur"); kitAssert(tranche.indexOf("KIT_PURE.patch" + "Activite(cible || {}, " + "candidate,") >= 0); kitAssert(tranche.indexOf("effectifPatch(" + "candidate)") === -1 && tranche.indexOf("effectifPatch(" + "match)") === -1); kitAssert(tranche.indexOf("ficheCourante(") >= 0 && tranche.indexOf("contactsRef." + "current") >= 0); kitAssert((tranche.match(/working\.filter\(function \(x\) \{ return x\.id === target\.id; \}\)\[0\]/g) || []).length >= 2); kitAssert((tranche.match(/report\.activites \+= 1/g) || []).length === 2); kitAssert(tranche.indexOf("cibleLot.activite !== p." + "activite") >= 0); kitAssert(tranche.indexOf("Activité " + "préremplie : «") >= 0 && tranche.indexOf("Activité conservée (votre " + "saisie)") >= 0); kitAssert(panneauDebut >= 0 && panneauFin > panneauDebut && compte >= 0 && compte < activite); kitAssert(panneau.indexOf("bulkReport.activites > " + "0") >= 0); kitAssert(panneau.indexOf("Ces actions mémorisent aussi le code d'activité " + "NAF") >= 0); });
+KIT_TESTS.add("câblage activité : création et formulaire", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var add = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function add" + "Contact("), KIT_SOURCE_HTML.indexOf("function upd" + "Contact(")), refreshDebut = KIT_SOURCE_HTML.indexOf("function refresh" + "Effectif("), refreshFin = KIT_SOURCE_HTML.indexOf("function prepare" + "BulkEffectifs(", refreshDebut), refresh = KIT_SOURCE_HTML.slice(refreshDebut, refreshFin); kitAssert(add.indexOf("activite: payload." + "activite") >= 0); var debut = KIT_SOURCE_HTML.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), formulaire = KIT_SOURCE_HTML.slice(debut, debut + 3000); kitAssert(formulaire.indexOf("maxLength: " + "200") >= 0 && formulaire.indexOf("CCN de " + "branche)") >= 0 && formulaire.indexOf("Reprendre le libellé " + "officiel") >= 0 && formulaire.indexOf("NAF 2025 ") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("activite: fAct.trim().slice(0, " + "200)") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("consensus(function (c) { return c." + "activite; })") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf('setFAct(ex ? (ex.' + 'activite || "") : "")') >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("if (act && !fAct." + "trim()) setFAct(act)") >= 0); kitAssert(formulaire.indexOf("fAct !== existing." + "nafLibelle") >= 0); kitAssert(refresh.indexOf("(l'activité que vous avez saisie est " + "conservée)") >= 0); });
+KIT_TESTS.add("câblage activité : fiche, candidats, Entreprises", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), detail = KIT_SOURCE_HTML.slice(debut, fin), act = detail.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), eff = detail.indexOf("EFFECTIF " + "ENTREPRISE"); kitAssert(act >= 0 && detail.indexOf("Activité non " + "renseignée") >= 0 && detail.indexOf("« Actualiser » l'effectif récupère le code " + "NAF.") >= 0 && act < eff); kitAssert(detail.indexOf("c.nafLibelle && c.nafLibelle !== c." + "activite ?") >= 0); kitAssert(detail.indexOf("{!c." + "nafCode ? <p") >= 0); kitAssert(detail.indexOf('{"ancien code " + c.' + 'nafRev2Code}') === -1); kitAssert(detail.indexOf('" · ancien code " + c.' + 'nafRev2Code') >= 0); var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "EffectifModal("), debut); kitAssert(modal.indexOf('"Activité : " + ' + "lib") >= 0); var entreprises = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Companies("), KIT_SOURCE_HTML.indexOf("function render" + "Stats(")); kitAssert(entreprises.indexOf("c." + "activite || \"\").trim()") >= 0); });
+KIT_TESTS.add("câblage activité : export et import", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var exportDebut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), exportTranche = KIT_SOURCE_HTML.slice(exportDebut, exportDebut + 4000), nbInteractions = exportTranche.indexOf("Nb " + "interactions"), codeNaf = exportTranche.indexOf('"Code NAF ' + '2025"'); kitAssert(exportDebut >= 0 && nbInteractions >= 0 && nbInteractions < codeNaf); kitAssert(exportTranche.indexOf('"Nb interactions", "Activité", "Code NAF ' + '2025"]') >= 0); kitAssert(/EXPORT_COLW = \[[^\]]*, 40, 12\]/.test(KIT_SOURCE_HTML)); kitAssert(exportTranche.indexOf("c.activite || " + '"", c.nafCode || ""') >= 0); var importDebut = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("), importTranche = KIT_SOURCE_HTML.slice(importDebut, importDebut + 7000); kitAssert(importDebut >= 0 && importTranche.indexOf('=== "' + 'activite"') >= 0); kitAssert(importTranche.indexOf("if (iAct === iSect || iAct === " + "iEntr) iAct = -1") >= 0); kitAssert(importTranche.indexOf("activite: ((iAct >= 0 ? vals[iAct] : " + '"") || "").slice(0, 200)') >= 0); });
+KIT_TESTS.add("câblage activité : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Activité de l'" + "entreprise") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Reprendre le libellé " + "officiel") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Activité de l'entreprise (v1.5." + "10)") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("NAF " + "2025") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("(dit code APE, attribué par l'" + "INSEE)") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Le message « Activité conservée (votre saisie). » s'affiche lors du choix d'un " + "candidat") >= 0); });
+KIT_TESTS.add("câblage activité : scripts data référencés par le document", function () { kitAssert(typeof KIT_NAF === "object"); });
 KIT_TESTS.add("suivi : liens d'une fiche — tri stable et auto-exclusion", function () { var egales = KIT_PURE.liensFiche({ id: "T", interactions: [{ iid: "premier", type: "recommandation_donnee", date: "2026-08-01", lieId: "A" }, { iid: "second", type: "recommandation_donnee", date: "2026-08-01", lieId: "B" }] }, [{ id: "A" }, { id: "B" }]).recoDonnees; kitAssert(egales[0].iid === "premier" && egales[1].iid === "second"); kitAssert(KIT_PURE.liensFiche({ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }, [{ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }]).recommandePar.length === 0); });
 KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
 KIT_TESTS.add("câblage suivi : édition conserve la fiche liée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function open" + "EditInteraction("), fin = KIT_SOURCE_HTML.indexOf("function invite" + "Mobile(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("setLogLieId(entry." + 'lieId || "")') >= 0); kitAssert(tranche.indexOf("setLogLieLabel(entry." + 'lieLabel || "")') >= 0); });
@@ -1212,13 +1243,13 @@ var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repa
 
 /* ── KIT_SYNC_HELPERS ── */
 const DEFAULT_CATS = ["Client", "Prospect", "Avocat / EC"];
-var APP_VERSION = "1.5.9";
+var APP_VERSION = "1.5.10";
 var RECUPERATION_DELAI_MS = 3000;
 var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "activite", "nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
@@ -1364,7 +1395,7 @@ function mergeData(localData, importedData) {
 
 /* ═══════ EXPORT FORMAT (forme maison) ═══════ */
 // Largeurs de colonnes (forme maison) ; null = largeur Excel par défaut
-var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null];
+var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null, 40, 12];
 // Listes déroulantes : { colonne Excel : formule } ; la CCN de branche pointe vers l'onglet CCN de branche
 var EXPORT_DV = {
   M: '"Nulle,Faible,Moyen,Élevé"',
@@ -2108,6 +2139,8 @@ function App(props) {
   var [agendaState, setAgendaState] = useState(KIT_AGENDA.getState());
   var candidateReqSeq = useRef(0);
   var effectifReqSeq = useRef(0);
+  var contactsRef = useRef(contacts);
+  contactsRef.current = (data && data.contacts) || [];
   var [effectifModal, setEffectifModal] = useState(null);
   var [effectifResults, setEffectifResults] = useState([]);
   var [effectifMessage, setEffectifMessage] = useState("");
@@ -2130,6 +2163,7 @@ function App(props) {
   var [fMet, setFMet] = useState("");
   var [fNotes, setFNotes] = useState("");
   var [fSec2, setFSec2] = useState("");
+  var [fAct, setFAct] = useState("");
   var [fNxt, setFNxt] = useState("");
   var [fFollowDate, setFFollowDate] = useState("");
   var [fFollowNote, setFFollowNote] = useState("");
@@ -2487,7 +2521,7 @@ function App(props) {
       followUpDate: payload.followUpDate || "", followUpNote: payload.followUpNote || "",
       tags: payload.tags, keyDates: payload.keyDates,
       birthday: payload.birthday || "",
-      company: payload.company || "", jobTitle: payload.jobTitle || "",
+      company: payload.company || "", activite: payload.activite || "", jobTitle: payload.jobTitle || "",
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
@@ -2507,6 +2541,8 @@ function App(props) {
       var now = nowTS(); var fu = Object.assign({}, c.fieldsUpdatedAt || {}); var touched = false;
       var effectifFields = ["effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis"];
       var effectifWrite = effectifFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
+      var nafFields = ["nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate"];
+      var nafWrite = nafFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
       var procedureFields = ["procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
       var procedureWrite = procedureFields.some(function (key) { return Object.prototype.hasOwnProperty.call(updates, key); });
       Object.keys(updates).forEach(function (k) {
@@ -2515,6 +2551,7 @@ function App(props) {
         if (JSON.stringify(oldV === undefined ? null : oldV) !== JSON.stringify(newV === undefined ? null : newV)) { fu[k] = now; touched = true; }
       });
       if (effectifWrite) { effectifFields.forEach(function (key) { fu[key] = now; }); touched = true; }
+      if (nafWrite) { nafFields.forEach(function (key) { fu[key] = now; }); touched = true; }
       if (procedureWrite) { procedureFields.forEach(function (key) { fu[key] = now; }); touched = true; }
       if (touched) { copy.updatedAt = now; copy.fieldsUpdatedAt = fu; }
       return copy;
@@ -2523,8 +2560,8 @@ function App(props) {
     return newContacts;
   }
 
-  function effectifPatch(candidate) {
-    return {
+  function effectifPatch(candidate, cible) {
+    var patch = {
       effectifTranche: candidate.tranche_effectif_salarie || "NN",
       effectifAnnee: candidate.annee_tranche_effectif_salarie || "",
       effectifSiren: candidate.siren || "",
@@ -2532,6 +2569,12 @@ function App(props) {
       effectifDate: todayStr(),
       effectifPrecis: null
     };
+    return Object.assign(patch, KIT_PURE.patchActivite(cible || {}, candidate, typeof KIT_NAF !== "undefined" ? KIT_NAF : null, todayStr()));
+  }
+
+  function ficheCourante(id, working) {
+    var liste = Array.isArray(working) ? working : contactsRef.current;
+    return liste.filter(function (x) { return x.id === id; })[0];
   }
 
   function procedurePatch(procedures) {
@@ -2657,11 +2700,13 @@ function App(props) {
       fermerEffectifModal();
       return;
     }
-    var working = updContact(effectifModal.id, effectifPatch(candidate), null, contacts);
+    var courant = ficheCourante(effectifModal.id) || contact;
+    var patchChoisi = effectifPatch(candidate, courant);
+    var working = updContact(effectifModal.id, patchChoisi, null, contacts);
     /* Les fiches sœurs partagent le nom saisi sur la fiche source — pas la raison sociale officielle SIRENE de la candidate. */
     var propagation = KIT_PURE.propagationCibles(contacts, effectifModal.id, (contact && contact.company) || effectifModal.company, candidate.siren);
-    propagation.aRattacher.forEach(function (id) { working = updContact(id, effectifPatch(candidate), null, working); });
-    var messages = [];
+    propagation.aRattacher.forEach(function (id) { working = updContact(id, effectifPatch(candidate, working.filter(function (x) { return x.id === id; })[0]), null, working); });
+    var messages = [patchChoisi.activite ? "Activité préremplie : « " + patchChoisi.activite + " »." : (courant && courant.activite ? "Activité conservée (votre saisie)." : "")].filter(Boolean);
     if (propagation.aRattacher.length) messages.push("Rattaché aussi à " + String(propagation.aRattacher.length) + " autre(s) fiche(s).");
     if (propagation.protegees.length) messages.push(String(propagation.protegees.length) + " protégée(s) (saisie manuelle).");
     if (propagation.autres.length) messages.push(String(propagation.autres.length) + " sur un autre SIREN, non modifiée(s).");
@@ -2693,7 +2738,7 @@ function App(props) {
 
   function refreshEffectif(c) {
     if (!c.effectifSiren) { openEffectifSearch(c); return; }
-    if (c.effectifSource === "manuel" && !confirm("Cette actualisation remplacera la valeur saisie manuellement. Continuer ?")) return;
+    if (c.effectifSource === "manuel" && !confirm("Cette actualisation remplacera l'effectif saisi manuellement (l'activité que vous avez saisie est conservée). Continuer ?")) return;
     if (!navigator.onLine) return;
     setEffectifModal({ id: c.id, company: c.company, refresh: true });
     setEffectifResults([]); setEffectifMessage(""); setEffectifLoading(true);
@@ -2710,7 +2755,8 @@ function App(props) {
       if (seq !== effectifReqSeq.current) return;
       var candidate = (body.results || []).filter(function (x) { return x.siren === c.effectifSiren; })[0];
       if (!candidate || candidate.etat_administratif !== "A") { setEffectifMessage("Entreprise introuvable ou cessée : l'ancien effectif est conservé."); return; }
-      updContact(c.id, effectifPatch(candidate)); fermerEffectifModal();
+      var courant = ficheCourante(c.id) || c;
+      updContact(c.id, effectifPatch(candidate, courant)); fermerEffectifModal();
     }).catch(function (error) {
       if (seq !== effectifReqSeq.current) return;
       var msg = String(error && error.message || "");
@@ -2733,7 +2779,7 @@ function App(props) {
 
   function runBulkEffectifs() {
     if (!bulkPreview || !navigator.onLine) return;
-    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], procedures: [], bodaccKo: [], stopped: "" };
+    var lot = bulkPreview; var working = contacts; var report = { updated: [], ambiguous: [], preserved: [], procedures: [], bodaccKo: [], activites: 0, stopped: "" };
     setBulkPreview(null); setBulkProgress({ done: 0, total: lot.targets.length });
     function next(index) {
       if (index >= lot.targets.length) { setBulkProgress(null); setBulkReport(report); setBulkResume(null); return; }
@@ -2772,7 +2818,7 @@ function App(props) {
       }).then(function (results) {
         if (target.mode === "denomination") {
           var candidate = results.length === 1 && KIT_PURE.denominationMatch(results[0].nom_complet, target.cle) ? results[0] : null;
-          if (candidate && candidate.etat_administratif === "A") { working = updContact(target.id, effectifPatch(candidate), null, working); report.updated.push(target.label + (cpUtilise ? " (affiné par " + cpUtilise + ")" : "")); }
+          if (candidate && candidate.etat_administratif === "A") { var cibleLot = working.filter(function (x) { return x.id === target.id; })[0]; var p = effectifPatch(candidate, cibleLot); working = updContact(target.id, p, null, working); if (Object.prototype.hasOwnProperty.call(p, "activite") && (!cibleLot || cibleLot.activite !== p.activite)) report.activites += 1; report.updated.push(target.label + (cpUtilise ? " (affiné par " + cpUtilise + ")" : "")); }
           else report.ambiguous.push({ id: target.id, company: target.cle, results: results, cp: cpUtilise });
         } else if (target.mode === "secondaire") {
           var secondaryMatch = results.filter(function (x) { return x.siren === target.cle; })[0];
@@ -2787,7 +2833,7 @@ function App(props) {
         } else {
           var match = results.filter(function (x) { return x.siren === target.cle; })[0];
           if (!match || match.etat_administratif !== "A") report.preserved.push(target.label);
-          else { working = updContact(target.id, effectifPatch(match), null, working); report.updated.push(target.label); }
+          else { var cibleLot = working.filter(function (x) { return x.id === target.id; })[0]; var p = effectifPatch(match, cibleLot); working = updContact(target.id, p, null, working); if (Object.prototype.hasOwnProperty.call(p, "activite") && (!cibleLot || cibleLot.activite !== p.activite)) report.activites += 1; report.updated.push(target.label); }
         }
         if (target.mode !== "siren") return null;
         var bodaccContact = working.filter(function (c) { return c.id === target.id; })[0];
@@ -3133,6 +3179,7 @@ function App(props) {
     setFMet(ex ? (ex.metAt || "") : "");
     setFNotes(ex ? (ex.notes || "") : "");
     setFSec2(ex ? (ex.sector || "") : "");
+    setFAct(ex ? (ex.activite || "") : "");
     setFNxt(ex ? (ex.nextAction || "") : "");
     setFFollowDate(ex ? (ex.followUpDate || "") : "");
     setFFollowNote(ex ? (ex.followUpNote || "") : "");
@@ -3165,7 +3212,7 @@ function App(props) {
       metAt: fMet, notes: fNotes,
       sector: fSec2, nextAction: fNxt, tags: tagsArr, keyDates: fKds,
       followUpDate: fFollowDate, followUpNote: fFollowNote,
-      birthday: fBday, company: fCompany, jobTitle: fJobTitle, workLocation: fWorkLoc,
+      birthday: fBday, company: fCompany, activite: fAct.trim().slice(0, 200), jobTitle: fJobTitle, workLocation: fWorkLoc,
       email: fEmail, phonePro: fPhonePro, phonePerso: fPhonePerso,
       address: fAddress, linkedin: fLinkedin, origin: fOrigin
     };
@@ -3179,7 +3226,7 @@ function App(props) {
 
   /* ── CSV Export ── */
   function exportExcel() {
-    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions"];
+    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions", "Activité", "Code NAF 2025"];
     var rows = contacts.map(function (c) {
       var kdStr = (c.keyDates || []).map(function (k) { return k.label + ": " + k.date; }).join("; ");
       var lastRdvInt = null, lastContactInt = null;
@@ -3196,7 +3243,8 @@ function App(props) {
         lastContactInt ? lastContactInt.date : "", lastContactInt ? typeLabel(lastContactInt.type) : "",
         c.birthday || "", (c.tags || []).join("; "),
         c.nextAction || "", c.metAt || "", c.notes || "", kdStr, c.origin || "",
-        statusLabel(getStatus(c)), c.archived ? "Oui" : "Non", (c.interactions || []).length
+        statusLabel(getStatus(c)), c.archived ? "Oui" : "Non", (c.interactions || []).length,
+        c.activite || "", c.nafCode || ""
       ];
     });
 
@@ -3588,6 +3636,8 @@ function App(props) {
     var iPrenom = findCol(hd, ["prénom", "prenom", "firstname", "first name"]);
     var iFonc = findCol(hd, ["fonction", "titre", "poste", "job", "title"]);
     var iEntr = findCol(hd, ["entreprise", "company", "societe", "société"]);
+    var iAct = -1;
+    for (var ia = 0; ia < hd.length; ia++) { if (stripAccents(String(hd[ia] || "")).trim().toLowerCase() === "activite") { iAct = ia; break; } }
     var iLieuEx = findCol(hd, ["lieu d'exercice", "lieu d exercice", "work location", "ville exercice"]);
     var iEmail = findCol(hd, ["email", "mail", "e-mail", "courriel"]);
     var iPhonePro = findCol(hd, ["tel. pro", "tel pro", "telephone pro", "phone pro"]);
@@ -3599,6 +3649,7 @@ function App(props) {
     var iCat = findCol(hd, ["categ", "category"]);
     var iPrio = findCol(hd, ["priorit", "priority"]);
     var iSect = findCol(hd, ["ccn de branche", "ccn", "convention collective", "secteur", "sector", "branche"]);
+    if (iAct === iSect || iAct === iEntr) iAct = -1;
     var iAnniv = findCol(hd, ["anniversaire", "birthday", "naissance"]);
     var iTags = findCol(hd, ["tag"]);
     var iNext = findCol(hd, ["prochaine", "next", "action"]);
@@ -3671,6 +3722,7 @@ function App(props) {
         category: catN,
         priority: parsePriority(iPrio >= 0 ? vals[iPrio] : ""),
         sector: (iSect >= 0 ? vals[iSect] : "") || "",
+        activite: ((iAct >= 0 ? vals[iAct] : "") || "").slice(0, 200),
         birthday: birthdayVal,
         tags: tagsArr,
         nextAction: (iNext >= 0 ? vals[iNext] : "") || "",
@@ -3995,6 +4047,7 @@ function App(props) {
               <span style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", fontWeight: 700, color: ac }}>{candidate.nom_complet || "Entreprise sans nom"}{candidate.etat_administratif !== "A" ? <span style={{ padding: "2px 7px", borderRadius: 9, background: "#FBEAE5", color: "#9A3115", fontSize: 10.5 }}>cessée</span> : null}</span>
               <span style={{ display: "block", marginTop: 4, color: "#64748B", fontSize: 12 }}>{"SIREN " + (candidate.siren || "non renseigné") + (place ? " · " + place : "")}</span>
               <span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 12 }}>{effectif + (candidate.annee_tranche_effectif_salarie ? " · " + String(candidate.annee_tranche_effectif_salarie) : "")}</span>
+              {(function () { var lib = KIT_PURE.libelleNaf(candidate.activite_principale_naf25, typeof KIT_NAF !== "undefined" ? KIT_NAF : null); return lib ? <span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 12 }}>{"Activité : " + lib}</span> : null; })()}
             </button>;
           })}
           <button onClick={fermerEffectifModal} style={{ marginTop: 16, background: "transparent", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button>
@@ -4224,9 +4277,11 @@ function App(props) {
     var wl = consensus(function (c) { return c.workLocation; });
     var ad = consensus(function (c) { return c.address; });
     var sc = consensus(function (c) { return c.sector; });
+    var act = consensus(function (c) { return c.activite; });
     if (wl) setFWorkLoc(wl);
     if (ad) setFAddress(ad);
     if (sc) setFSec2(sc);
+    if (act && !fAct.trim()) setFAct(act);
   }
 
   function renderForm() {
@@ -4282,6 +4337,13 @@ function App(props) {
                   })
                 ) : null
               )
+            ),
+            React.createElement("div", { style: { marginBottom: 16 } },
+              React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "ACTIVITÉ DE L'ENTREPRISE"),
+              React.createElement("input", { style: { width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }, value: fAct, maxLength: 200, onChange: function (e) { setFAct(e.target.value); }, placeholder: "Ex: études cliniques pour l'industrie pharmaceutique" }),
+              React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } }, "Ce que fait l'entreprise, pour cibler vos actualités. La convention collective se choisit plus bas (CCN de branche)."),
+              existing && existing.nafCode ? React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } }, "NAF 2025 " + existing.nafCode + (existing.nafLibelle ? " — " + existing.nafLibelle : "") + " (SIRENE, " + fmtDate(existing.nafDate) + ")" + (existing.nafRev2Code ? " · ancien code " + existing.nafRev2Code : "")) : null,
+              existing && existing.nafLibelle && fAct !== existing.nafLibelle ? React.createElement("button", { type: "button", onClick: function () { setFAct(existing.nafLibelle); }, style: { background: "none", border: "none", color: abl, fontSize: 12, cursor: "pointer", fontFamily: ff, padding: 0, marginTop: 5 } }, "Reprendre le libellé officiel") : null
             ),
             React.createElement("div", { style: { marginBottom: 16 } },
               React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "LIEU D'EXERCICE"),
@@ -4498,6 +4560,12 @@ function App(props) {
             {c.metAt ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>LIEU DE RENCONTRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.metAt}</p></div> : null}
             {c.sector ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>CCN DE BRANCHE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{c.sector}</p></div> : null}
             {c.birthday ? <div style={{ padding: 14, background: "#FDF2F8", borderRadius: 8 }}><p style={{ margin: 0, fontSize: 11, color: "#9D174D", fontWeight: 600 }}>ANNIVERSAIRE</p><p style={{ margin: "4px 0 0", fontSize: 14 }}>{fmtDate(c.birthday)}</p></div> : null}
+            {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}>
+              <p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>ACTIVITÉ DE L'ENTREPRISE</p>
+              <p style={{ margin: "4px 0 0", fontSize: 14, color: c.activite ? undefined : "#94A3B8" }}>{c.activite || "Activité non renseignée"}</p>
+              {c.nafCode ? <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#6E6A64" }}>{"NAF 2025 " + c.nafCode + (c.nafLibelle && c.nafLibelle !== c.activite ? " — " + c.nafLibelle : "") + (c.nafRev2Code ? " · ancien code " + c.nafRev2Code : "")}</p> : null}
+              {!c.nafCode ? <p style={{ margin: "6px 0 0", fontSize: 11.5, color: "#6E6A64" }}>{c.effectifSiren ? "« Actualiser » l'effectif récupère le code NAF." : "« Rechercher l'effectif » la préremplit."}</p> : null}
+            </div> : null}
             {c.company ? <div style={{ padding: 14, background: "#F6F5F2", borderRadius: 8 }}>
               <p style={{ margin: 0, fontSize: 11, color: "#64748B", fontWeight: 600 }}>EFFECTIF ENTREPRISE</p>
               <p style={{ margin: "4px 0 8px", fontSize: 14 }}>{KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c)) ? (c.effectifPrecis != null ? String(c.effectifPrecis) + " sal. · " : "") + KIT_PURE.trancheLabel(KIT_PURE.couvertureTranche(c)) + ((c.effectifsSecondaires || []).length ? " (groupe)" : "") + (c.effectifSource ? " (" + (c.effectifSource === "api" ? "SIRENE" : "manuel") + (c.effectifAnnee ? " " + String(c.effectifAnnee) : "") + ")" : "") : "Effectif non renseigné"}</p>
@@ -4813,6 +4881,7 @@ function App(props) {
               <div style={{ minWidth: 0 }}>
                 <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: "#1B1B24", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.name}</p>
                 <p style={{ margin: "3px 0 0", fontSize: 12, color: "#86837C" }}>{String(g.list.length) + " fiche(s)"}{(g.list.length === 1 && g.list.some(function (c) { return isClient(c); })) ? <span style={{ marginLeft: 6, fontSize: 10.5, color: "#9A3115", background: "#FBEAE5", padding: "1px 7px", borderRadius: 10, border: "1px solid #F4D6CB", fontWeight: 600 }}>{"compte mono-contact"}</span> : null}</p>
+                {(function () { var a = g.list.map(function (c) { return (c.activite || "").trim(); }).filter(Boolean)[0]; return a ? <p style={{ margin: "2px 0 0", fontSize: 12, color: "#86837C", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a}</p> : null; })()}
               </div>
               <div style={{ display: "flex", gap: 10, flexShrink: 0, fontSize: 12, fontWeight: 600 }}>
                 {counts.overdue ? <span style={{ color: "#BE3C1A" }}>{"\u25cf " + String(counts.overdue)}</span> : null}
@@ -5006,12 +5075,13 @@ function App(props) {
         {showEffectifsPanel ? <div style={{ background: "#EAF3F5", borderRadius: 12, border: "1px solid #9FCAD3", padding: 16, marginBottom: 12 }}>
           <p style={{ margin: "0 0 5px", fontSize: 14, fontWeight: 700, color: "#235C68" }}>Taille des entreprises</p>
           <p style={{ margin: "0 0 10px", fontSize: 12, color: "#2F7C8C" }}>Toutes les dénominations ci-dessous sont toujours affichées avant tout envoi.</p>
+          <p style={{ margin: "0 0 10px", fontSize: 12, color: "#64748B" }}>Ces actions mémorisent aussi le code d'activité NAF et préremplissent l'activité des fiches où elle est vide.</p>
           <label style={{ display: "block", marginBottom: 10, fontSize: 12.5, color: "#235C68" }}><input type="checkbox" checked={bulkIncludeManual} onChange={function (e) { setBulkIncludeManual(e.target.checked); }} /> Inclure les valeurs saisies manuellement</label>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("complete"); }} style={{ background: "#235C68", color: "#fff", border: "none", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Compléter les effectifs</button><button disabled={!navigator.onLine || !!bulkProgress} onClick={function () { prepareBulkEffectifs("update"); }} style={{ background: "#fff", color: "#235C68", border: "1px solid #235C68", borderRadius: 8, padding: "9px 13px", cursor: navigator.onLine ? "pointer" : "not-allowed", fontFamily: ff }}>Mettre à jour les effectifs</button></div>
           {!navigator.onLine ? <p role="alert" style={{ margin: "9px 0 0", fontSize: 12, color: "#9A3115" }}>Actions indisponibles hors ligne.</p> : null}
           {bulkPreview ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8 }}><p style={{ margin: "0 0 7px", fontSize: 13, fontWeight: 700 }}>Aperçu obligatoire · {bulkPreview.targets.length} requête(s)</p>{bulkPreview.targets.length ? <ul style={{ maxHeight: 150, overflowY: "auto", margin: "0 0 10px", paddingLeft: 20, fontSize: 12 }}>{bulkPreview.targets.map(function (target) { return <li key={target.id + "-" + target.mode + "-" + target.cle}>{target.label}{target.mode !== "denomination" ? " · SIREN " + target.cle + (target.mode === "secondaire" ? " (groupe)" : "") : ""}</li>; })}</ul> : <p style={{ fontSize: 12 }}>Aucune fiche à traiter.</p>}<div style={{ display: "flex", gap: 8 }}><button disabled={!bulkPreview.targets.length} onClick={runBulkEffectifs} style={{ background: ac, color: "#fff", border: "none", borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Valider et lancer</button><button onClick={function () { setBulkPreview(null); }} style={{ background: "#fff", border: "1px solid " + bd, borderRadius: 7, padding: "7px 11px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div></div> : null}
           {bulkProgress ? <p role="status" style={{ margin: "10px 0 0", fontSize: 12.5, color: "#235C68" }}>Progression : {bulkProgress.done} / {bulkProgress.total}</p> : null}
-          {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.procedures.length ? <p style={{ margin: "4px 0", color: "#BE3C1A", fontWeight: 600 }}>⚠ Procédures collectives : {bulkReport.procedures.join(", ")}</p> : null}{(bulkReport.bodaccKo || []).length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>BODACC injoignable — à revérifier depuis la fiche : {bulkReport.bodaccKo.join(", ")}</p> : null}{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
+          {bulkReport ? <div style={{ marginTop: 12, padding: 12, background: "#fff", borderRadius: 8, fontSize: 12.5 }}><p style={{ margin: "0 0 6px", fontWeight: 700 }}>Compte rendu : {bulkReport.updated.length} mise(s) à jour</p>{bulkReport.activites > 0 ? <p style={{ margin: "4px 0", color: "#64748B" }}>Activité préremplie sur {bulkReport.activites} fiche(s).</p> : null}{bulkReport.procedures.length ? <p style={{ margin: "4px 0", color: "#BE3C1A", fontWeight: 600 }}>⚠ Procédures collectives : {bulkReport.procedures.join(", ")}</p> : null}{(bulkReport.bodaccKo || []).length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>BODACC injoignable — à revérifier depuis la fiche : {bulkReport.bodaccKo.join(", ")}</p> : null}{bulkReport.preserved.length ? <p style={{ margin: "4px 0", color: "#9A3115" }}>Anciennes valeurs conservées (introuvables ou cessées) : {bulkReport.preserved.join(", ")}</p> : null}{bulkReport.ambiguous.length ? <div><p style={{ margin: "6px 0" }}>Ambiguës, à choisir :</p>{bulkReport.ambiguous.map(function (item) { return <button key={item.id} onClick={function () { openBulkAmbiguous(item); }} style={{ display: "block", background: "none", border: "none", color: "#235C68", textDecoration: "underline", cursor: "pointer", padding: "3px 0", fontFamily: ff }}>{item.company}</button>; })}</div> : null}{bulkReport.stopped ? <p role="alert" style={{ color: "#9A3115" }}>{bulkReport.stopped}</p> : null}</div> : null}
         </div> : null}
 
         {showMeetingSettings ? (
