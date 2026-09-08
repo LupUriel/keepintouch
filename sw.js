@@ -9,6 +9,7 @@ var PRECACHE_URLS = [
   "./lib/babel.min.js",
   "./lib/xlsx.full.min.js",
   "./lib/exceljs.min.js",
+  "./data/naf-2025.js",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
 ];
