@@ -12,12 +12,17 @@
 
 ## Lignes spécifiques de la version
 
-## Dossiers et apporteurs (v1.5.8)
+## Recommandations et apporteurs (v1.5.9)
 
-- [ ] Sur une fiche cliente (données synthétiques), « Je l'ai contacté » → « Dossier confié » avec un apporteur : l'historique affiche « via <apporteur> », la relance planifiée et l'état « en attente » de la fiche sont conservés, « Dernière rencontre » inchangée
-- [ ] Stats > Apporteurs : l'apporteur apparaît avec « à remercier » ; un « Appel avec échange » enregistré sur SA fiche à une date ≥ celle du dossier fait disparaître la marque ; la section « Apporteurs à remercier » du récapitulatif suit
-- [ ] Dans le modal, taper le début du nom de l'apporteur sans cliquer la suggestion puis « Confirmer » : si une seule fiche correspond elle est retenue, sinon le message « Choisissez une fiche dans la liste… » s'affiche et rien n'est enregistré
-- [ ] Après mise à jour, le formulaire d'une fiche propose la catégorie « Avocat / EC » (PC et Samsung), sans doublon après synchronisation
+- [ ] Fiche d'un apporteur (données synthétiques) : « Je l'ai contacté » → « M'a recommandé quelqu'un » → personne recommandée choisie : la fiche affiche « Vous a recommandé : <nom> » (souligné, clic → fiche), la fiche de la personne recommandée affiche « Recommandé(e) par : <apporteur> », l'historique « → <nom> » ; relance planifiée et état d'attente de l'apporteur inchangés
+- [ ] Stats > Apporteurs : l'apporteur apparaît avec ses recommandations nommées et « à remercier » ; un « Appel avec échange » sur SA fiche à une date ≥ celle de la recommandation lève la marque ; le récapitulatif suit
+- [ ] « Je lui ai recommandé quelqu'un » sur une fiche : « Vous lui avez recommandé : <nom> » ; sur la fiche de la personne : « Recommandé(e) à : <contact> » ; tuile « Recommandations reçues (12 mois) » avec légende « … donnée par vous · … apporteur actif »
+- [ ] Le modal ne propose plus « Dossier confié » ; un dossier déjà saisi reste « Dossier confié · via … » ; Stats n'affiche plus « Origines des fiches » ; « À propos » affiche v1.5.9 · kit-crm-v51
+- [ ] Recommandation sans fiche liée : « Vous a recommandé : une personne sans fiche » ; ✏ permet de rattacher une fiche ensuite
+- [ ] Le formulaire d'une fiche propose la catégorie « Avocat / EC » (PC et Samsung), sans doublon après synchronisation
+- [ ] Données réelles : supprimer puis ressaisir les recommandations de la v1.5.8 sur la fiche de l'apporteur ; la fiche de la personne recommandée affiche « Recommandé(e) par : … »
+- [ ] Six recommandations d'un même apporteur : la fiche affiche cinq noms puis « … et 1 autre » ; le clic déplie
+- [ ] ✏ sur un « Dossier confié » déjà saisi : le champ s'intitule « APPORTEUR », aucun bouton de type n'est actif
 
 ## Récupération au démarrage (procédure de test, données synthétiques uniquement)
 

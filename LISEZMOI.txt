@@ -86,27 +86,38 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
 
-## Dossiers et apporteurs
+## Recommandations et apporteurs
 
-Un dossier se note sur la fiche du CLIENT, pas sur celle de la personne qui vous l'a envoyé :
-ouvrez la fiche du client, « Je l'ai contacté », choisissez « Dossier confié » (rangée « Suivi
-du réseau »), puis indiquez l'apporteur dans le champ APPORTEUR (une fiche de votre réseau ;
-laissez vide s'il n'y est pas).
-« Recommandation reçue » se note de la même façon, sur la fiche de la personne recommandée
-(créez-la d'abord si elle n'existe pas). « Recommandation donnée » se note sur la fiche de la
-personne que vous avez recommandée, en indiquant à qui (champ RECOMMANDÉ À).
-Ces trois types ne comptent pas comme une prise de contact : ils n'effacent pas une relance,
+Quand un contact vous recommande quelqu'un, notez-le sur la fiche DE CE CONTACT (pas sur celle
+de la personne recommandée) : « Je l'ai contacté », rangée « Recommandations »,
+« M'a recommandé quelqu'un », puis choisissez la personne recommandée parmi vos fiches
+(laissez vide si elle n'en a pas ; vous pourrez la rattacher plus tard avec ✏ dans
+l'historique). La fiche du contact affiche alors « Vous a recommandé : … » avec les noms ;
+la fiche de la personne recommandée affiche « Recommandé(e) par : … ». Les noms soulignés
+ouvrent la fiche.
+Quand c'est VOUS qui recommandez quelqu'un à un contact, notez « Je lui ai recommandé
+quelqu'un » sur la fiche de ce contact, en indiquant qui.
+
+Ces deux types ne comptent pas comme une prise de contact : ils n'effacent pas une relance,
 ne remettent pas le cycle de rencontres à zéro, ne servent pas d'accroche aux invitations et
-ne changent pas la catégorie de la fiche (passer une fiche de Prospect à Client reste votre
-geste, par « Modifier »).
-Dans Stats, le bloc « Apporteurs » montre qui vous apporte des dossiers ; la marque
-« à remercier » signale un apporteur avec qui vous n'avez eu aucun échange depuis son dernier
-dossier — un appel, un mail ou un déjeuner enregistré sur SA fiche la fait disparaître.
+ne changent pas la catégorie de la fiche (passer une fiche en Client reste votre geste, et
+vaut dossier : le bouton « Dossier confié » a été retiré ; les dossiers déjà notés restent
+visibles dans l'historique mais ne sont plus comptés).
+
+Dans Stats, le bloc « Apporteurs » liste les contacts qui vous ont recommandé quelqu'un, avec
+les noms ; la marque « à remercier » signale un apporteur avec qui vous n'avez eu aucun
+échange depuis sa dernière recommandation — un appel, un mail ou un déjeuner enregistré sur
+la fiche de l'apporteur la fait disparaître. Le récapitulatif du lundi les rappelle.
 Le champ « Origine de la fiche » reste libre et ne sert qu'à dire par où la fiche est entrée.
-Mettez à jour les deux appareils avant la première synchronisation contenant des dossiers.
-Une interaction modifiée après une synchronisation (commentaire, type, apporteur) ne se
-propage pas encore à l'autre appareil : ressaisissez-la ou attendez la prochaine version.
-La catégorie « Avocat / EC » (avocats et experts-comptables, vos apporteurs habituels) est ajoutée automatiquement à vos catégories à la mise à jour ; vous pouvez toujours en créer d'autres depuis le formulaire d'une fiche.
+
+Les recommandations saisies avant cette version étaient notées dans l'autre sens :
+supprimez-les (✕ dans l'historique) et ressaisissez-les sur la fiche de l'apporteur.
+Mettez à jour les deux appareils : un appareil resté en version précédente lirait les
+nouvelles recommandations à l'envers.
+La catégorie « Avocat / EC » (avocats et experts-comptables) est disponible dans vos
+catégories.
+Une interaction modifiée après une synchronisation ne se propage pas encore à l'autre
+appareil.
 
 ## Récapitulatif hebdomadaire
 
