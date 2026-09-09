@@ -29,6 +29,14 @@
 - [ ] Fiche préremplie par SIRENE puis alignée par propagation : « Actualiser » conserve l'activité propagée et n'y remet pas le libellé officiel
 - [ ] Sur l'entreprise la plus fournie du carnet réel, modifier l'activité et enregistrer : le retour à la fiche reste immédiat et aucune bannière rouge d'erreur d'enregistrement n'apparaît
 
+**Activité partagée (v1.5.11)**
+
+- [ ] Une fiche archivée de la même entreprise : la ligne annonce « (dont 1 fiche archivée) », et elle l'annonce encore quand la fiche archivée porte déjà la même activité
+- [ ] Deux fiches « MARTIN CONSEIL » rattachées à deux SIREN différents : la ligne n'en compte pas l'autre, et l'enregistrement ne la touche pas
+- [ ] Trois fiches « INDÉPENDANT » sans activité : la ligne annonce « Activité partagée avec 2 autres fiches de « INDÉPENDANT » » avant tout enregistrement — c'est la garde contre les dénominations fourre-tout
+- [ ] Une fiche sœur « En transition » n'est ni comptée dans la ligne, ni nommée dans la question, ni modifiée
+- [ ] Après un enregistrement qui recopie, la fiche affiche « Activité recopiée sur N autres fiches de « X ». » pendant dix secondes ; répondre Annuler à la question affiche « N fiche(s) inchangée(s). »
+
 ## Recommandations et apporteurs (v1.5.9)
 
 - [ ] Fiche d'un apporteur (données synthétiques) : « Je l'ai contacté » → « M'a recommandé quelqu'un » → personne recommandée choisie : la fiche affiche « Vous a recommandé : <nom> » (souligné, clic → fiche), la fiche de la personne recommandée affiche « Recommandé(e) par : <apporteur> », l'historique « → <nom> » ; relance planifiée et état d'attente de l'apporteur inchangés

@@ -24,7 +24,7 @@ Retourne `{ aAligner: [{ id, label, archivee }], conflits: [{ id, label, archive
 
 Gardes, dans cet ordre :
 - `var fiches = Array.isArray(contacts) ? contacts : [];`
-- `denomination` vide après `normalizedText` → `{ aAligner: [], conflits: [], identiques: 0 }`. Cette garde suffit et rend inutile toute garde sur `company` ailleurs : `""`, `"   "`, `"-"`, `"?"` donnent tous une dénomination vide.
+- `denomination` vide après `normalizedText` → `{ aAligner: [], conflits: [], identiques: 0 }`. Cette garde suffit et rend inutile toute garde sur `company` ailleurs : `""`, `"   "` et `"-"` donnent une dénomination vide ; `"?"` et `"…"` ne le sont pas, d'où la garde complémentaire exigeant au moins une lettre ou un chiffre.
 - Ignorer toute fiche telle que `!contact || typeof contact.id !== "string" || !contact.id`.
 - N'exclure la fiche source que si `typeof sourceId === "string" && sourceId && contact.id === sourceId`.
 - Ignorer toute fiche dont `denominationMatch(contact.company, denomination)` est faux.
