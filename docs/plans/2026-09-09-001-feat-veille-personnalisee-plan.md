@@ -17,7 +17,7 @@ execution: code
 
 **Autorité produit** — Uriel SANSY. Les décisions de la section Key Decisions ont été prises en dialogue le 2026-09-09 et ne sont pas à rouvrir en planification.
 
-**Blocages ouverts** — Un seul : la source de la ligne « activité » du profil restreint (voir Outstanding Questions, première entrée). Les deux autres questions ouvertes n'empêchent pas de planifier.
+**Blocages ouverts** — Aucun. Les trois questions ouvertes restantes se tranchent en planification.
 
 **Révision** — Ce plan a été relu le 2026-09-09 par cinq lentilles indépendantes ; leurs 58 constats graves sont intégrés ci-dessous. Les exigences ont été renumérotées à cette occasion.
 
