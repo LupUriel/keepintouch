@@ -40,6 +40,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - **Une fiche inapte est écartée et signalée, jamais dégradée** (session-settled: user-directed). Rien de générique ne part sous couvert de veille ciblée. Gouverne R10.
 - **Un envoi de veille ne compte pas comme un échange** (session-settled: user-directed). Sans quoi un envoi collectif viderait le tableau de bord de ses relances et l'outil cesserait de signaler les contacts réellement délaissés. Gouverne R17.
 - **Le retour est un modèle à trous, pas un courriel figé.** Un même profil sert plusieurs destinataires ; le prénom et le registre sont substitués localement. Gouverne R12.
+- **Le seuil d'effectif est une donnée saisie, jamais déduite** (session-settled: user-directed — proposé par l'utilisateur, choisi contre une déduction depuis l'effectif précis existant). L'effectif INSEE et l'effectif de l'article L. 1111-2 ne sont pas la même grandeur, et depuis la loi PACTE le franchissement ne produit effet qu'après cinq années civiles consécutives : une entreprise de 310 personnes peut n'avoir pas franchi 300, une entreprise redescendue à 290 peut rester soumise. Seul l'utilisateur, qui a vu passer le CSE ou la BDESE, connaît le fait du franchissement. Gouverne R6, R20, R21.
 
 ### Requirements
 
@@ -53,7 +54,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 
 **Ce qui sort du carnet**
 
-- R6. En mode restreint, chaque fiche retenue produit un profil identifié par un numéro d'ordre, portant la branche, l'effectif, l'activité, le registre de politesse et la date du dernier envoi de veille de cette fiche. Aucun élément nominatif n'y figure : ni nom, ni prénom, ni dénomination d'entreprise, ni adresse, ni courriel.
+- R6. En mode restreint, chaque fiche retenue produit un profil identifié par un numéro d'ordre, portant la branche, l'effectif, le seuil de franchissement connu (R20), l'activité, le registre de politesse et la date du dernier envoi de veille de cette fiche. Aucun élément nominatif n'y figure : ni nom, ni prénom, ni dénomination d'entreprise, ni adresse, ni courriel.
 - R7. En mode étendu, le profil porte en outre les champs structurés de la fiche — identité, entreprise, fonction, lieu d'exercice, catégorie, dates. Les champs libres, notes et commentaires d'interactions, ne sortent dans aucun mode.
 - R8. Un aperçu obligatoire affiche le contenu exact qui va sortir, ligne par ligne, avant que l'export soit produit, dans les deux modes.
 - R9. L'export est un fichier écrit localement. L'application n'émet aucune requête réseau pour préparer, transmettre ou récupérer une veille.
@@ -77,6 +78,11 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - R18. Chaque fiche mémorise la date de son dernier envoi de veille, visible dans son historique. Cette date ne compte pas comme un échange : les délais de relance de la fiche ne bougent pas.
 - R19. L'application conserve, pour chaque lancement, la date, le mode retenu et le nombre de fiches concernées, de sorte que la question « qu'est-ce qui est sorti, et quand » trouve toujours sa réponse.
 
+**Seuil d'effectif au sens du droit du travail**
+
+- R20. La fiche porte un champ « seuil franchi », renseigné à la main, à une seule valeur parmi : je ne sais pas (défaut), moins de 11, 11, 50, 300, 1 000. Il est distinct de l'effectif et n'est jamais déduit d'un nombre ni d'une réponse SIRENE.
+- R21. Le seuil est facultatif : son absence n'écarte pas la fiche au titre de R10. Quand il est renseigné, il figure dans le profil ; quand il vaut « je ne sais pas », le profil dit que le seuil est inconnu plutôt que de laisser croire à un seuil non franchi.
+
 ### Flows
 
 - F1. **Un envoi complet.** L'utilisateur ouvre l'écran de veille → choisit clients, prospects ou les deux → choisit le mode d'export, restreint par défaut → lit l'aperçu de ce qui va sortir et la liste des fiches écartées → produit le fichier de profils → le confie à l'outil de rédaction, hors application → dépose le fichier de retour → lit le récapitulatif par profil → parcourt les projets, destinataire par destinataire → valide → le courriel s'ouvre pré-rempli → l'ajuste s'il le souhaite → l'envoie depuis sa messagerie.
@@ -92,6 +98,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - AE7. Projet validé dont le corps dépasse la limite du lien de messagerie : l'application copie le corps et l'annonce, au lieu d'ouvrir un courriel tronqué.
 - AE8. Après un envoi à quarante fiches, le tableau de bord affiche les mêmes relances qu'avant : aucune fiche n'est passée « à jour » du fait de la veille, et chaque fiche porte « Veille envoyée le … » dans son historique.
 - AE9. Un second envoi lancé le lendemain : chaque profil porte la date du dernier envoi de la fiche, y compris pour les fiches désignées entre-temps qui n'en ont pas.
+- AE10. Une fiche dont l'effectif INSEE est « 250-499 sal. » et dont le seuil franchi est renseigné à 50 : le profil transmet le seuil 50, non 300 ; une fiche de même tranche sans seuil renseigné transmet « seuil inconnu », et reste exportée.
 
 ### Scope Boundaries
 
@@ -108,5 +115,5 @@ Hors de ce plan, et volontairement :
 ### Outstanding Questions
 
 - **Convention collective : libellé ou IDCC ?** Le carnet stocke un libellé, non un numéro. Un profil gagnerait à porter l'IDCC, mais treize branches de la table embarquée n'en ont pas, et l'import Excel peut écrire un libellé hors liste. À trancher en planification : convertir quand c'est possible et transmettre le libellé sinon, ou transmettre le libellé seul.
-- **Effectif : tranche INSEE ou nombre ?** Les tranches ne coïncident pas avec les seuils du droit du travail — « 250-499 salariés » ne dit pas si l'entreprise franchit 300, seuil cité dans l'essai à blanc. Le champ d'effectif précis existe mais n'est renseigné qu'à la main.
+- **Où placer le champ « seuil franchi » de R20 ?** Le formulaire de fiche l'exposerait à chaque saisie ; le panneau « Taille des entreprises », où vit déjà l'effectif précis, le rangerait avec ses voisins mais le rendrait moins visible. À trancher en planification, avec la question de savoir si le seuil circule dans l'export Excel, l'import et la fusion entre appareils.
 - **Faut-il avertir quand un profil désigne trop peu d'entreprises ?** Le service statistique public ne diffuse pas une valeur portant sur moins de trois unités. L'application pourrait mesurer et signaler les profils les plus étroits avant l'export. À décider : garde-fou utile ou complexité inutile.
