@@ -44,7 +44,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - **Le seuil d'effectif est une donnée saisie, jamais déduite** (session-settled: user-directed — proposé par l'utilisateur, choisi contre une déduction depuis l'effectif précis existant). L'effectif INSEE et l'effectif de l'article L. 1111-2 ne sont pas la même grandeur, et depuis la loi PACTE le franchissement ne produit effet qu'après cinq années civiles consécutives : une entreprise de 310 personnes peut n'avoir pas franchi 300, une entreprise redescendue à 290 peut rester soumise. Gouverne R11, R27, R28.
 - **L'unité de rédaction est le profil, pas la fiche.** Des fiches dont la branche, l'effectif, le seuil et l'activité coïncident partagent un seul profil, donc un seul texte : soixante destinataires se ramènent en pratique à une quinzaine de textes à relire. Correction d'une incohérence relevée en relecture. Gouverne R9, R18, R20.
 - **L'activité sort, mais seulement après relecture, une fois par entreprise** (session-settled: user-directed — choisi contre l'export du seul libellé officiel INSEE, contre un avertissement répété à chaque aperçu et contre une exclusion automatique dès que le texte diffère du libellé). C'est le champ qui rend le courriel pertinent et c'est une saisie libre : la relecture est payée une fois par société, la modification du texte la fait tomber. Gouverne R11, R11a.
-- **Le presse-papiers est le régime normal de sortie, pas l'exception.** Mesuré sur les courriels de l'essai à blanc : 1 878 et 1 786 caractères de lien pour un plafond de 1 800. Le plan cesse de présenter la bascule comme un cas de bord. Gouverne R22, R23.
+- **Le presse-papiers est le régime normal de sortie, pas l'exception.** Mesuré sur les courriels de l'essai à blanc : 1 878 et 1 786 caractères de lien pour un plafond de 1 800. Le plan cesse de présenter la bascule comme un cas de bord. Gouverne R23, R24.
 
 ### Requirements
 
@@ -57,11 +57,11 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - R5. Une fiche archivée, une fiche « En transition » et une fiche sans adresse électronique ne sont jamais retenues. La fiche en transition est écartée parce que sa branche, son effectif et son activité décrivent un employeur que la personne a quitté.
 - R6. Plusieurs fiches d'une même entreprise peuvent être désignées ; chacune reçoit son propre courriel.
 - R7. Avant de produire quoi que ce soit, l'écran de préparation affiche la liste nominative des personnes à qui l'envoi s'adresse.
-- R8. Une fiche désignée dont la branche ou l'effectif manquent est écartée de l'export ; l'écran la nomme et indique ce qui lui manque. Un libellé de branche signifiant l'absence de convention collective vaut branche manquante.
+- R8. Une fiche désignée dont la branche ou l'effectif manquent est écartée de l'export ; l'écran la nomme et indique ce qui lui manque. Valent branche manquante les deux libellés de la table qui n'en désignent aucune — « Autre » et « Sans CCN ». Le libellé « Établissement public » n'est pas une branche mais reste une information exploitable : la fiche est exportée, et son profil dit que l'entreprise relève d'un statut de droit public plutôt que d'une convention de branche.
 
 **Le lancement**
 
-- R9. Un lancement porte un identifiant propre et une date. Les fiches retenues sont regroupées en **profils distincts** : deux fiches partagent un profil quand leur branche, leur effectif, leur seuil franchi et leur activité coïncident.
+- R9. Un lancement porte un identifiant propre et une date. Les fiches retenues sont regroupées en **profils distincts** : deux fiches partagent un profil quand coïncident les valeurs qui seront **effectivement transmises** — branche, effectif, seuil franchi, activité telle que R11a la calcule, et registre de politesse. Le regroupement porte sur les valeurs transmises, jamais sur les valeurs stockées : deux fiches dont l'activité saisie diffère mais dont aucune n'est relue partagent un profil si leur libellé officiel est le même, et deux fiches à l'activité identique dont une seule est relue n'en partagent pas.
 - R10. L'écran de préparation demande le mode d'export à chaque lancement. Le mode restreint est présélectionné et le choix n'est jamais mémorisé d'un lancement à l'autre.
 - R11. En mode restreint, un profil porte exactement : son numéro, la branche, l'effectif, le seuil franchi (R28), l'activité si elle a été relue (R11a), le registre de politesse, la date du plus récent envoi de veille parmi ses fiches, et le nombre de destinataires. Aucun élément nominatif n'y figure : ni nom, ni prénom, ni dénomination d'entreprise, ni adresse, ni courriel.
 - R11a. L'activité, champ de saisie libre, ne figure au profil qu'après avoir été relue et marquée bonne à transmettre dans son état exact. La relecture porte sur le couple dénomination et texte : la valider une fois vaut pour toutes les fiches de cette entreprise portant ce texte, et toute modification ultérieure du texte la fait tomber. À défaut de relecture, le profil porte le libellé officiel INSEE lorsqu'il existe, et ne porte aucune ligne d'activité sinon ; la fiche reste exportée.
@@ -73,10 +73,12 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 
 **Retour et validation**
 
-- R17. Le fichier de retour porte l'identifiant du lancement. L'application refuse, avec son motif, tout retour dont l'identifiant est inconnu, ne correspond pas à un export qu'elle a produit, ou a déjà été consommé.
+- R17. Le fichier de retour porte l'identifiant du lancement. L'application refuse, avec son motif, tout retour dont l'identifiant est inconnu ou ne correspond pas à un export qu'elle a produit. Un lancement est **clos** quand chacun de ses projets a été validé ou refusé ; redéposer le fichier d'un lancement clos est refusé, tandis que redéposer celui d'un lancement interrompu reprend là où la validation s'était arrêtée, sans reproposer les projets déjà traités.
 - R18. Le fichier de retour est décrit dans le plan de réalisation : au minimum, l'identifiant du lancement, et pour chaque profil son numéro, un objet et un corps. Un fichier incomplet, tronqué ou portant un numéro de profil absent du lancement est refusé sans rien modifier.
-- R19. Un projet est un modèle à trous : l'application substitue le prénom et le registre de chaque destinataire au moment du rendu.
+- R19. Un projet est un modèle à trous pour le seul prénom : l'application le substitue au moment du rendu. Le registre n'est pas substituable — dans l'application, tutoiement et vouvoiement sont deux textes distincts, non deux formes d'un même texte — et c'est pourquoi il figure dans la clé de regroupement de R9 : chaque projet revient écrit d'emblée dans le registre de ses destinataires.
+- R19a. Le registre de politesse d'une fiche est modifiable dans le formulaire de fiche. Aujourd'hui il n'est écrit que par la feuille d'invitation, et une fiche qui n'en a jamais reçu vaut « vous » pour un lecteur et « tu » pour un autre : la valeur par défaut devient le vouvoiement partout, y compris pour les fiches existantes dont le champ est vide.
 - R20. La validation porte sur un projet, donc sur un profil : l'écran montre le texte une fois, avec la liste des destinataires qui le recevront, et l'utilisateur valide ou refuse l'ensemble. Refuser un projet n'empêche pas les autres.
+- R20a. L'aptitude de chaque destinataire est réévaluée au moment de la validation, non à l'export : une fiche archivée, passée « En transition », privée de son adresse électronique ou dont le marqueur a été retiré entre-temps est écartée du projet et nommée à l'écran.
 - R21. L'utilisateur peut corriger le texte d'un projet avant validation ; la correction vaut pour tous les destinataires de ce profil.
 - R22. Rien n'est écrit dans les fiches avant validation. Le registre du lancement (R16) et le journal (R26) ne sont pas des écritures dans les fiches.
 
@@ -89,7 +91,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 **Traces et synchronisation**
 
 - R26. L'application tient un journal des lancements : identifiant, date, mode retenu, nombre de profils et de destinataires. Il est consultable, et permet de revoir ce qui a été préparé la fois précédente.
-- R27. Le marqueur de R1, la date de veille de R25 et le seuil de R28 sont des champs de fiche synchronisés au même titre que les autres : dernière écriture datée gagne, et un écart entre deux appareils est signalé au rapport de fusion. Le journal de R26 survit à la synchronisation et à la restauration d'une sauvegarde.
+- R27. Le marqueur de R1, la date de veille de R25, l’état de relecture de R11a, le registre de R19a et le seuil de R28 sont des champs de fiche synchronisés au même titre que les autres : dernière écriture datée gagne. Le rapport de fusion ne nomme aujourd’hui que les champs venus de l’autre appareil ; il doit nommer aussi ceux où la valeur locale l’a emporté sur une valeur distante plus ancienne, faute de quoi un retrait de désignation écrasé reste invisible. Le journal de R26 survit à la synchronisation et à la restauration d’une sauvegarde.
 
 **Seuil d'effectif au sens du droit du travail**
 
@@ -112,7 +114,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - AE8. Un profil dont toutes les fiches ont été supprimées depuis l'export : le projet est signalé comme sans destinataire, les autres restent validables.
 - AE9. Après un envoi touchant quarante fiches dont douze portent une relance planifiée avec sa note : les douze relances et leurs notes sont intactes, le tableau de bord affiche les mêmes échéances qu'avant, et chaque fiche porte sa date de veille.
 - AE10. Une fiche dont l'effectif INSEE est « 250-499 sal. » et dont le seuil franchi est renseigné à 50 : le profil transmet le seuil 50, non 300 ; une fiche de même tranche sans seuil renseigné transmet « seuil inconnu », et reste exportée.
-- AE11. Marqueur décoché sur un appareil, puis fusion avec l'autre appareil qui le portait coché : la modification la plus récente l'emporte et l'écart est signalé au rapport de fusion.
+- AE11. Marqueur décoché sur un appareil, puis fusion avec l’autre appareil qui le portait coché : la modification la plus récente l’emporte, et l’écart est nommé au rapport de fusion dans les deux sens — que la valeur retenue vienne de l’appareil local ou de l’autre.
 - AE12. Projet dont le corps dépasse la limite du lien de messagerie : l'application l'annonce avant le clic, copie le corps et affiche l'objet à recopier.
 - AE13. Une fiche dont l'activité saisie est « Filiale française de DUPONT SA, site de Roubaix », non relue : l'aperçu la propose à la relecture et, tant qu'elle n'est pas marquée, le profil porte le libellé officiel INSEE à sa place. Une fois marquée, elle sort ; corriger ensuite le texte d'un mot la fait retomber à relire.
 
@@ -130,6 +132,6 @@ Hors de ce plan, et volontairement :
 
 ### Outstanding Questions
 
-- **Faut-il avertir quand un profil désigne trop peu d'entreprises ?** Le service statistique public ne diffuse pas une valeur portant sur moins de trois unités. L'application pourrait interroger l'API publique des entreprises au moment de l'aperçu et signaler les profils les plus étroits — au prix d'un appel réseau, soumis au geste explicite.
+- **Faut-il signaler les profils qui désignent trop peu d’entreprises ?** Le service statistique public ne diffuse pas une valeur portant sur moins de trois unités. L’application ne peut pas le mesurer elle-même sans un appel réseau que R15 interdit ; la mesure se ferait donc hors application, au moment de la rédaction, et le récapitulatif de retour signalerait les profils les plus étroits. À décider : garde-fou utile ou complexité inutile.
 - **Où placer le champ « seuil franchi » de R28 ?** Le formulaire de fiche l'exposerait à chaque saisie ; le panneau « Taille des entreprises », où vit déjà l'effectif précis, le rangerait avec ses voisins mais le rendrait moins visible.
 - **Convention collective : libellé ou IDCC ?** Le carnet stocke un libellé. Un profil gagnerait à porter l'IDCC, mais treize branches de la table embarquée n'en ont pas et l'import Excel peut écrire un libellé hors liste. À trancher en planification : convertir quand c'est possible, transmettre le libellé sinon.
