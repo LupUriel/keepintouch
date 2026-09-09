@@ -1,4 +1,4 @@
-var CACHE_NAME = "kit-crm-v53";
+var CACHE_NAME = "kit-crm-v54";
 var PRECACHE_URLS = [
   "./",
   "./index.html",

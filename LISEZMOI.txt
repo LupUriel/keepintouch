@@ -180,13 +180,14 @@ casse, accents et tirets ignorés ; le reste compte, « ORANGE » et « ORANGE S
 entreprises). Sont alignées sans rien demander les fiches sans activité propre : champ vide,
 libellé officiel INSEE, ou le texte que la fiche modifiée portait avant votre correction — les
 fiches archivées comprises. Celles qui portent une autre activité saisie ne sont remplacées
-qu'après une question qui les nomme et rappelle leur activité actuelle ; répondre Annuler leur
-laisse la leur et enregistre quand même votre fiche. Vider le champ ne vide jamais les autres
-fiches sans cette question. Le formulaire indique, sous le champ, combien de fiches partagent
-l'entreprise. Une fiche ainsi alignée porte désormais votre texte : les mises à jour d'effectif
-ne la remplaceront plus par le libellé officiel. Les fiches « En transition » ne sont jamais
-touchées, ni comptées. Après l'enregistrement, un message sur la fiche indique combien d'autres
-ont été recopiées.
+qu'après une question qui nomme les cinq premières et compte les autres, et rappelle leur
+activité actuelle ; répondre Annuler leur laisse la leur et enregistre quand même votre fiche.
+Vider le champ ne vide jamais les autres fiches sans cette question. Le formulaire indique,
+sous le champ, combien de fiches partagent l'entreprise. Une fiche ainsi alignée porte
+désormais votre texte : les mises à jour d'effectif ne la remplaceront plus par le libellé
+officiel. Les fiches « En transition » ne sont jamais touchées, ni comptées. Après
+l'enregistrement, un message sur la fiche indique combien d'autres ont été recopiées, ou
+effacées si vous avez vidé le champ.
 
 ## Procédures collectives
 
