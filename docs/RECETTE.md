@@ -16,11 +16,26 @@
 
 - [ ] Fiche à activité vide : « Rechercher l'effectif » → la liste affiche « Activité : … » sous chaque candidat → choix → message « Activité préremplie : « … » » → la carte ACTIVITÉ DE L'ENTREPRISE affiche le libellé ; dans « Modifier », le champ contient le libellé et la ligne « NAF 2025 … (SIRENE, <date>) »
 - [ ] Remplacer l'activité par « Études cliniques (CRO) » puis « Actualiser » : l'activité saisie est conservée, la carte affiche la saisie puis « NAF 2025 … — libellé officiel · ancien code … » ; « Reprendre le libellé officiel » remet le libellé. (Le message « Activité conservée (votre saisie). » s'affiche lors du choix d'un candidat par « Rechercher l'effectif », pas sur « Actualiser ».)
-- [ ] Fiche préremplie jamais retouchée, rattachée ensuite à une autre entreprise : l'activité suit le nouveau libellé
+- [ ] Fiche préremplie jamais retouchée, rattachée ensuite à une autre entreprise : l'activité suit le nouveau libellé, à condition qu'aucune propagation manuelle ne l'ait alignée entre-temps
 - [ ] ⋯ › Taille des entreprises › « Mettre à jour les effectifs » (données synthétiques) : compte rendu « Activité préremplie sur N fiche(s). » ; une fiche à activité saisie n'est pas modifiée
-- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.5.10 · kit-crm-v52 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
+- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.5.11 · kit-crm-v53 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
 - [ ] Samsung : la carte ACTIVITÉ DE L'ENTREPRISE et la ligne NAF s'affichent sans infobulle ; le formulaire montre le champ en pleine largeur sous FONCTION/ENTREPRISE
 - [ ] Synchroniser PC ↔ Samsung : l'activité saisie sur un appareil apparaît sur l'autre
+- [ ] Trois fiches « LA POSTE », deux sans activité : le formulaire annonce « Activité partagée avec 2 autres fiches de « LA POSTE » » ; saisir « Distribution du courrier et colis » puis Enregistrer : aucune question, les deux autres fiches affichent la même activité ; modifier une deuxième fois : aucune question non plus
+- [ ] Une quatrième fiche saisie « SAINT-GOBAIN » et une cinquième saisie « SAINT GOBAIN » sont reconnues comme la même entreprise ; celle qui porte « Logistique (saisi) » est nommée dans la question ; Annuler la laisse intacte et aligne les fiches vides ; refaire et répondre OK la remplace ; l'onglet Entreprises continue d'afficher deux lignes
+- [ ] Vider l'activité sur une fiche dont les sœurs en ont une : la question apparaît ; Annuler conserve toutes les activités des sœurs, y compris celles issues du libellé officiel
+- [ ] Fiche sans entreprise : aucune ligne « Activité partagée avec … », aucune propagation
+- [ ] Cocher « En transition » après avoir saisi une activité, puis Enregistrer : aucune question
+- [ ] Fiche préremplie par SIRENE puis alignée par propagation : « Actualiser » conserve l'activité propagée et n'y remet pas le libellé officiel
+- [ ] Sur l'entreprise la plus fournie du carnet réel, modifier l'activité et enregistrer : le retour à la fiche reste immédiat et aucune bannière rouge d'erreur d'enregistrement n'apparaît
+
+**Activité partagée (v1.5.11)**
+
+- [ ] Une fiche archivée de la même entreprise : la ligne annonce « (dont 1 fiche archivée) », et elle l'annonce encore quand la fiche archivée porte déjà la même activité
+- [ ] Deux fiches « MARTIN CONSEIL » rattachées à deux SIREN différents : la ligne n'en compte pas l'autre, et l'enregistrement ne la touche pas
+- [ ] Trois fiches « INDÉPENDANT » sans activité : la ligne annonce « Activité partagée avec 2 autres fiches de « INDÉPENDANT » » avant tout enregistrement — c'est la garde contre les dénominations fourre-tout
+- [ ] Une fiche sœur « En transition » n'est ni comptée dans la ligne, ni nommée dans la question, ni modifiée
+- [ ] Après un enregistrement qui recopie, la fiche affiche « Activité recopiée sur N autres fiches de « X ». » pendant dix secondes ; répondre Annuler à la question affiche « N fiche(s) inchangée(s). »
 
 ## Recommandations et apporteurs (v1.5.9)
 
