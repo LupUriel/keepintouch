@@ -19,13 +19,13 @@ execution: code
 
 **Blocages ouverts** — Aucun. Les trois questions ouvertes restantes se tranchent en planification.
 
-**Révision** — Ce plan a été relu le 2026-09-09 par cinq lentilles indépendantes ; leurs 58 constats graves sont intégrés ci-dessous. Les exigences ont été renumérotées à cette occasion.
+**Révision** — Relu le 2026-09-09 par cinq lentilles indépendantes (58 constats graves, intégrés), puis la révision elle-même vérifiée par quatre lentilles et leurs contradicteurs (64 constats, 14 confirmés, 50 réfutés, intégrés à leur tour). Les exigences ont été renumérotées lors de la première révision.
 
 ## Product Contract
 
 ### Summary
 
-L'application apprend à préparer un envoi d'actualité : l'utilisateur coche dans les fiches qui doit recevoir, lance la préparation, et obtient un fichier de **profils** décrivant des situations d'entreprise sans nommer personne — les fiches dont la branche, l'effectif et l'activité coïncident partagent un seul profil. Les projets rédigés hors application reviennent par un fichier déposé dans l'outil, qui les présente profil par profil avec leurs destinataires ; chaque validation ouvre les courriels correspondants, que l'utilisateur envoie lui-même.
+L'application apprend à préparer un envoi d'actualité : l'utilisateur coche dans les fiches qui doit recevoir, lance la préparation, et obtient un fichier de **profils** décrivant des situations d'entreprise sans nommer personne — les fiches dont les valeurs transmises coïncident partagent un seul profil, donc un seul texte. Les projets rédigés hors application reviennent par un fichier déposé dans l'outil, qui les présente profil par profil avec leurs destinataires ; chaque validation ouvre les courriels correspondants, que l'utilisateur envoie lui-même.
 
 ### Problem Frame
 
@@ -42,7 +42,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - **Une fiche inapte est écartée et signalée, jamais dégradée** (session-settled: user-directed). Rien de générique ne part sous couvert de veille ciblée. Gouverne R8.
 - **Un envoi de veille ne compte pas comme un échange** (session-settled: user-directed). Sans quoi un envoi collectif viderait le tableau de bord de ses relances et l'outil cesserait de signaler les contacts réellement délaissés. Gouverne R25.
 - **Le seuil d'effectif est une donnée saisie, jamais déduite** (session-settled: user-directed — proposé par l'utilisateur, choisi contre une déduction depuis l'effectif précis existant). L'effectif INSEE et l'effectif de l'article L. 1111-2 ne sont pas la même grandeur, et depuis la loi PACTE le franchissement ne produit effet qu'après cinq années civiles consécutives : une entreprise de 310 personnes peut n'avoir pas franchi 300, une entreprise redescendue à 290 peut rester soumise. Gouverne R11, R27, R28.
-- **L'unité de rédaction est le profil, pas la fiche.** Des fiches dont la branche, l'effectif, le seuil et l'activité coïncident partagent un seul profil, donc un seul texte : soixante destinataires se ramènent en pratique à une quinzaine de textes à relire. Correction d'une incohérence relevée en relecture. Gouverne R9, R18, R20.
+- **L'unité de rédaction est le profil, pas la fiche.** Des fiches dont la branche, l'effectif, le seuil, l'activité transmise et le registre coïncident partagent un seul profil, donc un seul texte : soixante destinataires se ramènent en pratique à une quinzaine de textes à relire. Correction d'une incohérence relevée en relecture. Gouverne R9, R18, R20.
 - **L'activité sort, mais seulement après relecture, une fois par entreprise** (session-settled: user-directed — choisi contre l'export du seul libellé officiel INSEE, contre un avertissement répété à chaque aperçu et contre une exclusion automatique dès que le texte diffère du libellé). C'est le champ qui rend le courriel pertinent et c'est une saisie libre : la relecture est payée une fois par société, la modification du texte la fait tomber. Gouverne R11, R11a.
 - **Le presse-papiers est le régime normal de sortie, pas l'exception.** Mesuré sur les courriels de l'essai à blanc : 1 878 et 1 786 caractères de lien pour un plafond de 1 800. Le plan cesse de présenter la bascule comme un cas de bord. Gouverne R23, R24.
 
