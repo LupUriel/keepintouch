@@ -25,7 +25,7 @@ execution: code
 
 **Propriété de la fin de chaîne** — L'orchestrateur ouvre la demande de fusion et ne la déclare prête qu'après des contrôles verts ; la fusion et la mise en production appartiennent à l'utilisateur.
 
-**Révision** — Trois passes. Le contrat produit relu le 2026-09-09 par cinq lentilles indépendantes (58 constats graves, intégrés), puis cette révision vérifiée par quatre lentilles et leurs contradicteurs (64 constats, 14 confirmés, 50 réfutés). Le plan d'implémentation vérifié le 2026-09-11 par trois lentilles et leurs contradicteurs (46 constats, 9 confirmés, 29 réfutés). Les exigences ont été renumérotées lors de la première révision seulement.
+**Révision** — Trois passes. Le contrat produit relu le 2026-09-09 par cinq lentilles indépendantes (58 constats graves, intégrés), puis cette révision vérifiée par quatre lentilles et leurs contradicteurs (64 constats, 14 confirmés, 50 réfutés). Le plan d'implémentation vérifié le 2026-09-11 par trois lentilles et leurs contradicteurs (46 constats, 9 confirmés, 29 réfutés), puis relu le même jour par sept relecteurs documentaires — cohérence, faisabilité, produit, conception, sécurité, périmètre, adversaire — dont 74 constats ; les corrections mécaniques et les incohérences nettes sont intégrées, les décisions restantes sont listées en Outstanding Questions. Les exigences ont été renumérotées lors de la première révision seulement.
 
 **Préservation du contrat produit** — Restructuré, sans changement de portée : R27 confiait la date de veille aux champs de fiche synchronisés ; elle vit désormais comme entrée de suivi et se synchronise par le mécanisme des interactions. Le comportement observable est le même — la date se retrouve sur les deux appareils — mais la double représentation que le plan d'implémentation avait introduite est levée. Aucune autre exigence n'a changé de sens.
 
@@ -50,7 +50,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - **Une fiche inapte est écartée et signalée, jamais dégradée** (session-settled: user-directed). Rien de générique ne part sous couvert de veille ciblée. Gouverne R8.
 - **Un envoi de veille ne compte pas comme un échange** (session-settled: user-directed). Sans quoi un envoi collectif viderait le tableau de bord de ses relances et l'outil cesserait de signaler les contacts réellement délaissés. Gouverne R25.
 - **Le seuil d'effectif est une donnée saisie, jamais déduite** (session-settled: user-directed — proposé par l'utilisateur, choisi contre une déduction depuis l'effectif précis existant). L'effectif INSEE et l'effectif de l'article L. 1111-2 ne sont pas la même grandeur, et depuis la loi PACTE le franchissement ne produit effet qu'après cinq années civiles consécutives : une entreprise de 310 personnes peut n'avoir pas franchi 300, une entreprise redescendue à 290 peut rester soumise. Gouverne R11, R27, R28.
-- **L'unité de rédaction est le profil, pas la fiche.** Des fiches dont la branche, l'effectif, le seuil, l'activité transmise et le registre coïncident partagent un seul profil, donc un seul texte : soixante destinataires se ramènent en pratique à une quinzaine de textes à relire. Correction d'une incohérence relevée en relecture. Gouverne R9, R18, R20.
+- **L'unité de rédaction est le profil, pas la fiche.** Des fiches dont la branche, l'effectif, le seuil, l'activité transmise et le registre coïncident partagent un seul profil, donc un seul texte : soixante destinataires devraient se ramener à un nombre de textes nettement inférieur — l'ordre de grandeur d'une quinzaine est une hypothèse de travail, non une mesure : le regroupement dépend entièrement de la dispersion réelle du carnet, et la mesure de réidentification citée plus haut suggère au contraire des segments étroits. À mesurer au premier usage. Correction d'une incohérence relevée en relecture. Gouverne R9, R18, R20.
 - **L'activité sort, mais seulement après relecture, une fois par entreprise** (session-settled: user-directed — choisi contre l'export du seul libellé officiel INSEE, contre un avertissement répété à chaque aperçu et contre une exclusion automatique dès que le texte diffère du libellé). C'est le champ qui rend le courriel pertinent et c'est une saisie libre : la relecture est payée une fois par société, la modification du texte la fait tomber. Gouverne R11, R11a.
 - **Le presse-papiers est le régime normal de sortie, pas l'exception.** Mesuré sur les courriels de l'essai à blanc : 1 878 et 1 786 caractères de lien pour un plafond de 1 800. Le plan cesse de présenter la bascule comme un cas de bord. Gouverne R23, R24.
 
@@ -71,7 +71,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 
 - R9. Un lancement porte un identifiant propre et une date. Les fiches retenues sont regroupées en **profils distincts** : deux fiches partagent un profil quand coïncident les valeurs qui seront **effectivement transmises** — branche, effectif, seuil franchi, activité telle que R11a la calcule, et registre de politesse. Le regroupement porte sur les valeurs transmises, jamais sur les valeurs stockées : deux fiches dont l'activité saisie diffère mais dont aucune n'est relue partagent un profil si leur libellé officiel est le même, et deux fiches à l'activité identique dont une seule est relue n'en partagent pas.
 - R10. L'écran de préparation demande le mode d'export à chaque lancement. Le mode restreint est présélectionné et le choix n'est jamais mémorisé d'un lancement à l'autre.
-- R11. En mode restreint, un profil porte exactement : son numéro, la branche, l'effectif, le seuil franchi (R28), l'activité si elle a été relue (R11a), le registre de politesse, la date du plus récent envoi de veille parmi ses fiches, et le nombre de destinataires. Aucun élément nominatif n'y figure : ni nom, ni prénom, ni dénomination d'entreprise, ni adresse, ni courriel.
+- R11. En mode restreint, un profil porte exactement : son numéro, la branche, l'effectif, le seuil franchi (R28), l'activité si elle a été relue (R11a), le registre de politesse, la date de la plus récente veille préparée parmi ses fiches, et le nombre de destinataires. Aucun élément nominatif n'y figure : ni nom, ni prénom, ni dénomination d'entreprise, ni adresse, ni courriel.
 - R11a. L'activité, champ de saisie libre, ne figure au profil qu'après avoir été relue et marquée bonne à transmettre dans son état exact. La relecture porte sur le couple dénomination et texte : la valider une fois vaut pour toutes les fiches de cette entreprise portant ce texte, et toute modification ultérieure du texte la fait tomber. À défaut de relecture, le profil porte le libellé officiel INSEE lorsqu'il existe, et ne porte aucune ligne d'activité sinon ; la fiche reste exportée.
 - R12. En mode étendu, le profil porte en outre, pour chaque destinataire, une liste **close** de champs : prénom, nom, dénomination de l'entreprise, fonction, lieu d'exercice, catégorie, date du dernier échange. Aucun autre champ de la fiche n'y figure.
 - R13. Ne sortent dans aucun mode : les notes, les commentaires d'interactions, le lieu de rencontre, la prochaine action, l'origine, la note de relance et les étiquettes — tous champs de saisie libre.
@@ -81,8 +81,8 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 
 **Retour et validation**
 
-- R17. Le fichier de retour porte l'identifiant du lancement. L'application refuse, avec son motif, tout retour dont l'identifiant est inconnu ou ne correspond pas à un export qu'elle a produit. Un lancement est **clos** quand chacun de ses projets a été validé ou refusé ; redéposer le fichier d'un lancement clos est refusé, tandis que redéposer celui d'un lancement interrompu reprend là où la validation s'était arrêtée, sans reproposer les projets déjà traités.
-- R18. Le fichier de retour est décrit dans le plan de réalisation : au minimum, l'identifiant du lancement, et pour chaque profil son numéro, un objet et un corps. Un fichier incomplet, tronqué ou portant un numéro de profil absent du lancement est refusé sans rien modifier.
+- R17. Le fichier de retour porte l'identifiant du lancement. L'application refuse, avec son motif, tout retour dont l'identifiant est absent ou illisible, et tout retour d'un lancement que **cet appareil** connaît et a clos. Lorsque l'identifiant est inconnu de cet appareil — dépôt sur l'autre poste — elle ne refuse pas : elle réapparie par description, per KTD2, et ne refuse que si ce réappariement échoue pour tous les profils. Un lancement est **clos** quand chacun de ses projets a été validé ou refusé ; un lancement interrompu reprend là où la validation s'était arrêtée, sans reproposer les projets traités.
+- R18. Le fichier de retour est décrit dans le plan de réalisation : au minimum, l'identifiant du lancement, et pour chaque profil son numéro, sa description, un objet et un corps. Un fichier incomplet ou tronqué est refusé sans rien modifier. Un numéro de profil absent du lancement fait refuser le fichier lorsque le lancement est connu de cet appareil ; sur la voie par description, un profil qui ne trouve aucun destinataire est signalé seul, les autres restant validables.
 - R19. Un projet est un modèle à trous pour le seul prénom : l'application le substitue au moment du rendu. Le registre n'est pas substituable — dans l'application, tutoiement et vouvoiement sont deux textes distincts, non deux formes d'un même texte — et c'est pourquoi il figure dans la clé de regroupement de R9 : chaque projet revient écrit d'emblée dans le registre de ses destinataires.
 - R19a. Le registre de politesse d'une fiche est modifiable dans le formulaire de fiche. Aujourd'hui il n'est écrit que par la feuille d'invitation, et une fiche qui n'en a jamais reçu vaut « vous » pour un lecteur et « tu » pour un autre : la valeur par défaut devient le vouvoiement partout, y compris pour les fiches existantes dont le champ est vide.
 - R20. La validation porte sur un projet, donc sur un profil : l'écran montre le texte une fois, avec la liste des destinataires qui le recevront, et l'utilisateur valide ou refuse l'ensemble. Refuser un projet n'empêche pas les autres.
@@ -99,7 +99,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 **Traces et synchronisation**
 
 - R26. L'application tient un journal des lancements : identifiant, date, mode retenu, nombre de profils et de destinataires. Il est consultable, et permet de revoir ce qui a été préparé la fois précédente.
-- R27. Le marqueur de R1, l’état de relecture de R11a, le registre de R19a et le seuil de R28 sont des champs de fiche synchronisés (la date de veille de R25 n’en est pas un : elle vit comme entrée de suivi dans l’historique de la fiche, et se synchronise par le mécanisme des interactions) au même titre que les autres : dernière écriture datée gagne. Le rapport de fusion ne nomme aujourd’hui que les champs venus de l’autre appareil ; il doit nommer aussi ceux où la valeur locale l’a emporté sur une valeur distante plus ancienne, faute de quoi un retrait de désignation écrasé reste invisible. Le journal de R26 survit à la synchronisation et à la restauration d’une sauvegarde.
+- R27. Trois clauses. (a) Le marqueur de R1, l'état de relecture de R11a, le registre de R19a et le seuil de R28 sont des champs de fiche synchronisés au même titre que les autres : dernière écriture datée gagne. La date de veille de R25 n'en est pas un — elle vit comme entrée de suivi et se synchronise par le mécanisme des interactions. (b) Le rapport de fusion ne nomme aujourd'hui que les champs venus de l'autre appareil ; il doit nommer aussi ceux où la valeur locale l'a emporté sur une valeur distante plus ancienne, faute de quoi un retrait de désignation écrasé reste invisible. (c) Le journal des lancements de R26 survit à la synchronisation et à la restauration d'une sauvegarde, sans être fusionné entre appareils : chacun garde le sien, ce que KTD2 rend acceptable.
 
 **Seuil d'effectif au sens du droit du travail**
 
@@ -108,7 +108,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 
 ### Flows
 
-- F1. **Un envoi complet.** L'utilisateur ouvre l'écran de veille → retient les catégories → voit la liste nominative des destinataires et corrige les cases → lit la liste des fiches écartées et ce qui leur manque → choisit le mode, restreint par défaut → lit l'aperçu de ce qui va sortir → produit le fichier de profils → le confie à l'outil de rédaction, hors application → dépose le fichier de retour → parcourt les projets, un par profil, avec leurs destinataires → corrige s'il le souhaite → valide → les courriels se préparent un par un → il les envoie depuis sa messagerie.
+- F1. **Un envoi complet.** L'utilisateur ouvre l'écran de veille → retient les catégories → voit la liste nominative des destinataires et corrige les cases → lit la liste des fiches écartées et ce qui leur manque → choisit le mode, restreint par défaut → lit l'aperçu de ce qui va sortir → relit et marque les activités que l'aperçu signale → produit le fichier de profils → le confie à l'outil de rédaction, hors application → dépose le fichier de retour → parcourt les projets, un par profil, avec leurs destinataires → corrige s'il le souhaite → valide → les courriels se préparent un par un → il les envoie depuis sa messagerie.
 
 ### Acceptance Examples
 
@@ -117,7 +117,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 - AE3. Une fiche désignée sans convention collective : elle n'apparaît pas dans l'export, et l'écran la nomme en indiquant « convention collective manquante ». Idem pour une fiche sans adresse électronique, pour une fiche archivée et pour une fiche « En transition ».
 - AE4. Une fiche « Avocat / EC » dont le marqueur a été coché par erreur : elle n'est jamais retenue.
 - AE5. Mode étendu retenu : l'aperçu montre les champs nommés par R12 et rien d'autre — ni note, ni lieu de rencontre, ni prochaine action. Au lancement suivant, le mode est revenu à restreint sans intervention.
-- AE6. Deux lancements successifs sans dépôt du premier retour : déposer ensuite le retour du premier est accepté et s'applique à ses propres destinataires ; déposer deux fois le même fichier est refusé avec son motif.
+- AE6. Deux lancements successifs sans dépôt du premier retour : déposer ensuite le retour du premier est accepté et s'applique à ses propres destinataires. Redéposer le fichier d'un lancement **clos** est refusé avec son motif ; redéposer celui d'un lancement interrompu reprend sans reproposer les projets déjà traités.
 - AE7. Application fermée puis rouverte entre l'export et le retour : les profils retrouvent leurs destinataires.
 - AE8. Un profil dont toutes les fiches ont été supprimées depuis l'export : le projet est signalé comme sans destinataire, les autres restent validables.
 - AE9. Après un envoi touchant quarante fiches dont douze portent une relance planifiée avec sa note : les douze relances et leurs notes sont intactes, le tableau de bord affiche les mêmes échéances qu'avant, et chaque fiche porte sa date de veille.
@@ -142,7 +142,7 @@ Hors de ce plan, et volontairement :
 
 - **Faut-il signaler les profils qui désignent trop peu d’entreprises ?** Le service statistique public ne diffuse pas une valeur portant sur moins de trois unités. L’application ne peut pas le mesurer elle-même sans un appel réseau que R15 interdit ; la mesure se ferait donc hors application, au moment de la rédaction, et le récapitulatif de retour signalerait les profils les plus étroits. À décider : garde-fou utile ou complexité inutile.
 - **Où placer le champ « seuil franchi » de R28 ?** Le formulaire de fiche l'exposerait à chaque saisie ; le panneau « Taille des entreprises », où vit déjà l'effectif précis, le rangerait avec ses voisins mais le rendrait moins visible.
-- **Convention collective : libellé ou IDCC ?** Le carnet stocke un libellé. Un profil gagnerait à porter l'IDCC, mais treize branches de la table embarquée n'en ont pas et l'import Excel peut écrire un libellé hors liste. À trancher en planification : convertir quand c'est possible, transmettre le libellé sinon.
+
 
 ---
 
@@ -160,7 +160,7 @@ Hors de ce plan, et volontairement :
 
 ### Constraints
 
-- Fichier unique de 5 528 lignes ; le bloc Babel en occupe 63 % et coûte 8,4 s de compilation au chargement. Le chantier ajoute 700 à 1 000 lignes, dont 550 à 750 dans ce bloc : compter 9,7 à 10,5 s. Toute logique décidable va dans `KIT_PURE`, hors Babel.
+- Fichier unique de 5 528 lignes ; le bloc Babel en occupe 63 % et coûtait 8,4 s de compilation au chargement lors de la mesure du 2026-09-02 — mesure à refaire avant de chiffrer le coût, le fichier ayant grossi depuis. Le chantier ajoute 700 à 1 000 lignes, dont 550 à 750 dans ce bloc : compter 9,7 à 10,5 s. Toute logique décidable va dans `KIT_PURE`, hors Babel.
 - Aucun hook React hors de la tête de `App` (les retours conditionnels sont lignes 2524-2525). Les tests de câblage vérifient cette absence dans `renderForm` et `renderDetail` — pas ailleurs : les deux nouveaux écrans doivent recevoir la même garde.
 - 51 tests de câblage lisent le document comme du texte. Trois littéraux positionnels dépendent de l'ordre des colonnes de l'export ; ajouter un type de suivi fait apparaître un bouton dans la modale d'interaction, ce qu'un test contrôle.
 - La version est figée en quatre endroits qui doivent bouger ensemble, sinon les portes restent vertes et la nouveauté n'atteint personne, le service worker servant en cache d'abord.
@@ -168,7 +168,7 @@ Hors de ce plan, et volontairement :
 
 ### Sequencing
 
-Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis des deux. L'étape 1 (U5 à U8) rend l'application utilisable pour préparer un envoi. L'étape 2 (U9 à U13) ferme la boucle. U14 est transverse et peut partir avec l'une ou l'autre.
+Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis des deux. L'étape 1 (U5 à U8) rend l'application utilisable pour préparer un envoi. L'étape 2 (U9 à U13, puis U15) ferme la boucle. U14 est transverse et peut partir avec l'une ou l'autre.
 
 ### Assumptions
 
@@ -191,7 +191,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 | U5 | Relecture de l'activité dans le formulaire | `index.html` (submitForm, renderForm) | U1, U3 |
 | U6 | Écran de préparation | `index.html` (bloc Babel, routeur, navigation) | U2, U3, U5 |
 | U7 | Export Excel et import du marqueur | `index.html` (exportExcel, processImportRows) | U1 |
-| U8 | Documentation et version v1.6.0 | `index.html`, `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md` | U6 |
+| U8 | Documentation et version v1.6.0 | `index.html`, `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md` | U6, U7 |
 | U9 | Moteur pur de validation du retour | `index.html` (KIT_PURE, KIT_TESTS) | U3, U6 |
 | U10 | Écran de retour et validation | `index.html` (bloc Babel, routeur) | U9 |
 | U11 | Préparation des courriels et date de veille | `index.html` (bloc Babel, SUIVI_TYPES) | U10 |
@@ -239,7 +239,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Files** — `index.html` : `KIT_PURE` (avant l'export ligne 718), `KIT_TESTS`.
 
-**Approach** — La fonction prend une fiche et rend soit « retenue », soit un motif nommé parmi : catégorie exclue, archivée, en transition, sans adresse électronique, sans branche, sans effectif. **« Effectif » désigne ici la tranche INSEE de la fiche, ou le nombre exact lorsqu'il a été saisi à la main, celui-ci primant.** La valeur sentinelle d'effectif inconnu vaut effectif manquant au sens de R8, au même titre qu'un champ vide. Deux libellés de la table des conventions valent absence de branche — « Autre » et « Sans CCN » — tandis que « Établissement public » est retenu et signalé comme statut de droit public, per R8. Le seuil manquant n'est jamais un motif d'exclusion, per R29.
+**Approach** — La fonction prend une fiche et rend soit « retenue », soit un motif nommé parmi : catégorie exclue, archivée, en transition, sans adresse électronique, sans branche, sans effectif. **« Effectif » désigne ici la tranche INSEE de la fiche ; lorsqu'un nombre exact a été saisi à la main, il sert à déterminer la tranche, et c'est la tranche qui est transmise (U3).** La valeur sentinelle d'effectif inconnu vaut effectif manquant au sens de R8, au même titre qu'un champ vide. Deux libellés de la table des conventions valent absence de branche — « Autre » et « Sans CCN » — tandis que « Établissement public » est retenu et signalé comme statut de droit public, per R8. Le seuil manquant n'est jamais un motif d'exclusion, per R29.
 
 **Test scenarios**
 
@@ -255,7 +255,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Goal** — Transformer une liste de fiches retenues en profils numérotés, et produire le contenu exact des deux modes d'export.
 
-**Requirements** — R9, R11, R11a (règle de calcul), R12, R13.
+**Requirements** — R9, R11, R11a (règle de calcul), R12, R13, R29 (mention « seuil inconnu »).
 
 **Dependencies** — U1, U2.
 
@@ -263,8 +263,8 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Approach**
 
-1. Calculer, pour chaque fiche retenue, les valeurs **transmises** : branche, effectif — le nombre exact s'il a été saisi, la tranche INSEE sinon, jamais la valeur sentinelle d'inconnu, écartée en amont par U2 —, seuil, activité selon la règle de relecture, registre. L'activité transmise est le texte saisi lorsqu'il a été relu dans son état exact, le libellé officiel INSEE sinon, et rien du tout si ni l'un ni l'autre n'existe.
-2. Regrouper les fiches dont ces valeurs coïncident ; numéroter les profils ; conserver pour chacun la liste des identifiants de fiches et le nombre de destinataires.
+1. Calculer, pour chaque fiche retenue, les valeurs **transmises** : branche — le numéro IDCC quand la table embarquée en donne un pour ce libellé, le libellé seul sinon, les deux étant transmis lorsque le numéro existe —, effectif — **toujours la tranche**, jamais le nombre exact : transmettre « 312 salariés » désigne une entreprise là où « 250-499 salariés » en désigne des dizaines, et fragmente les profils au lieu de les regrouper. Le nombre exact, lorsqu'il est saisi, sert à choisir la tranche et à rien d'autre ; la valeur sentinelle d'inconnu est écartée en amont par U2 —, seuil, activité selon la règle de relecture, registre. L'activité transmise est le texte saisi lorsqu'il a été relu dans son état exact, le libellé officiel INSEE sinon, et rien du tout si ni l'un ni l'autre n'existe.
+2. Regrouper les fiches dont ces valeurs coïncident ; numéroter les profils ; conserver pour chacun la liste des identifiants de fiches, le nombre de destinataires et la date du plus récent envoi de veille parmi ses fiches, calculée depuis les interactions — huitième élément que R11 met au profil.
 3. Sérialiser en mode restreint : la liste close de R11, sans aucun élément nominatif.
 4. Sérialiser en mode étendu : la liste close de R12 par destinataire. Ni l'un ni l'autre ne porte les champs de R13.
 
@@ -273,7 +273,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 - Deux fiches aux valeurs transmises identiques partagent un profil ; deux fiches dont seul le registre diffère n'en partagent pas.
 - Deux fiches à l'activité saisie identique dont une seule est relue tombent dans deux profils, et celle qui n'est pas relue porte le libellé officiel.
 - Deux fiches aux activités saisies différentes, aucune relue, de même libellé officiel : un seul profil.
-- Le mode restreint ne contient aucun nom, prénom, dénomination, adresse ni courriel — assertion portant sur la sortie sérialisée entière, pas sur des champs nommés.
+- Le mode restreint ne contient aucun nom, prénom, dénomination, adresse ni courriel — assertion portant sur la sortie sérialisée entière, pas sur des champs nommés. Le contrôle est mécanique : la sortie ne doit contenir aucune des chaînes présentes dans les champs nominatifs des fiches du lancement, comparaison faite après normalisation. Un texte d'activité relu qui contiendrait malgré tout une dénomination fait échouer ce contrôle et le signale, la relecture humaine n'étant pas la seule garde.
 - Le mode étendu ne contient ni note, ni commentaire d'interaction, ni lieu de rencontre, ni prochaine action, ni origine, ni note de relance, ni étiquette.
 - Un profil dont aucune fiche n'a de seuil porte « seuil inconnu ».
 
@@ -338,13 +338,13 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 2. Liste nominative des destinataires, cochable et décochable depuis l'écran ; liste des fiches écartées avec leur motif.
 3. Choix du mode, restreint présélectionné, jamais mémorisé d'un lancement à l'autre.
 4. Aperçu obligatoire montrant le contenu exact, ligne par ligne, avant production. L'aperçu signale les activités saisies mais non relues — leur profil porte alors le libellé officiel INSEE — et permet de les marquer bonnes à transmettre sans quitter l'écran, en réutilisant la fonction de marquage de U5. Sans quoi la relecture supposerait d'ouvrir les fiches une à une, ce que R2 existe précisément pour éviter.
-5. Production du fichier et écriture du registre du lancement — identifiant, date, mode, profils et fiches — dans une clé racine des données.
+5. Production du fichier et écriture, dans une clé racine des données, du registre du lancement — identifiant, date, mode, profils et fiches — **et de son entrée au journal de R26**, dès l'export et non à la validation. L'identifiant est tiré au sort de façon à rester unique même si les deux appareils préparent un envoi sans s'être synchronisés.
 
 **Patterns to follow** — le panneau « Taille des entreprises » porte le mécanisme complet d'un aperçu obligatoire avant action de masse, y compris la progression et le compte rendu ; la production du fichier suit l'export de sauvegarde existant.
 
 **Test scenarios**
 
-- L'aperçu affiche exactement ce que la sérialisation produira, et n'écrit rien.
+- L'aperçu affiche exactement ce que la sérialisation produira. Il n'écrit dans les fiches que sur un geste explicite de marquage d'activité, jamais du seul fait d'être affiché ; R22 vise l'écriture automatique, non une action demandée par l'utilisateur.
 - Le mode revient à restreint au lancement suivant.
 - Une fiche décochée depuis l'écran disparaît de la liste et du fichier.
 - Une activité saisie non relue est signalée dans l'aperçu ; la marquer depuis l'écran fait passer le profil du libellé officiel au texte saisi, sans quitter l'écran.
@@ -380,7 +380,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Requirements** — traçabilité.
 
-**Dependencies** — U6.
+**Dependencies** — U6, U7.
 
 **Files** — `index.html` (version), `sw.js` (nom de cache), `LISEZMOI.txt`, `docs/RECETTE.md`.
 
@@ -394,7 +394,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Goal** — Décider, sans interface, si un fichier de retour est acceptable et à quoi il correspond.
 
-**Requirements** — R17, R18.
+**Requirements** — R16 (lecture du registre), R17, R18.
 
 **Dependencies** — U3, U6.
 
@@ -422,7 +422,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Files** — `index.html` : nouvelle vue, dépôt de fichier, corps de l'écran.
 
-**Approach** — Dépôt sur le patron de l'import de sauvegarde existant. Un projet à la fois, avec son texte, la liste nominative de ses destinataires et un champ de correction valant pour tous. L'aptitude est réévaluée à ce moment par la fonction de U2 ; une fiche devenue inapte est nommée et retirée. Rien n'est écrit dans les fiches avant validation.
+**Approach** — L'écran se rejoint depuis l'écran de préparation, qui affiche en permanence les lancements non clos et propose d'y déposer un retour ; il n'a pas d'entrée propre dans la navigation, la veille restant une seule destination. Dépôt sur le patron de l'import de sauvegarde existant. Un projet à la fois, avec son texte, la liste nominative de ses destinataires et un champ de correction valant pour tous. L'aptitude est réévaluée à ce moment par la fonction de U2 ; une fiche devenue inapte est nommée et retirée. Rien n'est écrit dans les fiches avant validation.
 
 **Test scenarios**
 
@@ -438,13 +438,13 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Goal** — Ouvrir le courriel de chaque destinataire et laisser une trace qui ne dérange rien.
 
-**Requirements** — R19, R23, R24, R25.
+**Requirements** — R6, R19, R23, R24, R25.
 
 **Dependencies** — U10.
 
 **Files** — `index.html` : préparation du courriel, `SUIVI_TYPES` (≈ 477), écriture groupée.
 
-**Approach** — Le prénom est substitué par la fonction de modèle existante. Le courriel se prépare par le mécanisme déjà en service, qui bascule sur le presse-papiers au-delà de la limite du lien : l'annoncer **avant** le clic, comme le fait déjà le chemin invitation, et afficher aussi l'objet à recopier. La date de veille est écrite comme entrée de la famille « suivi », per KTD3. Toutes les écritures d'une validation se font **en une fois, vérifiée**, per KTD7. Le vocabulaire dit « préparé le », jamais « envoyé le », per R24.
+**Approach** — Après validation d'un projet, l'écran liste ses destinataires et prépare leur courriel **un par un, sur commande** : l'utilisateur en ouvre un, part dans sa messagerie, revient, ouvre le suivant ; la liste montre lesquels ont déjà été préparés. Aucune ouverture en rafale — un navigateur bloque les fenêtres successives, et rien ne garantit que l'utilisateur revienne. Le prénom est substitué par la fonction de modèle existante. Le courriel se prépare par le mécanisme déjà en service, qui bascule sur le presse-papiers au-delà de la limite du lien : l'annoncer **avant** le clic, comme le fait déjà le chemin invitation, et afficher aussi l'objet à recopier. La date de veille est écrite comme entrée de la famille « suivi », per KTD3 : cela suppose d'ajouter le type à la table des types de suivi **et** à la table des types d'interaction qui alimente la modale de saisie — en l'excluant explicitement des types proposés à la main, sous peine de faire apparaître un bouton parasite qu'un contrôle existant surveille. Toutes les écritures d'une validation se font **en une fois, vérifiée**, per KTD7. Le vocabulaire dit « préparé le », jamais « envoyé le », per R24.
 
 **Test scenarios**
 
@@ -461,7 +461,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Goal** — Que les notifications ne se dérèglent pas après un envoi.
 
-**Requirements** — KTD4.
+**Requirements** — R25 (compteurs de notification), per KTD4.
 
 **Dependencies** — U11.
 
@@ -480,7 +480,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Goal** — Pouvoir répondre à « qu'est-ce qui est sorti, et quand ».
 
-**Requirements** — R26.
+**Requirements** — R26, R27 clause (c).
 
 **Dependencies** — U9.
 
@@ -538,7 +538,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 ## Verification Contract
 
-- **Portes** : `node scripts/run-gates.js` pour toute unité ; `node scripts/run-gates.js --with-smoke` pour toute unité touchant le bloc Babel. Vérifier explicitement dans la sortie du smoke la présence de `SMOKE_OK`, de `"authenticated":true` et de `"exceptions":[]` — un `GATES_OK` lu dans une sortie tronquée a déjà laissé passer un écran blanc en production le 2026-09-08.
+- **Portes** : `node scripts/run-gates.js --with-smoke` pour **toute unité touchant le bloc Babel — U1, U4, U5, U6, U10, U11, U13 —** et `node scripts/run-gates.js` pour les autres. Vérifier explicitement dans la sortie du smoke la présence de `SMOKE_OK`, de `"authenticated":true` et de `"exceptions":[]` — un `GATES_OK` lu dans une sortie tronquée a déjà laissé passer un écran blanc en production le 2026-09-08.
 - **Mutations d'épreuve** : pour chaque unité portant une règle de décision (U2, U3, U9), appliquer temporairement au moins trois mutations au code et constater que les portes rougissent, puis rétablir.
 - **Recette en navigateur** : sur fixture synthétique uniquement, jamais sur le carnet réel. Deux parcours — préparation complète à la fin de l'étape 1, boucle entière à la fin de l'étape 2 — dont un cas de dépôt sur un carnet n'ayant pas connu le lancement.
 - **Non-régression du suivi** : la fixture de recette comporte des fiches portant une relance planifiée et sa note ; les échéances du tableau de bord sont relevées avant et après l'envoi.
