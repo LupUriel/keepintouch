@@ -12,13 +12,28 @@
 
 ## Lignes spécifiques de la version
 
+## Veille juridique — retour, validation, courriels (v1.6.1)
+
+- [ ] Sur des données fictives, déposer un fichier de retour dont l'identifiant de lancement est absent : le refus est motivé et rien n'est écrit
+- [ ] Déposer un retour valide : les projets défilent un par un avec les destinataires nommés
+- [ ] Refuser le premier projet, puis valider le second : seul le second apparaît dans « Préparer les courriels »
+- [ ] Archiver une fiche entre l'export et la validation : elle est nommée et retirée
+- [ ] Sous chaque bouton « Préparer le courriel », la ligne d'annonce est présente avant tout clic
+- [ ] Cliquer sur un texte long : le texte est copié, l'objet s'affiche, la fiche porte « Veille préparée le <date> » et sa relance planifiée est intacte
+- [ ] L'historique de la fiche montre « Veille préparée le », jamais « envoyé »
+- [ ] La fenêtre d'interaction ne propose pas de type « Veille »
+- [ ] « ⋯ › Journal de la veille » liste le lancement avec son mode et son état
+- [ ] Fermer l'application au milieu de la validation, puis redéposer le même fichier : la validation reprend au projet suivant
+- [ ] Fenêtre « Ajouter une entreprise du groupe » : taper un autre nom dans « Rechercher une entreprise », puis Entrée relance la recherche sur ce nom
+- [ ] ⋯ › À propos affiche « Keep In Touch v1.6.1 » suivi du build kit-crm-v56
+
 ## Activité de l'entreprise (v1.5.10)
 
 - [ ] Fiche à activité vide : « Rechercher l'effectif » → la liste affiche « Activité : … » sous chaque candidat → choix → message « Activité préremplie : « … » » → la carte ACTIVITÉ DE L'ENTREPRISE affiche le libellé ; dans « Modifier », le champ contient le libellé et la ligne « NAF 2025 … (SIRENE, <date>) »
 - [ ] Remplacer l'activité par « Études cliniques (CRO) » puis « Actualiser » : l'activité saisie est conservée, la carte affiche la saisie puis « NAF 2025 … — libellé officiel · ancien code … » ; « Reprendre le libellé officiel » remet le libellé. (Le message « Activité conservée (votre saisie). » s'affiche lors du choix d'un candidat par « Rechercher l'effectif », pas sur « Actualiser ».)
 - [ ] Fiche préremplie jamais retouchée, rattachée ensuite à une autre entreprise : l'activité suit le nouveau libellé, à condition qu'aucune propagation manuelle ne l'ait alignée entre-temps
 - [ ] ⋯ › Taille des entreprises › « Mettre à jour les effectifs » (données synthétiques) : compte rendu « Activité préremplie sur N fiche(s). » ; une fiche à activité saisie n'est pas modifiée
-- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.6.0 · kit-crm-v55 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
+- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.6.1 · kit-crm-v56 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
 - [ ] Samsung : la carte ACTIVITÉ DE L'ENTREPRISE et la ligne NAF s'affichent sans infobulle ; le formulaire montre le champ en pleine largeur sous FONCTION/ENTREPRISE
 - [ ] Synchroniser PC ↔ Samsung : l'activité saisie sur un appareil apparaît sur l'autre
 - [ ] Trois fiches « LA POSTE », deux sans activité : le formulaire annonce « Activité partagée avec 2 autres fiches de « LA POSTE » » ; saisir « Distribution du courrier et colis » puis Enregistrer : aucune question, les deux autres fiches affichent la même activité ; modifier une deuxième fois : aucune question non plus
