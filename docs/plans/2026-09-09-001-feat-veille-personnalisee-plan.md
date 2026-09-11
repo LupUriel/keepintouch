@@ -25,7 +25,9 @@ execution: code
 
 **Propriété de la fin de chaîne** — L'orchestrateur ouvre la demande de fusion et ne la déclare prête qu'après des contrôles verts ; la fusion et la mise en production appartiennent à l'utilisateur.
 
-**Révision** — Relu le 2026-09-09 par cinq lentilles indépendantes (58 constats graves, intégrés), puis la révision elle-même vérifiée par quatre lentilles et leurs contradicteurs (64 constats, 14 confirmés, 50 réfutés, intégrés à leur tour). Les exigences ont été renumérotées lors de la première révision.
+**Révision** — Trois passes. Le contrat produit relu le 2026-09-09 par cinq lentilles indépendantes (58 constats graves, intégrés), puis cette révision vérifiée par quatre lentilles et leurs contradicteurs (64 constats, 14 confirmés, 50 réfutés). Le plan d'implémentation vérifié le 2026-09-11 par trois lentilles et leurs contradicteurs (46 constats, 9 confirmés, 29 réfutés). Les exigences ont été renumérotées lors de la première révision seulement.
+
+**Préservation du contrat produit** — Restructuré, sans changement de portée : R27 confiait la date de veille aux champs de fiche synchronisés ; elle vit désormais comme entrée de suivi et se synchronise par le mécanisme des interactions. Le comportement observable est le même — la date se retrouve sur les deux appareils — mais la double représentation que le plan d'implémentation avait introduite est levée. Aucune autre exigence n'a changé de sens.
 
 ## Product Contract
 
@@ -97,7 +99,7 @@ Deux contraintes encadrent toute solution. D'abord la déontologie : le secret p
 **Traces et synchronisation**
 
 - R26. L'application tient un journal des lancements : identifiant, date, mode retenu, nombre de profils et de destinataires. Il est consultable, et permet de revoir ce qui a été préparé la fois précédente.
-- R27. Le marqueur de R1, la date de veille de R25, l’état de relecture de R11a, le registre de R19a et le seuil de R28 sont des champs de fiche synchronisés au même titre que les autres : dernière écriture datée gagne. Le rapport de fusion ne nomme aujourd’hui que les champs venus de l’autre appareil ; il doit nommer aussi ceux où la valeur locale l’a emporté sur une valeur distante plus ancienne, faute de quoi un retrait de désignation écrasé reste invisible. Le journal de R26 survit à la synchronisation et à la restauration d’une sauvegarde.
+- R27. Le marqueur de R1, l’état de relecture de R11a, le registre de R19a et le seuil de R28 sont des champs de fiche synchronisés (la date de veille de R25 n’en est pas un : elle vit comme entrée de suivi dans l’historique de la fiche, et se synchronise par le mécanisme des interactions) au même titre que les autres : dernière écriture datée gagne. Le rapport de fusion ne nomme aujourd’hui que les champs venus de l’autre appareil ; il doit nommer aussi ceux où la valeur locale l’a emporté sur une valeur distante plus ancienne, faute de quoi un retrait de désignation écrasé reste invisible. Le journal de R26 survit à la synchronisation et à la restauration d’une sauvegarde.
 
 **Seuil d'effectif au sens du droit du travail**
 
@@ -150,10 +152,10 @@ Hors de ce plan, et volontairement :
 
 - **KTD1. Livraison en deux versions utilisables.** v1.6.0 livre la préparation (couture de fiche, aptitude, regroupement, écran de préparation, fichier de profils) ; v1.6.1 livre le retour, la validation et l'ouverture des courriels. La première moitié sert déjà seule : l'utilisateur confie le fichier et recopie les textes à la main, comme lors de l'essai à blanc du 2026-09-08. D'un bloc, rien ne serait utilisable avant la fin. (session-settled: user-approved — chosen over une livraison unique : rien d'utilisable avant la fin.)
 - **KTD2. Le retour se réapparie d'abord par mémoire, puis par calcul.** L'application retient la correspondance profil → fiches (R16) et s'en sert en priorité ; quand le lancement lui est inconnu — dépôt sur l'autre appareil — elle recalcule les profils depuis ses propres fiches et rapproche par description. La fusion inter-appareils ne transporte que six clés racine et écarte le reste en silence (c'est déjà le sort des invitations en attente) : étendre la fusion serait un chantier distinct et toucherait la partie la plus délicate de l'application. (session-settled: user-directed — chosen over le seul appareil d'origine, et contre l'extension de la fusion.) Gouverne R16, R17, R20a.
-- **KTD3. La date de veille devient un type de la famille « suivi » créée le 2026-09-07.** L'aveuglement du calcul de relance passe par une seule fonction (`derniereInteractionHorsSuivi`), donc R25 est presque gratuit — mais seulement pour ce que cette fonction couvre. Quatre effets restent à traiter explicitement : l'horodatage de fiche qui ressuscite à la fusion une fiche supprimée ailleurs, le compteur d'interactions de l'export Excel, la recherche plein texte qui balaie les commentaires, et les compteurs de notification du service worker. Gouverne R25.
+- **KTD3. La date de veille est une entrée de la famille « suivi » créée le 2026-09-07, et rien d'autre.** Elle n'est pas dupliquée en champ de fiche : une seule représentation, écrite en U11, lue partout ailleurs depuis les interactions. L'aveuglement du calcul de relance passe par une seule fonction (`derniereInteractionHorsSuivi`), donc R25 est presque gratuit — mais seulement pour ce que cette fonction couvre. Quatre effets restent à traiter explicitement : l'horodatage de fiche qui ressuscite à la fusion une fiche supprimée ailleurs, le compteur d'interactions de l'export Excel, la recherche plein texte qui balaie les commentaires, et les compteurs de notification du service worker. Gouverne R25.
 - **KTD4. Le service worker doit apprendre à ignorer les entrées de suivi.** Il embarque sa propre copie de la logique de relance et, contrairement à l'application, ne filtre pas les suivis. L'écart existe déjà ; un envoi à soixante fiches le rendrait massif. Corrigé dans ce chantier bien qu'il lui préexiste.
 - **KTD5. Le registre et le journal vivent dans une clé racine des données, sur le patron des invitations en attente.** `save()` fait un `Object.assign` qui ne retire jamais une clé racine : la persistance à la fermeture, dans la sauvegarde JSON et au retour de version est acquise sans code. La fusion ne la transporte pas — c'est précisément ce que KTD2 contourne.
-- **KTD6. La colonne du marqueur s'ajoute en dernière position de l'export Excel.** Six tableaux de mise en forme sont indexés par position de colonne ; insérer ailleurs qu'en fin décale tout et fait rougir trois contrôles positionnels.
+- **KTD6. La colonne du marqueur s'ajoute en dernière position de l'export Excel.** Six tableaux de mise en forme sont indexés par position de colonne — largeurs, validations, colonnes de dates, de remplissage et de texte noir — et insérer ailleurs qu'en fin les décale tous. Attention au contresens : ce sont ces tableaux que la position finale protège, **pas** les contrôles automatiques, dont deux épinglent au contraire la fin des listes et devront donc être ré-épinglés (voir U7).
 - **KTD7. Une validation portant sur plusieurs destinataires s'écrit en une seule fois, vérifiée.** Chaque écriture de fiche sérialise le carnet entier, écrit en synchrone et tente l'instantané du jour ; et hors option de vérification, l'écriture rend « vrai » même quand le quota l'a fait échouer. Le motif de la rafale d'écritures est déjà en production ailleurs et a été mesuré à plusieurs secondes sur un gros carnet.
 
 ### Constraints
@@ -182,12 +184,12 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 | U-ID | Titre | Fichiers principaux | Dépend de |
 |---|---|---|---|
-| U1 | Cinq champs de fiche et leur couture | `index.html` (KIT_PURE, App, formulaire, MERGE_FIELDS) | — |
+| U1 | Quatre champs de fiche et leur couture | `index.html` (KIT_PURE, App, formulaire, MERGE_FIELDS) | — |
 | U2 | Moteur pur d'aptitude | `index.html` (KIT_PURE, KIT_TESTS) | U1 |
 | U3 | Moteur pur de regroupement et de sérialisation | `index.html` (KIT_PURE, KIT_TESTS) | U1, U2 |
 | U4 | Filtre « reçoit la veille » au tableau de bord | `index.html` (bloc Babel) | U1 |
 | U5 | Relecture de l'activité dans le formulaire | `index.html` (submitForm, renderForm) | U1, U3 |
-| U6 | Écran de préparation | `index.html` (bloc Babel, routeur, navigation) | U2, U3 |
+| U6 | Écran de préparation | `index.html` (bloc Babel, routeur, navigation) | U2, U3, U5 |
 | U7 | Export Excel et import du marqueur | `index.html` (exportExcel, processImportRows) | U1 |
 | U8 | Documentation et version v1.6.0 | `index.html`, `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md` | U6 |
 | U9 | Moteur pur de validation du retour | `index.html` (KIT_PURE, KIT_TESTS) | U3, U6 |
@@ -198,11 +200,11 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 | U14 | Rapport de fusion dans les deux sens | `index.html` (mergeData, modal de rapport) | — |
 | U15 | Documentation et version v1.6.1 | `index.html`, `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md` | U11, U13 |
 
-### U1. Cinq champs de fiche et leur couture
+### U1. Quatre champs de fiche et leur couture
 
-**Goal** — Faire exister dans la fiche les cinq données que tout le reste consomme, et les faire circuler correctement.
+**Goal** — Faire exister dans la fiche les quatre données que tout le reste consomme, et les faire circuler correctement.
 
-**Requirements** — R1, R19a, R28, R29 (champ), R25 (champ de date), R11a (champ d'état de relecture), R27 (première moitié).
+**Requirements** — R1, R19a, R28, R29 (champ), R11a (champ d'état de relecture), R27 (première moitié). La date de veille n'est pas un champ de fiche : elle s'écrit en U11.
 
 **Dependencies** — aucune.
 
@@ -210,10 +212,10 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Approach**
 
-1. Ajouter les cinq champs : marqueur « reçoit la veille » (booléen, faux par défaut), seuil franchi (une valeur parmi six, « je ne sais pas » par défaut), état de relecture de l'activité (le texte exact validé, vide par défaut), date de la dernière veille préparée, et exposition du registre de politesse existant.
+1. Ajouter les quatre champs : marqueur « reçoit la veille » (booléen, faux par défaut), seuil franchi (une valeur parmi six, « je ne sais pas » par défaut), état de relecture de l'activité (le texte exact validé, vide par défaut), et exposition du registre de politesse existant. **La date de veille n'est pas un champ de fiche** : elle s'écrit en U11 comme entrée de suivi, per KTD3, et la date que porte un profil se calcule depuis les interactions.
 2. Le registre existe déjà comme champ synchronisé mais n'est écrit qu'après une invitation confirmée, et il est lu avec deux valeurs par défaut contradictoires à trente-sept lignes d'écart (≈ 3024 « vous », ≈ 3061 « tu »). Aligner les deux lecteurs sur le vouvoiement, per R19a.
-3. Le seuil se place dans le panneau « Taille des entreprises », auprès de l'effectif précis dont il est le voisin logique, avec un renvoi depuis le formulaire de fiche.
-4. Inscrire les quatre champs nouveaux dans `MERGE_FIELDS` ; le registre y figure déjà.
+3. Le seuil se saisit dans la modale « Saisir l'effectif » (≈ 4139), la seule qui porte un contexte de fiche et où vit déjà l'effectif précis ; le formulaire de fiche y renvoie. Le panneau « Taille des entreprises » est un écran global sans fiche courante : il ne convient pas.
+4. Inscrire les trois champs nouveaux dans `MERGE_FIELDS` ; le registre y figure déjà.
 
 **Patterns to follow** — la chaîne complète d'un champ existant, par exemple la relance planifiée et sa note ; pour le seuil, le champ d'effectif précis et son panneau.
 
@@ -223,9 +225,9 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 - Cocher le marqueur, enregistrer, rouvrir la fiche : la valeur est conservée.
 - Le seuil accepte les six valeurs et rien d'autre.
 - Une fiche existante sans registre est traitée comme vouvoyée par les deux lecteurs.
-- Les cinq champs figurent dans la liste des champs synchronisés.
+- Les trois champs nouveaux figurent dans la liste des champs synchronisés ; aucune date de veille n'y figure.
 
-**Verification** — `node scripts/run-gates.js` vert ; les cinq champs présents dans une fiche enregistrée puis rechargée.
+**Verification** — `node scripts/run-gates.js` vert ; les quatre champs présents dans une fiche enregistrée puis rechargée.
 
 ### U2. Moteur pur d'aptitude
 
@@ -237,7 +239,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Files** — `index.html` : `KIT_PURE` (avant l'export ligne 718), `KIT_TESTS`.
 
-**Approach** — La fonction prend une fiche et rend soit « retenue », soit un motif nommé parmi : catégorie exclue, archivée, en transition, sans adresse électronique, sans branche, sans effectif. Deux libellés de la table des conventions valent absence de branche — « Autre » et « Sans CCN » — tandis que « Établissement public » est retenu et signalé comme statut de droit public, per R8. Le seuil manquant n'est jamais un motif d'exclusion, per R29.
+**Approach** — La fonction prend une fiche et rend soit « retenue », soit un motif nommé parmi : catégorie exclue, archivée, en transition, sans adresse électronique, sans branche, sans effectif. **« Effectif » désigne ici la tranche INSEE de la fiche, ou le nombre exact lorsqu'il a été saisi à la main, celui-ci primant.** La valeur sentinelle d'effectif inconnu vaut effectif manquant au sens de R8, au même titre qu'un champ vide. Deux libellés de la table des conventions valent absence de branche — « Autre » et « Sans CCN » — tandis que « Établissement public » est retenu et signalé comme statut de droit public, per R8. Le seuil manquant n'est jamais un motif d'exclusion, per R29.
 
 **Test scenarios**
 
@@ -261,7 +263,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Approach**
 
-1. Calculer, pour chaque fiche retenue, les valeurs **transmises** : branche, effectif, seuil, activité selon la règle de relecture, registre. L'activité transmise est le texte saisi lorsqu'il a été relu dans son état exact, le libellé officiel INSEE sinon, et rien du tout si ni l'un ni l'autre n'existe.
+1. Calculer, pour chaque fiche retenue, les valeurs **transmises** : branche, effectif — le nombre exact s'il a été saisi, la tranche INSEE sinon, jamais la valeur sentinelle d'inconnu, écartée en amont par U2 —, seuil, activité selon la règle de relecture, registre. L'activité transmise est le texte saisi lorsqu'il a été relu dans son état exact, le libellé officiel INSEE sinon, et rien du tout si ni l'un ni l'autre n'existe.
 2. Regrouper les fiches dont ces valeurs coïncident ; numéroter les profils ; conserver pour chacun la liste des identifiants de fiches et le nombre de destinataires.
 3. Sérialiser en mode restreint : la liste close de R11, sans aucun élément nominatif.
 4. Sérialiser en mode étendu : la liste close de R12 par destinataire. Ni l'un ni l'autre ne porte les champs de R13.
@@ -324,9 +326,9 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Goal** — L'écran qui va de « je veux envoyer » au fichier de profils.
 
-**Requirements** — R2 (seconde moitié), R4, R7, R8 (affichage), R10, R14, R15, R16 (écriture du registre).
+**Requirements** — R2 (seconde moitié), R4, R7, R8 (affichage), R10, R11a (relecture depuis l'aperçu), R14, R15, R16 (écriture du registre).
 
-**Dependencies** — U2, U3.
+**Dependencies** — U2, U3, U5.
 
 **Files** — `index.html` : nouvelle vue dans le routeur (≈ 5475-5481), entrée de navigation, corps de l'écran, écriture de la clé racine.
 
@@ -335,7 +337,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 1. Choix des catégories réellement présentes ; « Avocat / EC » jamais proposée.
 2. Liste nominative des destinataires, cochable et décochable depuis l'écran ; liste des fiches écartées avec leur motif.
 3. Choix du mode, restreint présélectionné, jamais mémorisé d'un lancement à l'autre.
-4. Aperçu obligatoire montrant le contenu exact, ligne par ligne, avant production.
+4. Aperçu obligatoire montrant le contenu exact, ligne par ligne, avant production. L'aperçu signale les activités saisies mais non relues — leur profil porte alors le libellé officiel INSEE — et permet de les marquer bonnes à transmettre sans quitter l'écran, en réutilisant la fonction de marquage de U5. Sans quoi la relecture supposerait d'ouvrir les fiches une à une, ce que R2 existe précisément pour éviter.
 5. Production du fichier et écriture du registre du lancement — identifiant, date, mode, profils et fiches — dans une clé racine des données.
 
 **Patterns to follow** — le panneau « Taille des entreprises » porte le mécanisme complet d'un aperçu obligatoire avant action de masse, y compris la progression et le compte rendu ; la production du fichier suit l'export de sauvegarde existant.
@@ -345,6 +347,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 - L'aperçu affiche exactement ce que la sérialisation produira, et n'écrit rien.
 - Le mode revient à restreint au lancement suivant.
 - Une fiche décochée depuis l'écran disparaît de la liste et du fichier.
+- Une activité saisie non relue est signalée dans l'aperçu ; la marquer depuis l'écran fait passer le profil du libellé officiel au texte saisi, sans quitter l'écran.
 - Aucune requête réseau n'est émise pendant tout le parcours.
 - Le registre écrit survit à un rechargement de l'application.
 - Aucun hook React dans les fonctions de rendu appelées conditionnellement.
@@ -361,12 +364,12 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Files** — `index.html` : en-têtes et lignes de l'export (≈ 3308-3331), largeurs de colonnes (≈ 1467), détection de colonne à l'import (≈ 3708-3742).
 
-**Approach** — Colonne ajoutée **en dernière position**, per KTD6, avec sa largeur. À l'import, une détection par mot-clé de plus, indépendante de l'ordre.
+**Approach** — Colonne ajoutée **en dernière position**, per KTD6, avec sa largeur. Deux contrôles automatiques épinglent la fin des listes d'en-têtes et de largeurs : les ré-épingler dans le même commit, sans affaiblir aucune assertion. À l'import, une détection par mot-clé de plus, indépendante de l'ordre.
 
 **Test scenarios**
 
 - L'export porte la colonne en dernier et la valeur attendue.
-- Les trois contrôles positionnels existants restent verts.
+- Les deux contrôles qui épinglent la fin des listes — le littéral d'en-têtes et l'expression sur les largeurs de colonnes — sont ré-épinglés dans le même commit sur la nouvelle dernière colonne ; les autres contrôles d'ordre relatif restent verts sans retouche.
 - Un import réinjecte le marqueur ; un fichier sans cette colonne n'efface pas les marqueurs existants.
 
 **Verification** — `node scripts/run-gates.js` vert.
@@ -464,7 +467,7 @@ Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis
 
 **Files** — `sw.js` (≈ 81-88), `index.html` (test de cohérence).
 
-**Approach** — Le service worker recalcule les relances avec sa propre copie de la logique et ne filtre pas les entrées de suivi. Lui apprendre à les ignorer, de la même manière que l'application. Ajouter un test qui compare les deux implémentations sur un même jeu fictif, pour que l'écart ne se recrée pas.
+**Approach** — Le service worker recalcule les relances avec sa propre copie de la logique et ne filtre pas les entrées de suivi. Lui apprendre à les ignorer, de la même manière que l'application. Ajouter un test qui compare les deux implémentations sur un même jeu fictif, pour que l'écart ne se recrée pas. Mécanique imposée : encadrer dans `sw.js` la fonction de calcul par deux marqueurs de commentaire, en extraire la tranche depuis la source du service worker déjà chargée par le lanceur de tests, et l'évaluer dans le bac à sable à côté de la fonction de l'application. À défaut de pouvoir isoler proprement la tranche, le signaler plutôt que de dupliquer la logique dans le test.
 
 **Test scenarios**
 
