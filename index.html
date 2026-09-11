@@ -795,6 +795,10 @@ KIT_TESTS.add("veille : seuil limité aux six valeurs prévues", function () { [
 KIT_TESTS.add("veille : champs synchronisés sans date de veille", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d = KIT_SOURCE_HTML.indexOf("var MERGE_" + "FIELDS = ["); kitAssert(d >= 0, "déclaration des champs synchronisés"); var liste = KIT_SOURCE_HTML.slice(d, KIT_SOURCE_HTML.indexOf("];", d)); ["recoitVeille", "seuilEffectif", "activiteRelue"].forEach(function (champ) { kitAssert(liste.indexOf(String.fromCharCode(34) + champ + String.fromCharCode(34)) >= 0, champ); }); kitAssert(liste.indexOf("dateVeille") === -1 && liste.indexOf("veilleDate") === -1, "aucune date de veille synchronisée comme champ de fiche"); });
 KIT_TESTS.add("veille : chargement et payload des trois champs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var init = app.slice(app.indexOf("function init" + "Form("), app.indexOf("function submit" + "Form(")); var submitStart = app.indexOf("function submit" + "Form("); var submit = app.slice(submitStart, app.indexOf("function export" + "Excel(", submitStart)); ["recoitVeille", "seuilEffectif", "activiteRelue"].forEach(function (champ) { kitAssert(init.indexOf(champ) >= 0, "chargement " + champ); kitAssert(submit.indexOf(champ) >= 0, "payload " + champ); }); });
 KIT_TESTS.add("veille : états déclarés avant les retours conditionnels", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var debut = babel.indexOf("function App" + "(props)"); var app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); ["fRecoit" + "Veille", "fSeuil" + "Effectif", "fActivite" + "Relue", "fReg" + "istre"].forEach(function (etat) { kitAssert(app.indexOf(etat) >= 0, etat); }); });
+KIT_TESTS.add("veille : filtre tableau de bord — libellé et options", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf('placeholder="Recher' + 'cher…"'), fin = KIT_SOURCE_HTML.indexOf("{filtered.length === " + "0 ?", debut), barre = KIT_SOURCE_HTML.slice(debut, fin); ["VEI" + "LLE", "Tou" + "tes", "Reçoit la " + "veille", "Ne reçoit " + "pas"].forEach(function (libelle) { kitAssert(barre.indexOf(libelle) >= 0, libelle); }); });
+KIT_TESTS.add("veille : filtre tableau de bord — état avant les retours", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')), debut = babel.indexOf("function App" + "(props)"), app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); kitAssert(app.indexOf("fVe" + "ille") >= 0 && app.indexOf("setF" + "Veille") >= 0 && app.indexOf('useState("' + 'all")') >= 0, "état du filtre avant la garde de récupération"); });
+KIT_TESTS.add("veille : filtre tableau de bord — clause combinée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var filtered = contacts." + "filter(function (c) {"), fin = KIT_SOURCE_HTML.indexOf("return " + "true;", debut), filtre = KIT_SOURCE_HTML.slice(debut, fin), precedent = 'if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return ' + 'false;', oui = 'if (fVeille === "oui" && c.recoitVeille !== true) return ' + 'false;', non = 'if (fVeille === "non" && c.recoitVeille === true) return ' + 'false;', recherche = "if (se" + "arch) {"; kitAssert(filtre.indexOf(precedent) >= 0 && filtre.indexOf(oui) > filtre.indexOf(precedent) && filtre.indexOf(non) > filtre.indexOf(oui) && filtre.indexOf(recherche) > filtre.indexOf(non), "clauses indépendantes dans la chaîne des filtres"); });
+KIT_TESTS.add("veille : filtre tableau de bord — six filtres conservés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf('placeholder="Recher' + 'cher…"'), fin = KIT_SOURCE_HTML.indexOf("{filtered.length === " + "0 ?", debut), barre = KIT_SOURCE_HTML.slice(debut, fin); ["setF" + "Comp", "Caté" + "gorie", "Sta" + "tut", "Prio" + "rité", "T" + "ag", "CCN de " + "branche"].forEach(function (marqueur) { kitAssert(barre.indexOf(marqueur) >= 0, marqueur); }); });
 KIT_TESTS.add("veille : formulaire câblé sans hook imbriqué", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var tranche = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Form("), KIT_SOURCE_HTML.indexOf("function render" + "Detail(")); kitAssert(tranche.length > 5000); kitAssert(tranche.indexOf("Reçoit la veille " + "juridique") >= 0 && tranche.indexOf("Vouvoie" + "ment") >= 0 && tranche.indexOf("Tutoie" + "ment") >= 0); ["use" + "State", "use" + "Memo", "use" + "Ref", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
 KIT_TESTS.add("veille : seuil dans la seule modale d'effectif", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function renderManual" + "EffectifModal("), KIT_SOURCE_HTML.indexOf("function render" + "LogModal(")); var panneauStart = KIT_SOURCE_HTML.indexOf("showEffectifs" + "Panel ?"); var panneau = KIT_SOURCE_HTML.slice(panneauStart, KIT_SOURCE_HTML.indexOf("showMeeting" + "Settings ?", panneauStart)); kitAssert(modal.indexOf("seuil" + "Effectif") >= 0 && modal.indexOf("L'effectif INSEE ne dit pas si un seuil est " + "franchi") >= 0); kitAssert(panneau.indexOf("seuil" + "Effectif") === -1); });
 KIT_TESTS.add("veille : registre vide lu comme vous partout", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var voeuxStart = app.indexOf("function openVoeux" + "Modal("); var inviteStart = app.indexOf("function openInvite" + "ModalNow("); var voeux = app.slice(voeuxStart, voeuxStart + 1000); var invite = app.slice(inviteStart, inviteStart + 1000); var lecture = 'c.registre === "tu" ? "tu" : "vous"'; kitAssert(voeux.indexOf(lecture) >= 0); kitAssert(invite.indexOf(lecture) >= 0); });
@@ -2193,6 +2197,7 @@ function App(props) {
   var [fSec, setFSec] = useState("all");
   var [search, setSearch] = useState("");
   var [fComp, setFComp] = useState("all");
+  var [fVeille, setFVeille] = useState("all");
   var [persistOk, setPersistOk] = useState(null);
   var [lastExport, setLastExport] = useState(function () { try { return localStorage.getItem(LAST_EXPORT_KEY) || ""; } catch (e) { return ""; } });
   var [updReady, setUpdReady] = useState(false);
@@ -3987,6 +3992,8 @@ function App(props) {
     if (fTag !== "all" && (c.tags || []).indexOf(fTag) === -1) return false;
     if (fSec !== "all" && c.sector !== fSec) return false;
     if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return false;
+    if (fVeille === "oui" && c.recoitVeille !== true) return false;
+    if (fVeille === "non" && c.recoitVeille === true) return false;
     if (search) {
       var q = norm(search);
       var hay = KIT_PURE.contactHaystack(c);
@@ -5481,6 +5488,14 @@ function App(props) {
               {allSectors.map(function (s) { return <option key={s} value={s}>{s}</option>; })}
             </select>
           ) : null}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "#64748B" }}>
+            VEILLE
+            <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fVeille} onChange={function (e) { setFVeille(e.target.value); }}>
+              <option value="all">Toutes</option>
+              <option value="oui">Reçoit la veille</option>
+              <option value="non">Ne reçoit pas</option>
+            </select>
+          </label>
         </div>
 
         {filtered.length === 0 ? (
