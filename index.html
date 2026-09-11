@@ -726,6 +726,16 @@ var KIT_PURE = (function () {
     if ((!fiche.effectifTranche || fiche.effectifTranche === "NN") && !effectifExact) return { retenue: false, motif: "sans-effectif", libelle: "effectif inconnu" };
     return { retenue: true, motif: "", libelle: "" };
   }
+  function categoriesPreparationVeille(contacts) {
+    var categories = [];
+    (Array.isArray(contacts) ? contacts : []).forEach(function (fiche) {
+      var categorie = String((fiche && fiche.category) || "").trim();
+      if (!categorie || categories.indexOf(categorie) >= 0) return;
+      if (aptitudeVeille({ category: categorie }).motif === "categorie-exclue") return;
+      categories.push(categorie);
+    });
+    return categories;
+  }
   var TYPE_INTERACTION_VEILLE = "veille";
   var IDCC_PAR_BRANCHE_VEILLE = {"Métallurgie":"3248","Industries chimiques":"0044","Industrie pharmaceutique (fabrication)":"0176","Plasturgie":"0292","Industries du caoutchouc":"0045","Industries du pétrole":"1388","Industries électriques et gazières (IEG)":"","Papiers-cartons (production et transformation)":"1495","Papiers-cartons : distribution et commerce de gros":"3224","Industrie textile":"0018","Industries de l'habillement":"0247","Industries du bois et scieries":"1947","Ameublement":"1411","Industries du verre":"0669","Imprimerie et industries graphiques":"0184","Édition de livres":"2121","Industries laitières":"0112","Bâtiment (ouvriers)":"1597","Bâtiment (ETAM et cadres)":"2609","Travaux publics":"1702","Négoce de matériaux de construction":"","Carrières et matériaux (UNICEM)":"0135","Promotion-construction immobilière":"1512","Production agricole et CUMA":"7024","Travaux et services agricoles, ruraux et forestiers (ETARF)":"","Coopératives agricoles":"","Entreprises du paysage":"","Déshydratation : entreprises agricoles":"7023","Boulangerie-pâtisserie (entreprises artisanales)":"0843","Industries alimentaires diverses":"","Sucreries, sucreries-distilleries, raffineries de sucre":"2728","Vins, spiritueux et boissons (négoce)":"0493","Commerce de détail et de gros à prédominance alimentaire":"2216","Commerce de détail non alimentaire":"1517","Commerces de l'habillement (succursales)":"0675","Commerce des articles de sport et de loisirs":"1557","Commerce de la chaussure":"0733","Bijouterie, joaillerie, horlogerie":"0567","Bricolage":"1606","Optique-lunetterie de détail":"1431","Pharmacie d'officine":"1996","Librairie / papeterie":"3013","Commerce de gros":"0573","Import-export et commerce international":"0043","Commerce à distance (entreprises)":"2198","Services de l'automobile":"1090","Hôtels, cafés, restaurants (HCR)":"1979","Restauration rapide":"1501","Restauration collective":"1266","Agences de voyages et de tourisme":"1710","Casinos":"2257","Transports routiers et activités auxiliaires":"0016","Transport public urbain de voyageurs":"1424","Transport aérien (personnel au sol)":"0275","Manutention et ports":"","Bureaux d'études, ingénierie, conseil et numérique (Syntec)":"1486","Prévention et sécurité":"1351","Propreté et services associés":"3043","Déchets (activités de)":"2149","Prestataires de services dans le domaine du secteur tertiaire":"2098","Travail temporaire":"2378","Portage salarial":"3219","Publicité":"0086","Organismes de formation":"1516","Cabinets d'avocats (personnel salarié)":"1000","Avocats salariés":"1850","Notariat (clercs et employés)":"2205","Commissaires de justice (personnel)":"1921","Cabinets d'experts-comptables et de commissaires aux comptes":"0787","Cabinets ou entreprises de géomètres-experts":"2543","Entreprises d'architecture":"2332","Cabinets dentaires (personnel)":"1619","Banque":"2120","Sociétés d'assurances":"1672","Agences générales d'assurances (personnel)":"2335","Courtage d'assurances":"2247","Mutualité":"2128","Retraite complémentaire et prévoyance":"1794","Sociétés financières":"0478","Hospitalisation privée (à but lucratif – FHP)":"2264","Établissements privés non lucratifs (CCN 51 – FEHAP)":"0029","Établissements pour personnes inadaptées et handicapées (CCN 66)":"0413","Sanitaire, social et médico-social : accords de branche du secteur":"","Aide à domicile (BAD)":"2941","Services à la personne (entreprises)":"3127","Laboratoires de biologie médicale":"0959","Cabinets médicaux (personnel)":"1147","Cliniques et cabinets vétérinaires":"1875","Acteurs du lien social et familial (centres sociaux – ALISFA)":"1261","Foyers et habitat de jeunes travailleurs":"","Missions locales et PAIO":"2190","Ateliers et chantiers d'insertion":"","Immobilier (administrateurs de biens, agents immobiliers)":"1527","Gardiens, concierges et employés d'immeubles":"1043","HLM – sociétés anonymes et fondations (personnel)":"2150","Offices publics de l'habitat (OPH)":"3220","Particuliers employeurs et emploi à domicile":"3239","Coiffure":"2596","Esthétique-cosmétique":"3032","Fleuristes, animaux familiers":"1978","Pompes funèbres":"0759","Blanchisserie, laverie, pressing":"2002","Sport":"2511","Animation (ÉCLAT)":"1518","Enseignement privé (hors contrat / EPNL)":"3218","Enseignement privé à distance":"2101","Télécommunications":"2148","Production audiovisuelle":"2642","Spectacle vivant privé":"3090","Presse et agences de presse (journalistes)":"1480","Presse d'information spécialisée":"3230","Personnel des organismes de sécurité sociale":"0218","Mutualité sociale agricole":"7502","Établissement public":"","Autre":"","Sans CCN":""};
   function valeursTransmises(contact) {
@@ -779,7 +789,7 @@ var KIT_PURE = (function () {
     });
     return targets;
   }
-  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, normaliseNaf: normaliseNaf, libelleNaf: libelleNaf, patchActivite: patchActivite, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, ciblesActivite: ciblesActivite, idsAPropager: idsAPropager, activiteEstRelue: activiteEstRelue, idsActiviteRelue: idsActiviteRelue, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, aptitudeVeille: aptitudeVeille, TYPE_INTERACTION_VEILLE: TYPE_INTERACTION_VEILLE, valeursTransmises: valeursTransmises, profilsVeille: profilsVeille, serialiseProfils: serialiseProfils, fuiteNominative: fuiteNominative, normaliseSeuilEffectif: normaliseSeuilEffectif, champsVeilleInit: champsVeilleInit, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, normaliseNaf: normaliseNaf, libelleNaf: libelleNaf, patchActivite: patchActivite, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, ciblesActivite: ciblesActivite, idsAPropager: idsAPropager, activiteEstRelue: activiteEstRelue, idsActiviteRelue: idsActiviteRelue, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, aptitudeVeille: aptitudeVeille, categoriesPreparationVeille: categoriesPreparationVeille, TYPE_INTERACTION_VEILLE: TYPE_INTERACTION_VEILLE, valeursTransmises: valeursTransmises, profilsVeille: profilsVeille, serialiseProfils: serialiseProfils, fuiteNominative: fuiteNominative, normaliseSeuilEffectif: normaliseSeuilEffectif, champsVeilleInit: champsVeilleInit, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -791,8 +801,15 @@ var KIT_TESTS = {
   }
 };
 function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
-KIT_TESTS.add("veille : un seul point d'entrée pour les fonctions pures", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var interdit = "KIT_" + "VEILLE", debut = KIT_SOURCE_HTML.indexOf("return { render" + "Template: renderTemplate"), ligne = KIT_SOURCE_HTML.slice(debut, KIT_SOURCE_HTML.indexOf("\n", debut)); kitAssert(KIT_SOURCE_HTML.indexOf(interdit) === -1, "aucun second point d'entrée"); ["aptitudeVeille", "valeursTransmises", "profilsVeille", "serialiseProfils", "fuiteNominative", "normaliseSeuilEffectif", "champsVeilleInit"].forEach(function (nom) { kitAssert(ligne.indexOf(nom + ": " + nom) >= 0, nom + " dans l'objet rendu"); }); });
+KIT_TESTS.add("veille : un seul point d'entrée pour les fonctions pures", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var interdit = "KIT_" + "VEILLE", debut = KIT_SOURCE_HTML.indexOf("return { render" + "Template: renderTemplate"), ligne = KIT_SOURCE_HTML.slice(debut, KIT_SOURCE_HTML.indexOf("\n", debut)); kitAssert(KIT_SOURCE_HTML.indexOf(interdit) === -1, "aucun second point d'entrée"); ["aptitudeVeille", "categoriesPreparationVeille", "valeursTransmises", "profilsVeille", "serialiseProfils", "fuiteNominative", "normaliseSeuilEffectif", "champsVeilleInit"].forEach(function (nom) { kitAssert(ligne.indexOf(nom + ": " + nom) >= 0, nom + " dans l'objet rendu"); }); });
 function ficheVeilleTest(id, patch) { return Object.assign({ id: id, recoitVeille: true, category: "Client", email: id + "@exemple.test", sector: "Métallurgie", effectifTranche: "21", seuilEffectif: "50", activite: "Fabrication synthétique", activiteRelue: "Fabrication synthétique", nafLibelle: "Libellé officiel synthétique", registre: "vous", interactions: [] }, patch || {}); }
+KIT_TESTS.add("veille : préparation — catégories présentes sauf catégorie exclue", function () { var cs = [ficheVeilleTest("a", { category: "Client" }), ficheVeilleTest("b", { category: "Partenaire personnalisé" }), ficheVeilleTest("c", { category: "Avocat / EC" }), ficheVeilleTest("d", { category: "Client" })], r = KIT_PURE.categoriesPreparationVeille(cs); kitAssert(JSON.stringify(r) === JSON.stringify(["Client", "Partenaire personnalisé"]), JSON.stringify(r)); });
+KIT_TESTS.add("veille : écran de préparation — quatre sections et textes", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut && tranche.length > 3500, "tranche renderVeille non vide"); ["Choix des " + "catégories", "Liste nominative des " + "destinataires", "Fiches écartées et leur " + "motif", "Compte de ce qui " + "partira", "Décocher retire durablement la personne de vos envois de " + "veille, jusqu'à ce que vous la recochiez.", "Aucune fiche n'est désignée pour la " + "veille. Cochez les personnes à qui vous voulez écrire, ici ou depuis leur fiche."].forEach(function (texte) { kitAssert(tranche.indexOf(texte) >= 0, texte); }); });
+KIT_TESTS.add("veille : écran de préparation — aucun hook imbriqué", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut && tranche.length > 3500, "tranche renderVeille non vide"); ["use" + "State", "use" + "Memo", "use" + "Ref", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
+KIT_TESTS.add("veille : écran de préparation — état avant récupération", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')), debut = babel.indexOf("function App" + "(props)"), app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); kitAssert(app.indexOf("veilleCategories" + "Exclues") >= 0 && app.indexOf("setVeilleCategories" + "Exclues") >= 0, "état des catégories avant la garde"); });
+KIT_TESTS.add("veille : écran de préparation — moteurs partagés et règles non recopiées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.aptitude" + "Veille") >= 0 && tranche.indexOf("KIT_PURE.profils" + "Veille") >= 0, "moteurs appelés"); kitAssert(tranche.indexOf("Avocat / " + "EC") === -1, "catégorie non comparée dans le rendu"); ["fiche arch" + "ivée", "en transition :", "pas d'adresse " + "électronique", "convention collective " + "manquante", "effectif " + "inconnu"].forEach(function (motif) { kitAssert(tranche.indexOf(motif) === -1, "motif non recopié : " + motif); }); });
+KIT_TESTS.add("veille : écran de préparation — routeur et navigation", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var route = '{view === "' + 'veille" ? renderVeille() : null}', nav = 'navBtn("' + 'veille", "Veille")', bas = '{ id: "' + 'veille", label: "Veille"'; kitAssert(KIT_SOURCE_HTML.indexOf(route) >= 0, "route veille"); kitAssert(KIT_SOURCE_HTML.indexOf(nav) >= 0 && KIT_SOURCE_HTML.indexOf(bas) >= 0, "navigation veille"); });
+KIT_TESTS.add("veille : écran de préparation — exclusion affichée si présente", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("ecartees.length > " + "0 ?") >= 0, "bloc conditionné par les fiches écartées"); });
 KIT_TESTS.add("veille : profils — regroupement distingue registre et seuil", function () { var p = KIT_PURE.profilsVeille([ficheVeilleTest("alpha"), ficheVeilleTest("beta"), ficheVeilleTest("gamma", { registre: "tu" }), ficheVeilleTest("delta", { seuilEffectif: "300" })]); kitAssert(p.length === 3 && p.some(function (x) { return x.nombreDestinataires === 2; })); });
 KIT_TESTS.add("veille : profils — activité relue et libellé officiel divergent", function () { var p = KIT_PURE.profilsVeille([ficheVeilleTest("alpha"), ficheVeilleTest("beta", { activiteRelue: "" })]); kitAssert(p.length === 2 && p.some(function (x) { return x.valeurs.activite === "Libellé officiel synthétique"; })); });
 KIT_TESTS.add("veille : profils — activités non relues regroupées sur l'officiel", function () { var p = KIT_PURE.profilsVeille([ficheVeilleTest("alpha", { activite: "Saisie une", activiteRelue: "" }), ficheVeilleTest("beta", { activite: "Saisie deux", activiteRelue: "" })]); kitAssert(p.length === 1 && p[0].nombreDestinataires === 2); });
@@ -2217,6 +2234,7 @@ function App(props) {
   var [search, setSearch] = useState("");
   var [fComp, setFComp] = useState("all");
   var [fVeille, setFVeille] = useState("all");
+  var [veilleCategoriesExclues, setVeilleCategoriesExclues] = useState([]);
   var [persistOk, setPersistOk] = useState(null);
   var [lastExport, setLastExport] = useState(function () { try { return localStorage.getItem(LAST_EXPORT_KEY) || ""; } catch (e) { return ""; } });
   var [updReady, setUpdReady] = useState(false);
@@ -5229,6 +5247,68 @@ function App(props) {
     );
   }
 
+  function renderVeille() {
+    var categoriesDisponibles = KIT_PURE.categoriesPreparationVeille(contacts);
+    var categoriesRetenues = categoriesDisponibles.filter(function (categorie) { return veilleCategoriesExclues.indexOf(categorie) === -1; });
+    var fichesDesCategories = contacts.filter(function (fiche) { return categoriesRetenues.indexOf(String(fiche.category || "").trim()) >= 0; });
+    var fichesAvecAptitude = fichesDesCategories.map(function (fiche) { return { fiche: fiche, aptitude: KIT_PURE.aptitudeVeille(fiche) }; });
+    var nominatives = fichesAvecAptitude.filter(function (item) { return item.aptitude.retenue || item.aptitude.motif === "non-designee"; });
+    var ecartees = fichesAvecAptitude.filter(function (item) { return item.fiche.recoitVeille === true && !item.aptitude.retenue && item.aptitude.motif !== "non-designee"; });
+    var retenues = fichesAvecAptitude.filter(function (item) { return item.aptitude.retenue; }).map(function (item) { return item.fiche; });
+    var designees = fichesDesCategories.filter(function (fiche) { return fiche.recoitVeille === true; });
+    var profils = KIT_PURE.profilsVeille(retenues);
+    nominatives.sort(function (a, b) { return KIT_PURE.nomCourant(a.fiche).localeCompare(KIT_PURE.nomCourant(b.fiche)); });
+    ecartees.sort(function (a, b) { return KIT_PURE.nomCourant(a.fiche).localeCompare(KIT_PURE.nomCourant(b.fiche)); });
+    function basculerCategorie(categorie, cochee) {
+      if (cochee) setVeilleCategoriesExclues(veilleCategoriesExclues.filter(function (x) { return x !== categorie; }));
+      else setVeilleCategoriesExclues(veilleCategoriesExclues.concat([categorie]));
+    }
+    return (
+      <div>
+        {renderNav()}
+        <button type="button" style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff, marginBottom: 18 }} onClick={function () { setView("dashboard"); }}>← Retour</button>
+        <h2 style={{ margin: "0 0 6px", fontSize: 22, color: ac }}>Veille</h2>
+        <p style={{ margin: "0 0 22px", color: "#64748B", fontSize: 14 }}>Préparez les destinataires et mesurez le nombre de textes nécessaires.</p>
+
+        <section className="kit-card" style={{ background: "#fff", border: "1px solid #ECE9E3", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 12px", color: ac, fontSize: 16 }}>Choix des catégories</h3>
+          {categoriesDisponibles.length > 0 ? <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px" }}>
+            {categoriesDisponibles.map(function (categorie) {
+              var cochee = categoriesRetenues.indexOf(categorie) >= 0;
+              return <label key={categorie} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}><input type="checkbox" checked={cochee} onChange={function (e) { basculerCategorie(categorie, e.target.checked); }} /><span>{categorie}</span></label>;
+            })}
+          </div> : <p style={{ margin: 0, color: "#64748B", fontSize: 13 }}>Aucune catégorie n'est encore présente dans votre carnet.</p>}
+        </section>
+
+        <section className="kit-card" style={{ background: "#fff", border: "1px solid #ECE9E3", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 12px", color: ac, fontSize: 16 }}>Liste nominative des destinataires</h3>
+          {designees.length === 0 ? <p style={{ margin: "0 0 14px", padding: "10px 12px", borderRadius: 8, background: "#FAF0D4", color: "#77520B", fontSize: 13 }}>Aucune fiche n'est désignée pour la veille. Cochez les personnes à qui vous voulez écrire, ici ou depuis leur fiche.</p> : null}
+          {nominatives.length > 0 ? <div>
+            {nominatives.map(function (item, index) {
+              var fiche = item.fiche;
+              return <label key={fiche.id || String(index)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 2px", borderTop: index > 0 ? "1px solid " + bd : "none", cursor: "pointer" }}>
+                <input type="checkbox" checked={fiche.recoitVeille === true} onChange={function (e) { updContact(fiche.id, { recoitVeille: e.target.checked }); }} />
+                <span style={{ minWidth: 0 }}><strong style={{ display: "block", fontSize: 14, color: "#1B1B24" }}>{KIT_PURE.nomCourant(fiche)}</strong><span style={{ display: "block", marginTop: 2, color: "#64748B", fontSize: 12.5 }}>{fiche.company || "Entreprise non renseignée"}</span></span>
+              </label>;
+            })}
+          </div> : <p style={{ margin: 0, color: "#64748B", fontSize: 13 }}>Aucune fiche dans les catégories retenues.</p>}
+          <p style={{ margin: "13px 0 0", paddingTop: 12, borderTop: "1px solid " + bd, color: "#64748B", fontSize: 12.5 }}>Décocher retire durablement la personne de vos envois de veille, jusqu'à ce que vous la recochiez.</p>
+        </section>
+
+        {ecartees.length > 0 ? <section className="kit-card" style={{ background: "#FFF8F5", border: "1px solid #F4D6CB", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 5px", color: "#9A3115", fontSize: 16 }}>Fiches écartées et leur motif</h3>
+          <p style={{ margin: "0 0 10px", color: "#9A3115", fontSize: 13, fontWeight: 700 }}>{String(ecartees.length) + " fiches désignées ne peuvent pas être traitées"}</p>
+          {ecartees.map(function (item, index) { return <div key={item.fiche.id || String(index)} style={{ padding: "8px 0", borderTop: index > 0 ? "1px solid #F4D6CB" : "none", fontSize: 13 }}><strong>{KIT_PURE.nomCourant(item.fiche)}</strong><span style={{ color: "#64748B" }}>{" — " + item.aptitude.libelle}</span></div>; })}
+        </section> : null}
+
+        <section className="kit-card" style={{ background: "#EAF3F5", border: "1px solid #C7E0E6", borderRadius: 14, padding: 18 }}>
+          <h3 style={{ margin: "0 0 7px", color: ac, fontSize: 16 }}>Compte de ce qui partira</h3>
+          <p style={{ margin: 0, color: "#235C68", fontSize: 15, fontWeight: 700 }}>{String(retenues.length) + (retenues.length > 1 ? " personnes recevront" : " personne recevra") + " la veille · " + String(profils.length) + (profils.length > 1 ? " textes distincts" : " texte distinct")}</p>
+        </section>
+      </div>
+    );
+  }
+
   // ─── NAV ───
   function renderNav() {
     function navBtn(id, label) {
@@ -5245,6 +5325,7 @@ function App(props) {
         {navBtn("week", "À suivre (" + String(followUpList.length + awaitingList.length + retryList.length + rencontreList.length) + ")")}
         {navBtn("stats", "Stats")}
         {navBtn("companies", "Entreprises")}
+        {navBtn("veille", "Veille")}
       </div>
     );
   }
@@ -5585,7 +5666,8 @@ function App(props) {
     { id: "dashboard", label: "Contacts", icon: "👤" },
     { id: "week", label: "À suivre", icon: "🔔", badge: followUpList.length + awaitingList.length + retryList.length + rencontreList.length },
     { id: "stats", label: "Stats", icon: "📊" },
-    { id: "companies", label: "Entreprises", icon: "🏢" }
+    { id: "companies", label: "Entreprises", icon: "🏢" },
+    { id: "veille", label: "Veille", icon: "✉️" }
   ];
   var KIT_CSS = ".kit-card{transition:box-shadow .16s ease,transform .16s ease}.kit-card:hover{box-shadow:0 6px 18px rgba(16,24,40,.10);transform:translateY(-1px)}.kit-row:hover{background:#F6F5F2}.kit-btn{transition:opacity .15s ease,background .15s ease,border-color .15s ease}.kit-btn:hover{opacity:.88}.kit-fade{animation:kitfade .28s ease both}@keyframes kitfade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}.kit-bottomnav{display:none}@media(max-width:640px){.kit-topnav{display:none!important}.kit-bottomnav{display:flex!important}.kit-shell{padding-bottom:84px!important}}.kit-stats{display:grid;gap:10px;grid-template-columns:repeat(5,1fr);margin-bottom:18px}@media(max-width:640px){.kit-stats{grid-template-columns:repeat(6,1fr)}.kit-stats>div{grid-column:span 2}.kit-stats>div:nth-child(4){grid-column:2/span 2}.kit-stats>div:nth-child(5){grid-column:4/span 2}}";
 
@@ -5628,6 +5710,7 @@ function App(props) {
       {view === "stats" ? renderStats() : null}
       {view === "contact" ? renderDetail() : null}
       {view === "companies" ? renderCompanies() : null}
+      {view === "veille" ? renderVeille() : null}
       {view === "newContact" ? renderForm() : null}
       {view === "editContact" ? renderForm() : null}
       {updReady ? (
