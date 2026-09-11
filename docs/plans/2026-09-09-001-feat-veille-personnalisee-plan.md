@@ -4,7 +4,7 @@ type: feat
 date: 2026-09-09
 topic: veille-personnalisee
 artifact_contract: ce-unified-plan/v1
-artifact_readiness: requirements-only
+artifact_readiness: implementation-ready
 product_contract_source: ce-brainstorm
 execution: code
 ---
@@ -18,6 +18,12 @@ execution: code
 **Autorité produit** — Uriel SANSY. Les décisions de la section Key Decisions ont été prises en dialogue le 2026-09-09 et ne sont pas à rouvrir en planification.
 
 **Blocages ouverts** — Aucun. Les trois questions ouvertes restantes se tranchent en planification.
+
+**Conditions d'arrêt** — Arrêter et demander si : une exigence supposerait un appel réseau depuis l'application, un hook React devrait être posé hors de la tête du composant principal, une donnée nominative devrait sortir en mode restreint, ou une décision de la section Key Decisions devrait être contredite pour avancer.
+
+**Profil d'exécution** — Unités livrées dans l'ordre du plan, une par commit, chacune vérifiée par les portes avant la suivante. Le code de production est écrit par Codex sur paquet borné ; l'orchestrateur inspecte, vérifie et committe. Fixtures synthétiques exclusivement.
+
+**Propriété de la fin de chaîne** — L'orchestrateur ouvre la demande de fusion et ne la déclare prête qu'après des contrôles verts ; la fusion et la mise en production appartiennent à l'utilisateur.
 
 **Révision** — Relu le 2026-09-09 par cinq lentilles indépendantes (58 constats graves, intégrés), puis la révision elle-même vérifiée par quatre lentilles et leurs contradicteurs (64 constats, 14 confirmés, 50 réfutés, intégrés à leur tour). Les exigences ont été renumérotées lors de la première révision.
 
@@ -135,3 +141,422 @@ Hors de ce plan, et volontairement :
 - **Faut-il signaler les profils qui désignent trop peu d’entreprises ?** Le service statistique public ne diffuse pas une valeur portant sur moins de trois unités. L’application ne peut pas le mesurer elle-même sans un appel réseau que R15 interdit ; la mesure se ferait donc hors application, au moment de la rédaction, et le récapitulatif de retour signalerait les profils les plus étroits. À décider : garde-fou utile ou complexité inutile.
 - **Où placer le champ « seuil franchi » de R28 ?** Le formulaire de fiche l'exposerait à chaque saisie ; le panneau « Taille des entreprises », où vit déjà l'effectif précis, le rangerait avec ses voisins mais le rendrait moins visible.
 - **Convention collective : libellé ou IDCC ?** Le carnet stocke un libellé. Un profil gagnerait à porter l'IDCC, mais treize branches de la table embarquée n'en ont pas et l'import Excel peut écrire un libellé hors liste. À trancher en planification : convertir quand c'est possible, transmettre le libellé sinon.
+
+---
+
+## Planning Contract
+
+### Key Technical Decisions
+
+- **KTD1. Livraison en deux versions utilisables.** v1.6.0 livre la préparation (couture de fiche, aptitude, regroupement, écran de préparation, fichier de profils) ; v1.6.1 livre le retour, la validation et l'ouverture des courriels. La première moitié sert déjà seule : l'utilisateur confie le fichier et recopie les textes à la main, comme lors de l'essai à blanc du 2026-09-08. D'un bloc, rien ne serait utilisable avant la fin. (session-settled: user-approved — chosen over une livraison unique : rien d'utilisable avant la fin.)
+- **KTD2. Le retour se réapparie d'abord par mémoire, puis par calcul.** L'application retient la correspondance profil → fiches (R16) et s'en sert en priorité ; quand le lancement lui est inconnu — dépôt sur l'autre appareil — elle recalcule les profils depuis ses propres fiches et rapproche par description. La fusion inter-appareils ne transporte que six clés racine et écarte le reste en silence (c'est déjà le sort des invitations en attente) : étendre la fusion serait un chantier distinct et toucherait la partie la plus délicate de l'application. (session-settled: user-directed — chosen over le seul appareil d'origine, et contre l'extension de la fusion.) Gouverne R16, R17, R20a.
+- **KTD3. La date de veille devient un type de la famille « suivi » créée le 2026-09-07.** L'aveuglement du calcul de relance passe par une seule fonction (`derniereInteractionHorsSuivi`), donc R25 est presque gratuit — mais seulement pour ce que cette fonction couvre. Quatre effets restent à traiter explicitement : l'horodatage de fiche qui ressuscite à la fusion une fiche supprimée ailleurs, le compteur d'interactions de l'export Excel, la recherche plein texte qui balaie les commentaires, et les compteurs de notification du service worker. Gouverne R25.
+- **KTD4. Le service worker doit apprendre à ignorer les entrées de suivi.** Il embarque sa propre copie de la logique de relance et, contrairement à l'application, ne filtre pas les suivis. L'écart existe déjà ; un envoi à soixante fiches le rendrait massif. Corrigé dans ce chantier bien qu'il lui préexiste.
+- **KTD5. Le registre et le journal vivent dans une clé racine des données, sur le patron des invitations en attente.** `save()` fait un `Object.assign` qui ne retire jamais une clé racine : la persistance à la fermeture, dans la sauvegarde JSON et au retour de version est acquise sans code. La fusion ne la transporte pas — c'est précisément ce que KTD2 contourne.
+- **KTD6. La colonne du marqueur s'ajoute en dernière position de l'export Excel.** Six tableaux de mise en forme sont indexés par position de colonne ; insérer ailleurs qu'en fin décale tout et fait rougir trois contrôles positionnels.
+- **KTD7. Une validation portant sur plusieurs destinataires s'écrit en une seule fois, vérifiée.** Chaque écriture de fiche sérialise le carnet entier, écrit en synchrone et tente l'instantané du jour ; et hors option de vérification, l'écriture rend « vrai » même quand le quota l'a fait échouer. Le motif de la rafale d'écritures est déjà en production ailleurs et a été mesuré à plusieurs secondes sur un gros carnet.
+
+### Constraints
+
+- Fichier unique de 5 528 lignes ; le bloc Babel en occupe 63 % et coûte 8,4 s de compilation au chargement. Le chantier ajoute 700 à 1 000 lignes, dont 550 à 750 dans ce bloc : compter 9,7 à 10,5 s. Toute logique décidable va dans `KIT_PURE`, hors Babel.
+- Aucun hook React hors de la tête de `App` (les retours conditionnels sont lignes 2524-2525). Les tests de câblage vérifient cette absence dans `renderForm` et `renderDetail` — pas ailleurs : les deux nouveaux écrans doivent recevoir la même garde.
+- 51 tests de câblage lisent le document comme du texte. Trois littéraux positionnels dépendent de l'ordre des colonnes de l'export ; ajouter un type de suivi fait apparaître un bouton dans la modale d'interaction, ce qu'un test contrôle.
+- La version est figée en quatre endroits qui doivent bouger ensemble, sinon les portes restent vertes et la nouveauté n'atteint personne, le service worker servant en cache d'abord.
+- ES5 strict dans `KIT_PURE` et `KIT_TESTS` ; JSX + ES5 dans le bloc Babel ; aucune dépendance nouvelle ; aucune étape de construction.
+
+### Sequencing
+
+Deux étapes livrables, plus un socle commun. Le socle (U1 à U4) est prérequis des deux. L'étape 1 (U5 à U8) rend l'application utilisable pour préparer un envoi. L'étape 2 (U9 à U13) ferme la boucle. U14 est transverse et peut partir avec l'une ou l'autre.
+
+### Assumptions
+
+- Le format du fichier de profils et du fichier de retour est un JSON dont la forme exacte est arrêtée en U3 puis figée par les tests purs de U9 ; il n'a pas à être lisible par un tiers autre que l'outil de rédaction.
+- Le carnet réel comporte un nombre significatif de fiches sans convention collective : le premier envoi couvrira moins de monde que le nombre de fiches cochées. C'est le comportement voulu (R8), pas un défaut.
+- Aucune mesure de réidentification n'est faite par l'application ; elle se fait à la rédaction, hors application.
+
+---
+
+## Implementation Units
+
+### Unit Index
+
+| U-ID | Titre | Fichiers principaux | Dépend de |
+|---|---|---|---|
+| U1 | Cinq champs de fiche et leur couture | `index.html` (KIT_PURE, App, formulaire, MERGE_FIELDS) | — |
+| U2 | Moteur pur d'aptitude | `index.html` (KIT_PURE, KIT_TESTS) | U1 |
+| U3 | Moteur pur de regroupement et de sérialisation | `index.html` (KIT_PURE, KIT_TESTS) | U1, U2 |
+| U4 | Filtre « reçoit la veille » au tableau de bord | `index.html` (bloc Babel) | U1 |
+| U5 | Relecture de l'activité dans le formulaire | `index.html` (submitForm, renderForm) | U1, U3 |
+| U6 | Écran de préparation | `index.html` (bloc Babel, routeur, navigation) | U2, U3 |
+| U7 | Export Excel et import du marqueur | `index.html` (exportExcel, processImportRows) | U1 |
+| U8 | Documentation et version v1.6.0 | `index.html`, `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md` | U6 |
+| U9 | Moteur pur de validation du retour | `index.html` (KIT_PURE, KIT_TESTS) | U3, U6 |
+| U10 | Écran de retour et validation | `index.html` (bloc Babel, routeur) | U9 |
+| U11 | Préparation des courriels et date de veille | `index.html` (bloc Babel, SUIVI_TYPES) | U10 |
+| U12 | Service worker aveugle aux entrées de suivi | `sw.js`, `index.html` (test) | U11 |
+| U13 | Journal des lancements et son panneau | `index.html` (bloc Babel) | U9 |
+| U14 | Rapport de fusion dans les deux sens | `index.html` (mergeData, modal de rapport) | — |
+| U15 | Documentation et version v1.6.1 | `index.html`, `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md` | U11, U13 |
+
+### U1. Cinq champs de fiche et leur couture
+
+**Goal** — Faire exister dans la fiche les cinq données que tout le reste consomme, et les faire circuler correctement.
+
+**Requirements** — R1, R19a, R28, R29 (champ), R25 (champ de date), R11a (champ d'état de relecture), R27 (première moitié).
+
+**Dependencies** — aucune.
+
+**Files** — `index.html` : valeur initiale dans `addContact` (≈ 2565), états du formulaire en tête d'`App` (≈ 2211-2232), chargement dans `initForm` (≈ 3223), saisie dans `renderForm` (≈ 4367-4559), payload de `submitForm` (≈ 3256), `MERGE_FIELDS` (ligne 1301), migration des données existantes.
+
+**Approach**
+
+1. Ajouter les cinq champs : marqueur « reçoit la veille » (booléen, faux par défaut), seuil franchi (une valeur parmi six, « je ne sais pas » par défaut), état de relecture de l'activité (le texte exact validé, vide par défaut), date de la dernière veille préparée, et exposition du registre de politesse existant.
+2. Le registre existe déjà comme champ synchronisé mais n'est écrit qu'après une invitation confirmée, et il est lu avec deux valeurs par défaut contradictoires à trente-sept lignes d'écart (≈ 3024 « vous », ≈ 3061 « tu »). Aligner les deux lecteurs sur le vouvoiement, per R19a.
+3. Le seuil se place dans le panneau « Taille des entreprises », auprès de l'effectif précis dont il est le voisin logique, avec un renvoi depuis le formulaire de fiche.
+4. Inscrire les quatre champs nouveaux dans `MERGE_FIELDS` ; le registre y figure déjà.
+
+**Patterns to follow** — la chaîne complète d'un champ existant, par exemple la relance planifiée et sa note ; pour le seuil, le champ d'effectif précis et son panneau.
+
+**Test scenarios**
+
+- Une fiche créée porte le marqueur à faux, le seuil à « je ne sais pas », l'état de relecture vide.
+- Cocher le marqueur, enregistrer, rouvrir la fiche : la valeur est conservée.
+- Le seuil accepte les six valeurs et rien d'autre.
+- Une fiche existante sans registre est traitée comme vouvoyée par les deux lecteurs.
+- Les cinq champs figurent dans la liste des champs synchronisés.
+
+**Verification** — `node scripts/run-gates.js` vert ; les cinq champs présents dans une fiche enregistrée puis rechargée.
+
+### U2. Moteur pur d'aptitude
+
+**Goal** — Une seule fonction pure décide si une fiche est retenue pour un envoi, et pourquoi elle ne l'est pas.
+
+**Requirements** — R3, R5, R8, R29.
+
+**Dependencies** — U1.
+
+**Files** — `index.html` : `KIT_PURE` (avant l'export ligne 718), `KIT_TESTS`.
+
+**Approach** — La fonction prend une fiche et rend soit « retenue », soit un motif nommé parmi : catégorie exclue, archivée, en transition, sans adresse électronique, sans branche, sans effectif. Deux libellés de la table des conventions valent absence de branche — « Autre » et « Sans CCN » — tandis que « Établissement public » est retenu et signalé comme statut de droit public, per R8. Le seuil manquant n'est jamais un motif d'exclusion, per R29.
+
+**Test scenarios**
+
+- Une fiche complète et cochée est retenue.
+- Chacun des six motifs écarte la fiche et rend son propre libellé.
+- Une fiche « Établissement public » est retenue, et son profil porte la mention de statut.
+- Une fiche sans seuil renseigné est retenue.
+- Une fiche non cochée n'est jamais retenue, quels que soient ses autres champs.
+
+**Verification** — cas purs verts ; la même fonction est appelée à la préparation et à la validation, per R20a.
+
+### U3. Moteur pur de regroupement et de sérialisation
+
+**Goal** — Transformer une liste de fiches retenues en profils numérotés, et produire le contenu exact des deux modes d'export.
+
+**Requirements** — R9, R11, R11a (règle de calcul), R12, R13.
+
+**Dependencies** — U1, U2.
+
+**Files** — `index.html` : `KIT_PURE`, `KIT_TESTS`.
+
+**Approach**
+
+1. Calculer, pour chaque fiche retenue, les valeurs **transmises** : branche, effectif, seuil, activité selon la règle de relecture, registre. L'activité transmise est le texte saisi lorsqu'il a été relu dans son état exact, le libellé officiel INSEE sinon, et rien du tout si ni l'un ni l'autre n'existe.
+2. Regrouper les fiches dont ces valeurs coïncident ; numéroter les profils ; conserver pour chacun la liste des identifiants de fiches et le nombre de destinataires.
+3. Sérialiser en mode restreint : la liste close de R11, sans aucun élément nominatif.
+4. Sérialiser en mode étendu : la liste close de R12 par destinataire. Ni l'un ni l'autre ne porte les champs de R13.
+
+**Test scenarios**
+
+- Deux fiches aux valeurs transmises identiques partagent un profil ; deux fiches dont seul le registre diffère n'en partagent pas.
+- Deux fiches à l'activité saisie identique dont une seule est relue tombent dans deux profils, et celle qui n'est pas relue porte le libellé officiel.
+- Deux fiches aux activités saisies différentes, aucune relue, de même libellé officiel : un seul profil.
+- Le mode restreint ne contient aucun nom, prénom, dénomination, adresse ni courriel — assertion portant sur la sortie sérialisée entière, pas sur des champs nommés.
+- Le mode étendu ne contient ni note, ni commentaire d'interaction, ni lieu de rencontre, ni prochaine action, ni origine, ni note de relance, ni étiquette.
+- Un profil dont aucune fiche n'a de seuil porte « seuil inconnu ».
+
+**Verification** — cas purs verts, dont un cas qui sérialise un carnet fictif complet et vérifie l'absence de toute chaîne nominative.
+
+### U4. Filtre « reçoit la veille » au tableau de bord
+
+**Goal** — Voir d'un coup d'œil qui est désigné, et le rester après un tri.
+
+**Requirements** — R2 (première moitié).
+
+**Dependencies** — U1.
+
+**Files** — `index.html` : états de filtre en tête d'`App`, barre de filtres, fonction de filtrage.
+
+**Approach** — Un filtre de plus sur le modèle des six existants : un état initialisé à « tous », un sélecteur dans la barre, une clause dans la fonction de filtrage.
+
+**Test scenarios**
+
+- Le filtre isole les fiches désignées, et se combine avec la catégorie et le statut.
+- Remis à « tous », il ne retire rien.
+
+**Verification** — `node scripts/run-gates.js` vert ; test de câblage sur la présence du filtre.
+
+### U5. Relecture de l'activité dans le formulaire
+
+**Goal** — Permettre de marquer une activité bonne à transmettre, une fois par entreprise, et faire tomber cette marque dès que le texte change.
+
+**Requirements** — R11a (interface).
+
+**Dependencies** — U1, U3.
+
+**Files** — `index.html` : zone du champ activité de `renderForm` (≈ 4404-4431), `submitForm` (≈ 3254-3300).
+
+**Approach** — La marque enregistre le texte exact validé ; la comparaison avec le texte courant suffit à la faire tomber, sans nouvelle machinerie. Se brancher là où la propagation d'activité entre fiches d'une même entreprise se déclenche déjà, de sorte que valider une fois marque toutes les fiches de la même dénomination portant ce texte. **Aucun hook** ne doit être ajouté dans `renderForm`.
+
+**Execution note** — cette zone porte déjà cinquante lignes de propagation avec question et compte rendu, corrigées deux fois cette semaine ; écrire d'abord les tests de câblage qui protègent l'existant.
+
+**Test scenarios**
+
+- Marquer une activité relue, enregistrer, rouvrir : la marque tient.
+- Corriger le texte d'un mot : la marque tombe et le formulaire le signale.
+- Marquer sur une fiche d'une entreprise à trois fiches : les trois sont marquées.
+- La propagation d'activité existante continue de fonctionner à l'identique.
+- Aucun hook React dans `renderForm`.
+
+**Verification** — `node scripts/run-gates.js --with-smoke` vert ; les cas de la propagation d'activité restent verts sans modification.
+
+### U6. Écran de préparation
+
+**Goal** — L'écran qui va de « je veux envoyer » au fichier de profils.
+
+**Requirements** — R2 (seconde moitié), R4, R7, R8 (affichage), R10, R14, R15, R16 (écriture du registre).
+
+**Dependencies** — U2, U3.
+
+**Files** — `index.html` : nouvelle vue dans le routeur (≈ 5475-5481), entrée de navigation, corps de l'écran, écriture de la clé racine.
+
+**Approach**
+
+1. Choix des catégories réellement présentes ; « Avocat / EC » jamais proposée.
+2. Liste nominative des destinataires, cochable et décochable depuis l'écran ; liste des fiches écartées avec leur motif.
+3. Choix du mode, restreint présélectionné, jamais mémorisé d'un lancement à l'autre.
+4. Aperçu obligatoire montrant le contenu exact, ligne par ligne, avant production.
+5. Production du fichier et écriture du registre du lancement — identifiant, date, mode, profils et fiches — dans une clé racine des données.
+
+**Patterns to follow** — le panneau « Taille des entreprises » porte le mécanisme complet d'un aperçu obligatoire avant action de masse, y compris la progression et le compte rendu ; la production du fichier suit l'export de sauvegarde existant.
+
+**Test scenarios**
+
+- L'aperçu affiche exactement ce que la sérialisation produira, et n'écrit rien.
+- Le mode revient à restreint au lancement suivant.
+- Une fiche décochée depuis l'écran disparaît de la liste et du fichier.
+- Aucune requête réseau n'est émise pendant tout le parcours.
+- Le registre écrit survit à un rechargement de l'application.
+- Aucun hook React dans les fonctions de rendu appelées conditionnellement.
+
+**Verification** — `node scripts/run-gates.js --with-smoke` vert ; recette en navigateur sur données fictives.
+
+### U7. Export Excel et import du marqueur
+
+**Goal** — Le marqueur voyage dans le tableur, dans les deux sens.
+
+**Requirements** — R1 (circulation).
+
+**Dependencies** — U1.
+
+**Files** — `index.html` : en-têtes et lignes de l'export (≈ 3308-3331), largeurs de colonnes (≈ 1467), détection de colonne à l'import (≈ 3708-3742).
+
+**Approach** — Colonne ajoutée **en dernière position**, per KTD6, avec sa largeur. À l'import, une détection par mot-clé de plus, indépendante de l'ordre.
+
+**Test scenarios**
+
+- L'export porte la colonne en dernier et la valeur attendue.
+- Les trois contrôles positionnels existants restent verts.
+- Un import réinjecte le marqueur ; un fichier sans cette colonne n'efface pas les marqueurs existants.
+
+**Verification** — `node scripts/run-gates.js` vert.
+
+### U8. Documentation et version v1.6.0
+
+**Goal** — Livrer la première moitié.
+
+**Requirements** — traçabilité.
+
+**Dependencies** — U6.
+
+**Files** — `index.html` (version), `sw.js` (nom de cache), `LISEZMOI.txt`, `docs/RECETTE.md`.
+
+**Approach** — Version portée aux quatre endroits solidaires. Le mode d'emploi décrit la préparation et dit clairement que la validation dans l'application arrive à la version suivante ; d'ici là les textes se recopient à la main. Cases de recette pour le parcours de préparation.
+
+**Test scenarios** — le contrôle de version existant couvre les quatre endroits ; les phrases nouvelles du mode d'emploi sont épinglées par un test de documentation.
+
+**Verification** — `node scripts/run-gates.js --with-smoke` vert, `SMOKE_OK`, `"authenticated":true`, `"exceptions":[]`.
+
+### U9. Moteur pur de validation du retour
+
+**Goal** — Décider, sans interface, si un fichier de retour est acceptable et à quoi il correspond.
+
+**Requirements** — R17, R18.
+
+**Dependencies** — U3, U6.
+
+**Files** — `index.html` : `KIT_PURE`, `KIT_TESTS`.
+
+**Approach** — Une fonction pure prenant le registre des lancements et le contenu déposé, rendant soit les projets appariés à leurs destinataires, soit un refus motivé. Elle porte les deux voies de KTD2 : appariement par le registre lorsque le lancement est connu, réappariement par description sinon. Un lancement est clos quand chacun de ses projets a été validé ou refusé ; un lancement interrompu reprend sans reproposer les projets traités.
+
+**Test scenarios**
+
+- Retour d'un lancement connu : les projets trouvent leurs destinataires.
+- Retour d'un lancement inconnu, mais dont les descriptions correspondent aux fiches locales : les destinataires sont retrouvés par le calcul, et l'écran le dit.
+- Retour d'un lancement inconnu dont une description ne correspond à aucune fiche : ce projet est signalé sans destinataire, les autres restent validables.
+- Identifiant absent, fichier tronqué, numéro de profil inconnu, lancement clos : quatre refus distincts, chacun avec son motif.
+- Lancement interrompu : les projets déjà traités ne sont pas reproposés.
+
+**Verification** — cas purs verts pour chacun des refus et chacune des deux voies d'appariement.
+
+### U10. Écran de retour et validation
+
+**Goal** — Déposer le fichier, parcourir les projets, corriger, valider.
+
+**Requirements** — R20, R20a, R21, R22.
+
+**Dependencies** — U9.
+
+**Files** — `index.html` : nouvelle vue, dépôt de fichier, corps de l'écran.
+
+**Approach** — Dépôt sur le patron de l'import de sauvegarde existant. Un projet à la fois, avec son texte, la liste nominative de ses destinataires et un champ de correction valant pour tous. L'aptitude est réévaluée à ce moment par la fonction de U2 ; une fiche devenue inapte est nommée et retirée. Rien n'est écrit dans les fiches avant validation.
+
+**Test scenarios**
+
+- Refuser un projet n'empêche pas de valider les suivants.
+- Une fiche archivée entre l'export et la validation est nommée et retirée.
+- Une correction de texte s'applique à tous les destinataires du projet.
+- Fermer l'application au milieu, redéposer le même fichier : la validation reprend où elle s'était arrêtée.
+- Aucun hook React dans les fonctions de rendu appelées conditionnellement.
+
+**Verification** — `node scripts/run-gates.js --with-smoke` vert ; recette en navigateur.
+
+### U11. Préparation des courriels et date de veille
+
+**Goal** — Ouvrir le courriel de chaque destinataire et laisser une trace qui ne dérange rien.
+
+**Requirements** — R19, R23, R24, R25.
+
+**Dependencies** — U10.
+
+**Files** — `index.html` : préparation du courriel, `SUIVI_TYPES` (≈ 477), écriture groupée.
+
+**Approach** — Le prénom est substitué par la fonction de modèle existante. Le courriel se prépare par le mécanisme déjà en service, qui bascule sur le presse-papiers au-delà de la limite du lien : l'annoncer **avant** le clic, comme le fait déjà le chemin invitation, et afficher aussi l'objet à recopier. La date de veille est écrite comme entrée de la famille « suivi », per KTD3. Toutes les écritures d'une validation se font **en une fois, vérifiée**, per KTD7. Le vocabulaire dit « préparé le », jamais « envoyé le », per R24.
+
+**Test scenarios**
+
+- Après une validation touchant quarante fiches dont douze portent une relance planifiée : les douze relances et leurs notes sont intactes, les échéances du tableau de bord inchangées.
+- Le compteur d'interactions de l'export Excel ne bouge pas du fait d'une veille.
+- La recherche plein texte ne remonte pas une fiche sur le contenu d'une entrée de veille.
+- Un texte long annonce le presse-papiers avant le clic et affiche l'objet.
+- L'écriture groupée est vérifiée : un quota atteint produit une erreur visible, jamais un succès affiché à tort.
+- La modale d'interaction n'expose pas de bouton pour créer une entrée de veille à la main.
+
+**Verification** — `node scripts/run-gates.js --with-smoke` vert ; recette en navigateur avec une fixture portant des relances planifiées.
+
+### U12. Service worker aveugle aux entrées de suivi
+
+**Goal** — Que les notifications ne se dérèglent pas après un envoi.
+
+**Requirements** — KTD4.
+
+**Dependencies** — U11.
+
+**Files** — `sw.js` (≈ 81-88), `index.html` (test de cohérence).
+
+**Approach** — Le service worker recalcule les relances avec sa propre copie de la logique et ne filtre pas les entrées de suivi. Lui apprendre à les ignorer, de la même manière que l'application. Ajouter un test qui compare les deux implémentations sur un même jeu fictif, pour que l'écart ne se recrée pas.
+
+**Test scenarios**
+
+- Sur un même carnet fictif, l'application et le service worker comptent le même nombre de fiches à relancer, entrées de veille comprises.
+- Une fiche dont la seule interaction récente est une veille reste comptée comme à relancer.
+
+**Verification** — `node --check sw.js` et `node scripts/run-gates.js` verts.
+
+### U13. Journal des lancements et son panneau
+
+**Goal** — Pouvoir répondre à « qu'est-ce qui est sorti, et quand ».
+
+**Requirements** — R26.
+
+**Dependencies** — U9.
+
+**Files** — `index.html` : clé racine partagée avec le registre, panneau du menu « ⋯ ».
+
+**Approach** — Un panneau de plus sur le patron des six existants. Le journal liste identifiant, date, mode, nombre de profils et de destinataires, et l'état du lancement. Il partage la clé racine du registre, per KTD5.
+
+**Test scenarios**
+
+- Un lancement apparaît au journal dès l'export, avec son mode.
+- Le journal survit à un rechargement, à une restauration de sauvegarde et à un retour de version.
+- Le panneau s'ouvre en fermant les autres, comme ses voisins.
+
+**Verification** — `node scripts/run-gates.js` vert.
+
+### U14. Rapport de fusion dans les deux sens
+
+**Goal** — Qu'un retrait de désignation écrasé par la synchronisation ne reste pas invisible.
+
+**Requirements** — R27 (seconde moitié).
+
+**Dependencies** — aucune.
+
+**Files** — `index.html` : `mergeData` (≈ 1390-1401), modal de rapport (≈ 5495-5500).
+
+**Approach** — La branche où la valeur locale l'emporte sur une valeur distante plus ancienne ne pousse rien au rapport. La faire contribuer à une rubrique distincte, sans gonfler le décompte existant des mises à jour, qui a son propre sens à l'écran.
+
+**Execution note** — correctif au cœur de la fusion : écrire d'abord les cas purs sur le rapport, pas sur l'écran.
+
+**Test scenarios**
+
+- Valeur locale plus récente qu'une valeur distante : le champ est nommé dans la nouvelle rubrique et la valeur locale est conservée.
+- Le décompte des mises à jour affiché après une fusion garde sa valeur d'avant le correctif.
+- Un marqueur de veille décoché sur un appareil puis fusionné avec l'autre est nommé au rapport.
+
+**Verification** — `node scripts/run-gates.js` vert ; cas de fusion existants inchangés.
+
+### U15. Documentation et version v1.6.1
+
+**Goal** — Livrer la seconde moitié.
+
+**Requirements** — traçabilité.
+
+**Dependencies** — U11, U13.
+
+**Files** — `index.html` (version), `sw.js`, `LISEZMOI.txt`, `docs/RECETTE.md`.
+
+**Approach** — Version portée aux quatre endroits. Le mode d'emploi décrit la boucle complète, dit que le dépôt du retour se fait de préférence sur l'appareil qui a préparé l'envoi et ce qui se passe sinon, et que l'application ne sait jamais si un courriel est parti. Cases de recette pour le parcours complet.
+
+**Test scenarios** — contrôle de version sur les quatre endroits ; phrases nouvelles épinglées.
+
+**Verification** — `node scripts/run-gates.js --with-smoke` vert, `SMOKE_OK`, `"authenticated":true`, `"exceptions":[]`.
+
+---
+
+## Verification Contract
+
+- **Portes** : `node scripts/run-gates.js` pour toute unité ; `node scripts/run-gates.js --with-smoke` pour toute unité touchant le bloc Babel. Vérifier explicitement dans la sortie du smoke la présence de `SMOKE_OK`, de `"authenticated":true` et de `"exceptions":[]` — un `GATES_OK` lu dans une sortie tronquée a déjà laissé passer un écran blanc en production le 2026-09-08.
+- **Mutations d'épreuve** : pour chaque unité portant une règle de décision (U2, U3, U9), appliquer temporairement au moins trois mutations au code et constater que les portes rougissent, puis rétablir.
+- **Recette en navigateur** : sur fixture synthétique uniquement, jamais sur le carnet réel. Deux parcours — préparation complète à la fin de l'étape 1, boucle entière à la fin de l'étape 2 — dont un cas de dépôt sur un carnet n'ayant pas connu le lancement.
+- **Non-régression du suivi** : la fixture de recette comporte des fiches portant une relance planifiée et sa note ; les échéances du tableau de bord sont relevées avant et après l'envoi.
+- **Aucun réseau** : un contrôle vérifie qu'aucune requête n'est émise pendant la préparation et la validation.
+- **Revue croisée** avant chaque demande de fusion, sur le protocole en vigueur : passe adversariale indépendante et lentilles, puis contradiction de chaque constat grave.
+
+---
+
+## Definition of Done
+
+**Global**
+
+- Les trente-deux exigences sont satisfaites ou explicitement reportées avec leur motif inscrit au plan.
+- Les portes passent avec le smoke, vérifié champ par champ.
+- Aucune fonction de rendu appelée conditionnellement ne contient de hook React, contrôle inclus dans les tests pour les deux nouveaux écrans.
+- Le mode restreint est prouvé, par un test portant sur la sortie entière, ne contenir aucune chaîne nominative.
+- Aucune donnée réelle de contact n'a été employée en développement ni en recette.
+- Le code des tentatives abandonnées est retiré, non laissé dans la livraison.
+- La version est portée aux quatre endroits solidaires, et le mode d'emploi décrit le comportement réel.
+
+**Par étape**
+
+- **v1.6.0** — l'utilisateur peut désigner ses destinataires, préparer un envoi, lire l'aperçu, obtenir le fichier de profils, et le mode d'emploi dit que la validation arrive ensuite.
+- **v1.6.1** — l'utilisateur peut déposer un retour, valider projet par projet, ouvrir ses courriels, consulter le journal, et ses relances n'ont pas bougé.
