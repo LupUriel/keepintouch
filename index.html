@@ -717,6 +717,8 @@ var KIT_PURE = (function () {
   }
   return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, normaliseNaf: normaliseNaf, libelleNaf: libelleNaf, patchActivite: patchActivite, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, ciblesActivite: ciblesActivite, idsAPropager: idsAPropager, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
+KIT_PURE.normaliseSeuilEffectif = function (value) { var valeurs = ["", "-11", "11", "50", "300", "1000"]; return valeurs.indexOf(value) >= 0 ? value : ""; };
+KIT_PURE.champsVeilleInit = function (payload) { var source = payload || {}; return { recoitVeille: source.recoitVeille === true, seuilEffectif: KIT_PURE.normaliseSeuilEffectif(source.seuilEffectif), activiteRelue: String(source.activiteRelue || "") }; };
 var KIT_TESTS = {
   cases: [],
   add: function (nom, fn) { this.cases.push({ nom: nom, fn: fn }); },
@@ -727,6 +729,14 @@ var KIT_TESTS = {
   }
 };
 function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
+KIT_TESTS.add("veille : valeurs initiales d'une fiche créée", function () { var v = KIT_PURE.champsVeilleInit({}); kitAssert(v.recoitVeille === false && v.seuilEffectif === "" && v.activiteRelue === ""); });
+KIT_TESTS.add("veille : seuil limité aux six valeurs prévues", function () { ["", "-11", "11", "50", "300", "1000"].forEach(function (v) { kitAssert(KIT_PURE.normaliseSeuilEffectif(v) === v, v); }); kitAssert(KIT_PURE.normaliseSeuilEffectif("250") === ""); });
+KIT_TESTS.add("veille : champs synchronisés sans date de veille", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d = KIT_SOURCE_HTML.indexOf("var MERGE_" + "FIELDS = ["); kitAssert(d >= 0, "déclaration des champs synchronisés"); var liste = KIT_SOURCE_HTML.slice(d, KIT_SOURCE_HTML.indexOf("];", d)); ["recoitVeille", "seuilEffectif", "activiteRelue"].forEach(function (champ) { kitAssert(liste.indexOf(String.fromCharCode(34) + champ + String.fromCharCode(34)) >= 0, champ); }); kitAssert(liste.indexOf("dateVeille") === -1 && liste.indexOf("veilleDate") === -1, "aucune date de veille synchronisée comme champ de fiche"); });
+KIT_TESTS.add("veille : chargement et payload des trois champs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var init = app.slice(app.indexOf("function init" + "Form("), app.indexOf("function submit" + "Form(")); var submitStart = app.indexOf("function submit" + "Form("); var submit = app.slice(submitStart, app.indexOf("function export" + "Excel(", submitStart)); ["recoitVeille", "seuilEffectif", "activiteRelue"].forEach(function (champ) { kitAssert(init.indexOf(champ) >= 0, "chargement " + champ); kitAssert(submit.indexOf(champ) >= 0, "payload " + champ); }); });
+KIT_TESTS.add("veille : états déclarés avant les retours conditionnels", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var debut = babel.indexOf("function App" + "(props)"); var app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); ["fRecoit" + "Veille", "fSeuil" + "Effectif", "fActivite" + "Relue", "fReg" + "istre"].forEach(function (etat) { kitAssert(app.indexOf(etat) >= 0, etat); }); });
+KIT_TESTS.add("veille : formulaire câblé sans hook imbriqué", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var tranche = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Form("), KIT_SOURCE_HTML.indexOf("function render" + "Detail(")); kitAssert(tranche.length > 5000); kitAssert(tranche.indexOf("Reçoit la veille " + "juridique") >= 0 && tranche.indexOf("Vouvoie" + "ment") >= 0 && tranche.indexOf("Tutoie" + "ment") >= 0); ["use" + "State", "use" + "Memo", "use" + "Ref", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
+KIT_TESTS.add("veille : seuil dans la seule modale d'effectif", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function renderManual" + "EffectifModal("), KIT_SOURCE_HTML.indexOf("function render" + "LogModal(")); var panneauStart = KIT_SOURCE_HTML.indexOf("showEffectifs" + "Panel ?"); var panneau = KIT_SOURCE_HTML.slice(panneauStart, KIT_SOURCE_HTML.indexOf("showMeeting" + "Settings ?", panneauStart)); kitAssert(modal.indexOf("seuil" + "Effectif") >= 0 && modal.indexOf("L'effectif INSEE ne dit pas si un seuil est " + "franchi") >= 0); kitAssert(panneau.indexOf("seuil" + "Effectif") === -1); });
+KIT_TESTS.add("veille : registre vide lu comme vous partout", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var voeuxStart = app.indexOf("function openVoeux" + "Modal("); var inviteStart = app.indexOf("function openInvite" + "ModalNow("); var voeux = app.slice(voeuxStart, voeuxStart + 1000); var invite = app.slice(inviteStart, inviteStart + 1000); var lecture = 'c.registre === "tu" ? "tu" : "vous"'; kitAssert(voeux.indexOf(lecture) >= 0); kitAssert(invite.indexOf(lecture) >= 0); });
 KIT_TESTS.add("effectifs ordre complet et inconnus", function () { var codes = ["00", "01", "02", "03", "11", "12", "21", "22", "31", "32", "41", "42", "51", "52", "53"]; codes.forEach(function (code, i) { kitAssert(KIT_PURE.trancheRank(code) === i, code); }); kitAssert(KIT_PURE.trancheRank("NN") === -1 && KIT_PURE.trancheRank() === -1 && KIT_PURE.trancheRank("XX") === -1); });
 KIT_TESTS.add("effectifs libellés exacts", function () { var expected = { "00": "0 sal.", "01": "1-2 sal.", "02": "3-5 sal.", "03": "6-9 sal.", "11": "10-19 sal.", "12": "20-49 sal.", "21": "50-99 sal.", "22": "100-199 sal.", "31": "200-249 sal.", "32": "250-499 sal.", "41": "500-999 sal.", "42": "1000-1999 sal.", "51": "2000-4999 sal.", "52": "5000-9999 sal.", "53": "10000+ sal." }; Object.keys(expected).forEach(function (code) { kitAssert(KIT_PURE.trancheLabel(code) === expected[code], code); }); kitAssert(KIT_PURE.trancheLabel("NN") === ""); });
 KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,"00"],[1,"01"],[2,"01"],[3,"02"],[5,"02"],[6,"03"],[9,"03"],[10,"11"],[19,"11"],[20,"12"],[49,"12"],[50,"21"],[99,"21"],[100,"22"],[199,"22"],[200,"31"],[249,"31"],[250,"32"],[499,"32"],[500,"41"],[999,"41"],[1000,"42"],[1999,"42"],[2000,"51"],[4999,"51"],[5000,"52"],[9999,"52"],[10000,"53"]]; pairs.forEach(function (pair) { kitAssert(KIT_PURE.trancheFromCount(pair[0]) === pair[1], String(pair[0])); }); });
@@ -1298,7 +1308,7 @@ var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "activite", "nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "recoitVeille", "seuilEffectif", "activiteRelue", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "activite", "nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
@@ -2198,6 +2208,7 @@ function App(props) {
   var [manualEffectif, setManualEffectif] = useState(null);
   var [manualEffectifPrecis, setManualEffectifPrecis] = useState("");
   var [manualEffectifTranche, setManualEffectifTranche] = useState("21");
+  var [manualSeuilEffectif, setManualSeuilEffectif] = useState("");
   var [bulkIncludeManual, setBulkIncludeManual] = useState(false);
   var [bulkPreview, setBulkPreview] = useState(null);
   var [bulkProgress, setBulkProgress] = useState(null);
@@ -2217,6 +2228,10 @@ function App(props) {
   var [fNxt, setFNxt] = useState("");
   var [fFollowDate, setFFollowDate] = useState("");
   var [fFollowNote, setFFollowNote] = useState("");
+  var [fRecoitVeille, setFRecoitVeille] = useState(false);
+  var [fSeuilEffectif, setFSeuilEffectif] = useState("");
+  var [fActiviteRelue, setFActiviteRelue] = useState("");
+  var [fRegistre, setFRegistre] = useState("vous");
   var [fTagsStr, setFTagsStr] = useState("");
   var [fKdLabel, setFKdLabel] = useState("");
   var [fKdDate, setFKdDate] = useState("");
@@ -2562,6 +2577,7 @@ function App(props) {
   /* ── CRUD ── */
   function addContact(payload) {
     var id = makeId();
+    var veille = KIT_PURE.champsVeilleInit(payload);
     var nc = {
       id: id, name: payload.name, lastName: payload.lastName || "", firstName: payload.firstName || "",
       inTransition: payload.inTransition || false,
@@ -2575,7 +2591,8 @@ function App(props) {
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
-      registre: "",
+      registre: payload.registre === "tu" ? "tu" : "vous",
+      recoitVeille: veille.recoitVeille, seuilEffectif: veille.seuilEffectif, activiteRelue: veille.activiteRelue,
       interactions: [], createdAt: todayStr(), updatedAt: nowTS(), fieldsUpdatedAt: {}, archived: false
     };
     save({ contacts: contacts.concat([nc]), categories: categories });
@@ -2768,6 +2785,7 @@ function App(props) {
     setManualEffectif(c);
     setManualEffectifPrecis(c.effectifPrecis == null ? "" : String(c.effectifPrecis));
     setManualEffectifTranche(c.effectifTranche && c.effectifTranche !== "NN" ? c.effectifTranche : "21");
+    setManualSeuilEffectif(KIT_PURE.normaliseSeuilEffectif(c.seuilEffectif));
   }
 
   function saveManualEffectif() {
@@ -2781,7 +2799,8 @@ function App(props) {
       effectifSiren: manualEffectif.effectifSiren || "",
       effectifSource: "manuel",
       effectifDate: todayStr(),
-      effectifPrecis: hasCount ? count : null
+      effectifPrecis: hasCount ? count : null,
+      seuilEffectif: KIT_PURE.normaliseSeuilEffectif(manualSeuilEffectif)
     });
     setManualEffectif(null);
   }
@@ -3058,7 +3077,7 @@ function App(props) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
     var defaultIdf = KIT_PURE.idfDefaultFor(c, data.settings || {});
-    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.registre === "vous" ? "vous" : "tu");
+    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.registre === "tu" ? "tu" : "vous");
     setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
     setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteIdf(defaultIdf); setInviteCoord(""); setShowInvite(true);
   }
@@ -3233,6 +3252,10 @@ function App(props) {
     setFNxt(ex ? (ex.nextAction || "") : "");
     setFFollowDate(ex ? (ex.followUpDate || "") : "");
     setFFollowNote(ex ? (ex.followUpNote || "") : "");
+    setFRecoitVeille(ex ? ex.recoitVeille === true : false);
+    setFSeuilEffectif(ex ? KIT_PURE.normaliseSeuilEffectif(ex.seuilEffectif) : "");
+    setFActiviteRelue(ex ? (ex.activiteRelue || "") : "");
+    setFRegistre(ex && ex.registre === "tu" ? "tu" : "vous");
     setFTagsStr(ex ? (ex.tags || []).join(", ") : "");
     setFKds(ex ? (ex.keyDates || []) : []);
     setFBday(ex ? (ex.birthday || "") : "");
@@ -3262,9 +3285,10 @@ function App(props) {
       metAt: fMet, notes: fNotes,
       sector: fSec2, nextAction: fNxt, tags: tagsArr, keyDates: fKds,
       followUpDate: fFollowDate, followUpNote: fFollowNote,
+      recoitVeille: fRecoitVeille, seuilEffectif: KIT_PURE.normaliseSeuilEffectif(fSeuilEffectif), activiteRelue: fActiviteRelue,
       birthday: fBday, company: fCompany, activite: fAct.trim().slice(0, 200), jobTitle: fJobTitle, workLocation: fWorkLoc,
       email: fEmail, phonePro: fPhonePro, phonePerso: fPhonePerso,
-      address: fAddress, linkedin: fLinkedin, origin: fOrigin
+      address: fAddress, linkedin: fLinkedin, origin: fOrigin, registre: fRegistre
     };
     if (existingId) {
       var avant = ficheCourante(existingId, contacts);
@@ -4149,6 +4173,12 @@ function App(props) {
         <select disabled={manualEffectifPrecis !== ""} value={manualEffectifPrecis !== "" && countValid ? KIT_PURE.trancheFromCount(Number(manualEffectifPrecis)) : manualEffectifTranche} onChange={function (e) { setManualEffectifTranche(e.target.value); }} style={{ width: "100%", padding: 9, margin: "5px 0 16px", border: "1px solid " + bd, borderRadius: 8 }}>
           {trancheCodes.map(function (code) { return <option key={code} value={code}>{KIT_PURE.trancheLabel(code)}</option>; })}
         </select>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>SEUIL D'EFFECTIF FRANCHI</label>
+        <select value={manualSeuilEffectif} onChange={function (e) { setManualSeuilEffectif(KIT_PURE.normaliseSeuilEffectif(e.target.value)); }} data-field="seuilEffectif" style={{ width: "100%", padding: 9, margin: "5px 0 0", border: "1px solid " + bd, borderRadius: 8 }}>
+          <option value="">Je ne sais pas</option><option value="-11">Moins de 11 salariés</option><option value="11">Seuil de 11 franchi</option><option value="50">Seuil de 50 franchi</option><option value="300">Seuil de 300 franchi</option><option value="1000">Seuil de 1 000 franchi</option>
+        </select>
+        <p style={{ margin: "5px 0 4px", fontSize: 11.5, color: "#6E6A64" }}>L'effectif INSEE ne dit pas si un seuil est franchi : le décompte obéit à ses propres règles, et le franchissement ne s'apprécie pas de la même manière selon le dispositif. Renseignez ce que vous savez du dossier.</p>
+        <p style={{ margin: "0 0 16px", fontSize: 11, color: "#6E6A64" }}>Textes : <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000019353569" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>décompte (C. trav. L. 1111-2)</a> · <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000031565369" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>exclusions (L. 1111-3)</a> · <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000035609353" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>CSE, douze mois consécutifs (L. 2311-2)</a> · <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000051287151" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>décompte annuel, cinq années civiles (CSS L. 130-1)</a></p>
         {!countValid ? <p role="alert" style={{ color: "#9A3115", fontSize: 12 }}>Saisissez un nombre entier positif.</p> : null}
         <div style={{ display: "flex", gap: 8 }}><button disabled={!countValid} onClick={saveManualEffectif} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", cursor: countValid ? "pointer" : "not-allowed", fontFamily: ff }}>Enregistrer</button><button onClick={function () { setManualEffectif(null); }} style={{ background: "#fff", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div>
       </div>
@@ -4399,6 +4429,16 @@ function App(props) {
               <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (fInTransition ? "#786078" : bd), display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{fInTransition ? React.createElement("span", { style: { width: 10, height: 10, borderRadius: "50%", background: "#786078" } }) : null}</span>
               {"En transition"}
             </label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={fRecoitVeille} onChange={function (e) { setFRecoitVeille(e.target.checked); }} /> Reçoit la veille juridique
+            </label>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>REGISTRE DE POLITESSE</label>
+            <select value={fRegistre} onChange={function (e) { setFRegistre(e.target.value === "tu" ? "tu" : "vous"); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }}>
+              <option value="vous">Vouvoiement</option><option value="tu">Tutoiement</option>
+            </select>
           </div>
 
           {!fInTransition ? React.createElement("div", null,
