@@ -18,7 +18,7 @@
 - [ ] Remplacer l'activité par « Études cliniques (CRO) » puis « Actualiser » : l'activité saisie est conservée, la carte affiche la saisie puis « NAF 2025 … — libellé officiel · ancien code … » ; « Reprendre le libellé officiel » remet le libellé. (Le message « Activité conservée (votre saisie). » s'affiche lors du choix d'un candidat par « Rechercher l'effectif », pas sur « Actualiser ».)
 - [ ] Fiche préremplie jamais retouchée, rattachée ensuite à une autre entreprise : l'activité suit le nouveau libellé, à condition qu'aucune propagation manuelle ne l'ait alignée entre-temps
 - [ ] ⋯ › Taille des entreprises › « Mettre à jour les effectifs » (données synthétiques) : compte rendu « Activité préremplie sur N fiche(s). » ; une fiche à activité saisie n'est pas modifiée
-- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.5.12 · kit-crm-v54 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
+- [ ] Hors ligne : la fiche affiche activité et libellé ; « À propos » affiche v1.6.0 · kit-crm-v55 ; export Excel : colonnes « Activité » et « Code NAF 2025 » en fin de ligne ; import d'un fichier avec colonne « Activité » → champ rempli ; « Entreprises » montre l'activité sous chaque société ; la recherche « pharma » trouve les fiches
 - [ ] Samsung : la carte ACTIVITÉ DE L'ENTREPRISE et la ligne NAF s'affichent sans infobulle ; le formulaire montre le champ en pleine largeur sous FONCTION/ENTREPRISE
 - [ ] Synchroniser PC ↔ Samsung : l'activité saisie sur un appareil apparaît sur l'autre
 - [ ] Trois fiches « LA POSTE », deux sans activité : le formulaire annonce « Activité partagée avec 2 autres fiches de « LA POSTE » » ; saisir « Distribution du courrier et colis » puis Enregistrer : aucune question, les deux autres fiches affichent la même activité ; modifier une deuxième fois : aucune question non plus
@@ -37,6 +37,20 @@
 - [ ] Une fiche sœur « En transition » n'est ni comptée dans la ligne, ni nommée dans la question, ni modifiée
 - [ ] Après un enregistrement qui recopie, la fiche affiche « Activité recopiée sur N autres fiches de « X ». » pendant dix secondes ; répondre Annuler à la question affiche « N fiche(s) inchangée(s). »
 - [ ] Vider le champ Activité sur une fiche dont l'entreprise a des fiches sœurs, répondre OK : le message affiché dit « Activité effacée sur N autres fiches », jamais « recopiée »
+
+## Veille juridique (v1.6.0)
+
+- [ ] Sur des données fictives, cocher « Reçoit la veille juridique » sur trois fiches de deux entreprises différentes, dont deux fiches de la même entreprise avec les mêmes données : l'écran Veille annonce 3 personnes et 2 textes distincts
+- [ ] Cocher une fiche sans convention collective : elle est nommée dans les fiches écartées avec « convention collective manquante »
+- [ ] Cocher une fiche « Avocat / EC » : elle n'apparaît nulle part dans l'écran Veille
+- [ ] Dans le filtre VEILLE du tableau de bord, « Reçoit la veille » ne montre que les fiches cochées
+- [ ] Ouvrir l'écran Veille, changer de vue, puis revenir : le mode est revenu à « Sans aucun nom »
+- [ ] « Produire le fichier » est inactif avant « Voir ce qui va sortir », puis actif après
+- [ ] L'aperçu en mode « Sans aucun nom » ne contient ni nom, ni entreprise, ni courriel
+- [ ] Relire une activité en y écrivant volontairement le nom de l'entreprise, puis choisir « Voir ce qui va sortir » : l'alerte nomme la chaîne et « Produire le fichier » reste inactif
+- [ ] Modifier d'un caractère une activité relue : la mention « Activité relue » disparaît et le bouton « Bon à transmettre » réapparaît
+- [ ] Exporter en Excel : la dernière colonne est « Reçoit la veille », à Oui/Non
+- [ ] Le fichier produit porte la date et un identifiant de lancement dans son nom
 
 ## Recommandations et apporteurs (v1.5.9)
 

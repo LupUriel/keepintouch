@@ -3,7 +3,8 @@
 ## Où vit l'application
 
 - Le code est hébergé sur GitHub : https://github.com/LupUriel/keepintouch
-- L'application est servie par GitHub Pages à l'adresse : https://lupuriel.github.io/keepintouch/
+- L'application est servie par GitHub Pages à l'adresse :
+  https://lupuriel.github.io/keepintouch/
 - Toute fusion sur la branche `main` (bouton « Merge pull request » sur GitHub) redéploie
   automatiquement le site en une à deux minutes. Aucune autre manipulation n'est nécessaire.
 
@@ -25,7 +26,8 @@
 ## Installer sur PC
 
 1. Ouvrez Chrome et allez sur https://lupuriel.github.io/keepintouch/
-2. Dans la barre d'adresse, cliquez la petite icône « Installer » (ou ⋮ > « Installer Keep In Touch »)
+2. Dans la barre d'adresse, cliquez la petite icône « Installer »
+   (ou ⋮ > « Installer Keep In Touch »)
 
 ## Envoyer des vœux en un geste
 
@@ -74,7 +76,8 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
      https://lupuriel.github.io/keepintouch/ (exacte) et http://localhost:8000 (développement)
 2. Noter l'ID d'application (client) et l'ID de l'annuaire (locataire) — identifiants
    publics par conception, inscrits dans le code de l'app
-3. API autorisées > Ajouter une autorisation > Microsoft Graph > Déléguées > Calendars.ReadBasic
+3. API autorisées > Ajouter une autorisation > Microsoft Graph > Déléguées >
+   Calendars.ReadBasic
 4. Si l'annuaire l'exige (erreur AADSTS50105) : Applications d'entreprise > Keep In Touch >
    Propriétés > « Affectation requise ? » > Non (ou ajouter l'utilisateur dans
    « Utilisateurs et groupes »)
@@ -84,7 +87,9 @@ du calendrier (titres, horaires, statut libre/occupé — jamais le contenu des 
 
 ## Vos données
 
-Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une interaction existante.
+Dans « À suivre » ou sur une fiche contact, « Déjeuner ✓ » enregistre immédiatement un
+déjeuner à la date du jour. Dans l'historique d'une fiche, le bouton ✏ permet de modifier une
+interaction existante.
 
 ## Recommandations et apporteurs
 
@@ -127,7 +132,13 @@ La case « Récapitulatif hebdomadaire à l'ouverture » des réglages permet de
 
 ## Taille des entreprises
 
-Le rattachement d'une entreprise propage désormais son effectif aux autres fiches de même dénomination, sauf les saisies manuelles protégées et les fiches déjà liées à un autre SIREN. Une fiche rattachée peut aussi réunir plusieurs entreprises du groupe, ajoutées ou retirées individuellement. La couverture affichée cumule prudemment les bornes basses des tranches connues et signale les groupes dans les badges. La vérification BODACC contrôle successivement toutes les entreprises du groupe et conserve un état collectif unique, même lorsque certaines réponses manquent.
+Le rattachement d'une entreprise propage désormais son effectif aux autres fiches de même
+dénomination, sauf les saisies manuelles protégées et les fiches déjà liées à un autre SIREN.
+Une fiche rattachée peut aussi réunir plusieurs entreprises du groupe, ajoutées ou retirées
+individuellement. La couverture affichée cumule prudemment les bornes basses des tranches
+connues et signale les groupes dans les badges. La vérification BODACC contrôle successivement
+toutes les entreprises du groupe et conserve un état collectif unique, même lorsque certaines
+réponses manquent.
 
 Le panneau « Taille des entreprises » s'ouvre à la demande depuis le menu ⋯.
 
@@ -138,8 +149,8 @@ Les actions groupées montrent toujours la liste complète des dénominations ou
 leur lancement.
 
 Les recherches par dénomination sont affinées avec le code postal trouvé dans l'adresse, puis
-les résultats sont classés localement selon leur proximité avec l'adresse de la fiche. Le bouton
-« Élargir la recherche » permet de retirer ce filtre quand il est appliqué.
+les résultats sont classés localement selon leur proximité avec l'adresse de la fiche. Le
+bouton « Élargir la recherche » permet de retirer ce filtre quand il est appliqué.
 
 La source publique est SIRENE, via l'API Recherche d'entreprises de l'État. Une recherche
 n'envoie que la dénomination de l'entreprise (ou son SIREN), jamais le nom du contact ni ses
@@ -189,9 +200,48 @@ officiel. Les fiches « En transition » ne sont jamais touchées, ni comptées.
 l'enregistrement, un message sur la fiche indique combien d'autres ont été recopiées, ou
 effacées si vous avez vidé le champ.
 
+## Veille juridique
+
+La veille juridique sert à envoyer à des contacts choisis une actualité de droit social
+adaptée à leur branche, à la taille de leur entreprise et à leur activité.
+L'application ne transmet rien à personne. Vous confiez vous-même le fichier à l'outil de
+rédaction de votre choix.
+
+Pour désigner une personne, cochez « Reçoit la veille juridique » dans sa fiche ou depuis
+l'écran Veille. Le filtre VEILLE du tableau de bord permet de voir les personnes désignées.
+Si vous décochez cette case, la personne est durablement retirée des envois.
+
+L'écran Veille montre les catégories, sans jamais proposer « Avocat / EC », la liste des
+destinataires et les fiches écartées. Il explique pourquoi chaque fiche est écartée : elle est
+archivée, en transition, sans courriel, sans convention collective ou sans effectif. Il indique
+aussi le nombre de textes distincts à relire.
+
+Le fichier propose deux modes. « Sans aucun nom », proposé par défaut et à choisir à chaque
+fois, ne contient que des situations d'entreprise numérotées : branche, effectif présenté par
+tranche, seuil, activité, et tutoiement ou vouvoiement. « Avec les identités » ajoute le
+prénom, le nom, l'entreprise, la fonction et le lieu.
+Dans aucun mode, les notes ni les échanges ne sortent. Votre choix n'est jamais mémorisé.
+
+Rien ne se produit tant que vous n'avez pas vu le contenu exact. Si vous choisissez « Sans
+aucun nom » et qu'un nom se glisse malgré tout dans le fichier, par exemple dans une activité
+relue, la production est bloquée et l'application indique ce qu'elle a trouvé.
+
+Tant qu'une activité n'est pas marquée « Bon à transmettre à la veille » dans la fiche, son
+libellé officiel INSEE sort à sa place. La marque disparaît dès que le texte change. Marquer
+l'activité sur une fiche vaut pour toutes les fiches de la même entreprise qui portent le même
+texte.
+
+Le seuil d'effectif se renseigne à la main dans la fenêtre de saisie de l'effectif. L'effectif
+INSEE ne dit pas si un seuil est franchi et les règles de franchissement diffèrent selon les
+dispositifs.
+
+La validation dans l'application et l'ouverture des courriels arriveront dans la prochaine
+version. D'ici là, recopiez à la main les textes rédigés dans votre messagerie.
+
 ## Procédures collectives
 
-La vérification s'appuie sur la source officielle BODACC. Seuls les SIREN mémorisés sont envoyés ;
+La vérification s'appuie sur la source officielle BODACC. Seuls les SIREN mémorisés sont
+envoyés ;
 le résultat constitue un signal d'information et ne remplace pas un suivi juridique.
 
 - Les données sont stockées LOCALEMENT dans chaque navigateur
@@ -207,9 +257,20 @@ le résultat constitue un signal d'information et ne remplace pas un suivi jurid
   met ensuite à jour automatiquement après chaque enregistrement.
 - Sur Android, utilisez « Partager la sauvegarde », puis importez le fichier sur l'autre
   appareil avec « Importer / fusionner ».
-- « Revenir à cette version » remet fiches et historiques à l'état du début d'un jour récent (vos réglages, modèles et catégories sont conservés). Ce que vous avez saisi depuis est retiré, mais reste dans le fichier téléchargé automatiquement juste avant (kit-sauvegarde-avant-retour-<date>.json). Une fiche supprimée volontairement ce jour-là revient aussi. Pour annuler un retour : « Remplacer tout » avec ce fichier.
-- Si l'app démarre sur un écran « Vos données locales sont absentes ou illisibles » ou signale qu'une copie de sécurité plus récente a été trouvée : choisissez « Restaurer cette copie » (la plus récente est proposée avec sa date et son nombre de fiches). Rien n'est modifié tant que vous n'avez pas choisi. Si l'écran indique que les « copies de sécurité ne répondent pas », fermez les autres onglets puis choisissez « Réessayer ».
-- Espace de stockage : le pourcentage utilisé est visible dans ⋯ > À propos. À partir de 80 %, un bandeau vous invite à exporter une sauvegarde puis à supprimer des fiches devenues inutiles — archiver ne libère pas d'espace. Si l'espace est plein, vos modifications ne sont plus enregistrées : exportez d'abord une sauvegarde.
+- « Revenir à cette version » remet fiches et historiques à l'état du début d'un jour récent
+  (vos réglages, modèles et catégories sont conservés). Ce que vous avez saisi depuis est
+  retiré, mais reste dans le fichier téléchargé automatiquement juste avant
+  (kit-sauvegarde-avant-retour-<date>.json). Une fiche supprimée volontairement ce jour-là
+  revient aussi. Pour annuler un retour : « Remplacer tout » avec ce fichier.
+- Si l'app démarre sur un écran « Vos données locales sont absentes ou illisibles » ou signale
+  qu'une copie de sécurité plus récente a été trouvée : choisissez « Restaurer cette copie »
+  (la plus récente est proposée avec sa date et son nombre de fiches). Rien n'est modifié tant
+  que vous n'avez pas choisi. Si l'écran indique que les « copies de sécurité ne répondent
+  pas », fermez les autres onglets puis choisissez « Réessayer ».
+- Espace de stockage : le pourcentage utilisé est visible dans ⋯ > À propos. À partir de 80 %,
+  un bandeau vous invite à exporter une sauvegarde puis à supprimer des fiches devenues
+  inutiles — archiver ne libère pas d'espace. Si l'espace est plein, vos modifications ne sont
+  plus enregistrées : exportez d'abord une sauvegarde.
 - Si une écriture locale ou celle du fichier suivi échoue, une bannière rouge vous avertit :
   exportez une sauvegarde ou re-choisissez le fichier selon le message affiché.
 
@@ -224,9 +285,16 @@ le résultat constitue un signal d'information et ne remplace pas un suivi jurid
 
 ## Pour les développeurs
 Lancez les tests avec `node scripts/kit-tests-node.js`.
-Les quatre portes s'exécutent avec `node scripts/run-gates.js` ; ajoutez `--with-smoke` pour inclure le smoke.
-Lancez le smoke avec `node scripts/smoke-navigateur.js` sous Node ≥ 22 : Chrome ou Edge est détecté automatiquement (`KIT_BROWSER` ou `--browser` pour en imposer un) ; l'application est ouverte dans un navigateur invisible, les 138 tests y sont exécutés, l'écran de mot de passe puis le tableau de bord (fixture de session, sans mot de passe réel) et le service worker sont vérifiés.
+Les quatre portes s'exécutent avec `node scripts/run-gates.js` ; ajoutez `--with-smoke` pour
+inclure le smoke.
+Lancez le smoke avec `node scripts/smoke-navigateur.js` sous Node ≥ 22 : Chrome ou Edge est
+détecté automatiquement (`KIT_BROWSER` ou `--browser` pour en imposer un) ; l'application est
+ouverte dans un navigateur invisible, les 138 tests y sont exécutés, l'écran de mot de passe
+puis le tableau de bord (fixture de session, sans mot de passe réel) et le service worker sont
+vérifiés.
 Servez l'application localement avec `node scripts/serve-app.js 8000`.
-Sur chaque PR, GitHub exécute les contrôles `portes` et `smoke` ; une fois la règle de branche activée, la fusion est bloquée tant que `portes` (puis `smoke`) n'est pas vert, le propriétaire gardant un contournement.
+Sur chaque PR, GitHub exécute les contrôles `portes` et `smoke` ; une fois la règle de branche
+activée, la fusion est bloquée tant que `portes` (puis `smoke`) n'est pas vert, le propriétaire
+gardant un contournement.
 Créez un tag `vX.Y.Z` par version livrée.
 Après la fusion, suivez la recette dans `docs/RECETTE.md`.
