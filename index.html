@@ -552,6 +552,21 @@ var KIT_PURE = (function () {
     var f = (remplacer && Array.isArray(c.conflits)) ? c.conflits : [];
     return a.concat(f).map(function (x) { return (x && typeof x.id === "string") ? x.id : ""; }).filter(function (id) { return !!id; });
   }
+  function activiteEstRelue(activite, activiteRelue) {
+    var texte = String(activite || ""), marque = String(activiteRelue || "");
+    return texte !== "" && marque !== "" && texte === marque;
+  }
+  function idsActiviteRelue(contacts, sourceId, denomination, activite, activiteRelue, siren) {
+    var ids = [];
+    if (!activiteEstRelue(activite, activiteRelue)) return ids;
+    (Array.isArray(contacts) ? contacts : []).forEach(function (contact) {
+      var decision;
+      if (!contact || typeof contact.id !== "string" || !contact.id || String(contact.activite || "") !== String(activite)) return;
+      decision = ciblesActivite([contact], sourceId, denomination, activite, activite, siren);
+      if (decision.identiques === 1) ids.push(contact.id);
+    });
+    return ids.sort();
+  }
   function propagationCibles(contacts, sourceId, denomination, siren) {
     var resultat = { aRattacher: [], protegees: [], autres: [] };
     /* Dénomination vide : ne jamais matcher les fiches sans entreprise. */
@@ -699,6 +714,72 @@ var KIT_PURE = (function () {
     (copieInst.contacts || []).forEach(function (c) { if (c.category && data.categories.indexOf(c.category) === -1) { data.categories.push(c.category); rapport.categoriesAjoutees += 1; } });
     return { data: data, rapport: rapport };
   }
+  function aptitudeVeille(contact) {
+    var fiche = contact || {}, branche = String(fiche.sector || "").trim();
+    var effectifExact = typeof fiche.effectifPrecis === "number" && isFinite(fiche.effectifPrecis) && fiche.effectifPrecis >= 0;
+    if (fiche.category === "Avocat / EC") return { retenue: false, motif: "categorie-exclue", libelle: "catégorie Avocat / EC" };
+    if (fiche.recoitVeille !== true) return { retenue: false, motif: "non-designee", libelle: "pas désignée pour la veille" };
+    if (fiche.archived) return { retenue: false, motif: "archivee", libelle: "fiche archivée" };
+    if (fiche.inTransition) return { retenue: false, motif: "en-transition", libelle: "en transition : l'entreprise inscrite n'est plus la sienne" };
+    if (!String(fiche.email || "").trim()) return { retenue: false, motif: "sans-courriel", libelle: "pas d'adresse électronique" };
+    if (!branche || branche === "Autre" || branche === "Sans CCN") return { retenue: false, motif: "sans-branche", libelle: "convention collective manquante" };
+    if ((!fiche.effectifTranche || fiche.effectifTranche === "NN") && !effectifExact) return { retenue: false, motif: "sans-effectif", libelle: "effectif inconnu" };
+    return { retenue: true, motif: "", libelle: "" };
+  }
+  function categoriesPreparationVeille(contacts) {
+    var categories = [];
+    (Array.isArray(contacts) ? contacts : []).forEach(function (fiche) {
+      var categorie = String((fiche && fiche.category) || "").trim();
+      if (!categorie || categories.indexOf(categorie) >= 0) return;
+      if (aptitudeVeille({ category: categorie }).motif === "categorie-exclue") return;
+      categories.push(categorie);
+    });
+    return categories;
+  }
+  var TYPE_INTERACTION_VEILLE = "veille";
+  var IDCC_PAR_BRANCHE_VEILLE = {"Métallurgie":"3248","Industries chimiques":"0044","Industrie pharmaceutique (fabrication)":"0176","Plasturgie":"0292","Industries du caoutchouc":"0045","Industries du pétrole":"1388","Industries électriques et gazières (IEG)":"","Papiers-cartons (production et transformation)":"1495","Papiers-cartons : distribution et commerce de gros":"3224","Industrie textile":"0018","Industries de l'habillement":"0247","Industries du bois et scieries":"1947","Ameublement":"1411","Industries du verre":"0669","Imprimerie et industries graphiques":"0184","Édition de livres":"2121","Industries laitières":"0112","Bâtiment (ouvriers)":"1597","Bâtiment (ETAM et cadres)":"2609","Travaux publics":"1702","Négoce de matériaux de construction":"","Carrières et matériaux (UNICEM)":"0135","Promotion-construction immobilière":"1512","Production agricole et CUMA":"7024","Travaux et services agricoles, ruraux et forestiers (ETARF)":"","Coopératives agricoles":"","Entreprises du paysage":"","Déshydratation : entreprises agricoles":"7023","Boulangerie-pâtisserie (entreprises artisanales)":"0843","Industries alimentaires diverses":"","Sucreries, sucreries-distilleries, raffineries de sucre":"2728","Vins, spiritueux et boissons (négoce)":"0493","Commerce de détail et de gros à prédominance alimentaire":"2216","Commerce de détail non alimentaire":"1517","Commerces de l'habillement (succursales)":"0675","Commerce des articles de sport et de loisirs":"1557","Commerce de la chaussure":"0733","Bijouterie, joaillerie, horlogerie":"0567","Bricolage":"1606","Optique-lunetterie de détail":"1431","Pharmacie d'officine":"1996","Librairie / papeterie":"3013","Commerce de gros":"0573","Import-export et commerce international":"0043","Commerce à distance (entreprises)":"2198","Services de l'automobile":"1090","Hôtels, cafés, restaurants (HCR)":"1979","Restauration rapide":"1501","Restauration collective":"1266","Agences de voyages et de tourisme":"1710","Casinos":"2257","Transports routiers et activités auxiliaires":"0016","Transport public urbain de voyageurs":"1424","Transport aérien (personnel au sol)":"0275","Manutention et ports":"","Bureaux d'études, ingénierie, conseil et numérique (Syntec)":"1486","Prévention et sécurité":"1351","Propreté et services associés":"3043","Déchets (activités de)":"2149","Prestataires de services dans le domaine du secteur tertiaire":"2098","Travail temporaire":"2378","Portage salarial":"3219","Publicité":"0086","Organismes de formation":"1516","Cabinets d'avocats (personnel salarié)":"1000","Avocats salariés":"1850","Notariat (clercs et employés)":"2205","Commissaires de justice (personnel)":"1921","Cabinets d'experts-comptables et de commissaires aux comptes":"0787","Cabinets ou entreprises de géomètres-experts":"2543","Entreprises d'architecture":"2332","Cabinets dentaires (personnel)":"1619","Banque":"2120","Sociétés d'assurances":"1672","Agences générales d'assurances (personnel)":"2335","Courtage d'assurances":"2247","Mutualité":"2128","Retraite complémentaire et prévoyance":"1794","Sociétés financières":"0478","Hospitalisation privée (à but lucratif – FHP)":"2264","Établissements privés non lucratifs (CCN 51 – FEHAP)":"0029","Établissements pour personnes inadaptées et handicapées (CCN 66)":"0413","Sanitaire, social et médico-social : accords de branche du secteur":"","Aide à domicile (BAD)":"2941","Services à la personne (entreprises)":"3127","Laboratoires de biologie médicale":"0959","Cabinets médicaux (personnel)":"1147","Cliniques et cabinets vétérinaires":"1875","Acteurs du lien social et familial (centres sociaux – ALISFA)":"1261","Foyers et habitat de jeunes travailleurs":"","Missions locales et PAIO":"2190","Ateliers et chantiers d'insertion":"","Immobilier (administrateurs de biens, agents immobiliers)":"1527","Gardiens, concierges et employés d'immeubles":"1043","HLM – sociétés anonymes et fondations (personnel)":"2150","Offices publics de l'habitat (OPH)":"3220","Particuliers employeurs et emploi à domicile":"3239","Coiffure":"2596","Esthétique-cosmétique":"3032","Fleuristes, animaux familiers":"1978","Pompes funèbres":"0759","Blanchisserie, laverie, pressing":"2002","Sport":"2511","Animation (ÉCLAT)":"1518","Enseignement privé (hors contrat / EPNL)":"3218","Enseignement privé à distance":"2101","Télécommunications":"2148","Production audiovisuelle":"2642","Spectacle vivant privé":"3090","Presse et agences de presse (journalistes)":"1480","Presse d'information spécialisée":"3230","Personnel des organismes de sécurité sociale":"0218","Mutualité sociale agricole":"7502","Établissement public":"","Autre":"","Sans CCN":""};
+  function valeursTransmises(contact) {
+    var fiche = contact || {}, libelle = String(fiche.sector || "").trim(), idcc = "", tranche = String(fiche.effectifTranche || "");
+    if (Object.prototype.hasOwnProperty.call(IDCC_PAR_BRANCHE_VEILLE, libelle)) idcc = IDCC_PAR_BRANCHE_VEILLE[libelle];
+    if ((!tranche || tranche === "NN") && typeof fiche.effectifPrecis === "number" && isFinite(fiche.effectifPrecis) && fiche.effectifPrecis >= 0) tranche = trancheFromCount(fiche.effectifPrecis);
+    var activite = String(fiche.activite || ""), relue = String(fiche.activiteRelue || ""), officiel = String(fiche.nafLibelle || "").trim();
+    return { branche: idcc ? { libelle: libelle, idcc: idcc } : { libelle: libelle }, effectif: trancheLabel(tranche), seuil: String(fiche.seuilEffectif || "").trim() || "seuil inconnu", activite: activiteEstRelue(activite, relue) ? activite : officiel, registre: fiche.registre === "tu" ? "tu" : "vous" };
+  }
+  function profilsVeille(contacts) {
+    var groupes = {};
+    (Array.isArray(contacts) ? contacts : []).forEach(function (fiche) {
+      if (!fiche || !aptitudeVeille(fiche).retenue) return;
+      var valeurs = valeursTransmises(fiche), cle = JSON.stringify(valeurs);
+      if (!groupes[cle]) groupes[cle] = { valeurs: valeurs, ids: [], nombreDestinataires: 0, derniereVeille: "aucune" };
+      if (typeof fiche.id === "string" && fiche.id) groupes[cle].ids.push(fiche.id);
+      groupes[cle].nombreDestinataires += 1;
+      (Array.isArray(fiche.interactions) ? fiche.interactions : []).forEach(function (interaction) { var date = interaction && interaction.type === TYPE_INTERACTION_VEILLE ? String(interaction.date || "") : ""; if (date && (groupes[cle].derniereVeille === "aucune" || date > groupes[cle].derniereVeille)) groupes[cle].derniereVeille = date; });
+    });
+    return Object.keys(groupes).sort().map(function (cle, index) { var groupe = groupes[cle]; groupe.ids.sort(); return { numero: index + 1, valeurs: groupe.valeurs, ids: groupe.ids, nombreDestinataires: groupe.nombreDestinataires, derniereVeille: groupe.derniereVeille }; });
+  }
+  function serialiseProfils(profils, mode, contactsParId) {
+    var repertoire = contactsParId || {};
+    function dernierEchange(fiche) { var dernier = null; (Array.isArray(fiche.interactions) ? fiche.interactions : []).forEach(function (interaction) { if (!interaction || estSuivi(interaction.type) || interaction.type === TYPE_INTERACTION_VEILLE) return; if (!dernier || String(interaction.date || "") > String(dernier.date || "")) dernier = interaction; }); return dernier; }
+    return { mode: mode === "etendu" ? "etendu" : "restreint", profils: (Array.isArray(profils) ? profils : []).map(function (profil) {
+      var sortie = { numero: profil.numero, valeurs: profil.valeurs, nombreDestinataires: profil.nombreDestinataires, derniereVeille: profil.derniereVeille };
+      if (mode === "etendu") sortie.destinataires = (Array.isArray(profil.ids) ? profil.ids : []).map(function (id) { var fiche = repertoire[id] || {}, dernier = dernierEchange(fiche); return { prenom: String(fiche.firstName || ""), nom: String(fiche.lastName || fiche.name || ""), entreprise: String(fiche.company || ""), fonction: String(fiche.jobTitle || ""), lieuExercice: String(fiche.workLocation || ""), categorie: String(fiche.category || ""), dernierEchange: dernier ? String(dernier.date || "") : "" }; });
+      return sortie;
+    }) };
+  }
+  function fuiteNominative(sortie, contacts) {
+    var texte = normalizedText(JSON.stringify(sortie == null ? null : sortie)), trouvees = [], deja = {}, champs = ["id", "firstName", "lastName", "name", "company", "address", "email"];
+    (Array.isArray(contacts) ? contacts : []).forEach(function (fiche) { champs.forEach(function (champ) { var brut = fiche && fiche[champ] != null ? String(fiche[champ]) : "", valeur = normalizedText(brut); if (valeur.length >= 3 && texte.indexOf(valeur) >= 0 && !deja[valeur]) { deja[valeur] = true; trouvees.push(brut); } }); });
+    return trouvees;
+  }
+  var sequenceLancementVeille = 0;
+  function composeLancementVeille(profils, mode, nombreDestinataires, dateISO) {
+    var date = String(dateISO || new Date().toISOString()), alea;
+    sequenceLancementVeille += 1;
+    alea = Math.floor(Math.random() * 0x100000000).toString(36) + "-" + sequenceLancementVeille.toString(36);
+    return { id: "veille-" + date.replace(/[^0-9]/g, "").slice(0, 17) + "-" + alea, date: date, mode: mode === "etendu" ? "etendu" : "restreint", nombreProfils: Array.isArray(profils) ? profils.length : 0, nombreDestinataires: Number(nombreDestinataires) || 0, profils: (Array.isArray(profils) ? profils : []).map(function (profil) { return { numero: profil.numero, ficheIds: (Array.isArray(profil.ids) ? profil.ids : []).slice() }; }), etat: "ouvert-production" };
+  }
+  function normaliseSeuilEffectif(value) { var valeurs = ["", "-11", "11", "50", "300", "1000"]; return valeurs.indexOf(value) >= 0 ? value : ""; }
+  function champsVeilleInit(payload) { var source = payload || {}; return { recoitVeille: source.recoitVeille === true, seuilEffectif: normaliseSeuilEffectif(source.seuilEffectif), activiteRelue: String(source.activiteRelue || "") }; }
   function bulkEffectifTargets(contacts, includeManual, lotStartISO) {
     var targets = [];
     function dejaTraitee(dateISO) { return !!(lotStartISO && dateISO && String(dateISO).slice(0, 10) >= String(lotStartISO).slice(0, 10)); }
@@ -715,7 +796,7 @@ var KIT_PURE = (function () {
     });
     return targets;
   }
-  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, normaliseNaf: normaliseNaf, libelleNaf: libelleNaf, patchActivite: patchActivite, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, ciblesActivite: ciblesActivite, idsAPropager: idsAPropager, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
+  return { renderTemplate: renderTemplate, categoriesApresImport: categoriesApresImport, SUIVI_TYPES: SUIVI_TYPES, estSuivi: estSuivi, normaliseNaf: normaliseNaf, libelleNaf: libelleNaf, patchActivite: patchActivite, derniereInteractionHorsSuivi: derniereInteractionHorsSuivi, apporteurs: apporteurs, statsRecommandations: statsRecommandations, liensFiche: liensFiche, nomCourant: nomCourant, ciblesActivite: ciblesActivite, idsAPropager: idsAPropager, activiteEstRelue: activiteEstRelue, idsActiviteRelue: idsActiviteRelue, pluriel: pluriel, niveauStockage: niveauStockage, estQuotaDepasse: estQuotaDepasse, derniereModification: derniereModification, candidatRecuperation: candidatRecuperation, choisirRecuperation: choisirRecuperation, revenirAVersion: revenirAVersion, cleanSubject: cleanSubject, formatDateFr: formatDateFr, formatDatesList: formatDatesList, nextAnnualOccurrence: nextAnnualOccurrence, accrocheFor: accrocheFor, toIntlDigits: toIntlDigits, toE164: toE164, buildMailto: buildMailto, buildWa: buildWa, buildSms: buildSms, isMobileFr: isMobileFr, voeuxCanalFor: voeuxCanalFor, mergeVoeuxTemplates: mergeVoeuxTemplates, selectedTemplateFrom: selectedTemplateFrom, extractPostal: extractPostal, isIdfPostal: isIdfPostal, idfDefaultFor: idfDefaultFor, mergeDates: mergeDates, canalToInteractionType: canalToInteractionType, nextPendingInvite: nextPendingInvite, pendingInviteRoundTrip: pendingInviteRoundTrip, snapshotPlan: snapshotPlan, exportModeFor: exportModeFor, weekKey: weekKey, recapDue: recapDue, recapSections: recapSections, seedRecapHebdo: seedRecapHebdo, recapGate: recapGate, addDaysISO: addDaysISO, generateCandidateHorizon: generateCandidateHorizon, isOccupyingStatus: isOccupyingStatus, subjectStartsWithTrigram: subjectStartsWithTrigram, normalizeGraphEvents: normalizeGraphEvents, intervalsOverlap: intervalsOverlap, windowIsFree: windowIsFree, provinceAllowsDate: provinceAllowsDate, dateIsFree: dateIsFree, candidateDates: candidateDates, accumulateGraphPage: accumulateGraphPage, isGraphUrl: isGraphUrl, normalizeCandidateResult: normalizeCandidateResult, redirectUriFor: redirectUriFor, classifyMsalError: classifyMsalError, shouldPurgeMsalKey: shouldPurgeMsalKey, digitsOf: digitsOf, contactHaystack: contactHaystack, matchesPhoneDigits: matchesPhoneDigits, patchInteraction: patchInteraction, trancheRank: trancheRank, trancheLabel: trancheLabel, trancheFromCount: trancheFromCount, trancheBorneBasse: trancheBorneBasse, couvertureTotale: couvertureTotale, couvertureTranche: couvertureTranche, effectifTieBreak: effectifTieBreak, effectifSearchUrl: effectifSearchUrl, bodaccSearchUrl: bodaccSearchUrl, bodaccEstOuverture: bodaccEstOuverture, bodaccEstCloture: bodaccEstCloture, parseBodaccProcedures: parseBodaccProcedures, procedureEtatFrom: procedureEtatFrom, procedureCombine: procedureCombine, cspAllowsApi: cspAllowsApi, cspDirectiveAllows: cspDirectiveAllows, graphNextStep: graphNextStep, aptitudeVeille: aptitudeVeille, categoriesPreparationVeille: categoriesPreparationVeille, TYPE_INTERACTION_VEILLE: TYPE_INTERACTION_VEILLE, valeursTransmises: valeursTransmises, profilsVeille: profilsVeille, serialiseProfils: serialiseProfils, fuiteNominative: fuiteNominative, composeLancementVeille: composeLancementVeille, normaliseSeuilEffectif: normaliseSeuilEffectif, champsVeilleInit: champsVeilleInit, bulkEffectifTargets: bulkEffectifTargets, denominationMatch: denominationMatch, propagationCibles: propagationCibles, secondairesAjoute: secondairesAjoute, secondairesRetire: secondairesRetire, adresseSimilarity: adresseSimilarity, rankEffectifCandidates: rankEffectifCandidates };
 }());
 var KIT_TESTS = {
   cases: [],
@@ -727,6 +808,53 @@ var KIT_TESTS = {
   }
 };
 function kitAssert(ok, message) { if (!ok) throw new Error(message || "assertion"); }
+KIT_TESTS.add("veille : un seul point d'entrée pour les fonctions pures", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var interdit = "KIT_" + "VEILLE", debut = KIT_SOURCE_HTML.indexOf("return { render" + "Template: renderTemplate"), ligne = KIT_SOURCE_HTML.slice(debut, KIT_SOURCE_HTML.indexOf("\n", debut)); kitAssert(KIT_SOURCE_HTML.indexOf(interdit) === -1, "aucun second point d'entrée"); ["aptitudeVeille", "categoriesPreparationVeille", "valeursTransmises", "profilsVeille", "serialiseProfils", "fuiteNominative", "composeLancementVeille", "normaliseSeuilEffectif", "champsVeilleInit"].forEach(function (nom) { kitAssert(ligne.indexOf(nom + ": " + nom) >= 0, nom + " dans l'objet rendu"); }); });
+function ficheVeilleTest(id, patch) { return Object.assign({ id: id, recoitVeille: true, category: "Client", email: id + "@exemple.test", sector: "Métallurgie", effectifTranche: "21", seuilEffectif: "50", activite: "Fabrication synthétique", activiteRelue: "Fabrication synthétique", nafLibelle: "Libellé officiel synthétique", registre: "vous", interactions: [] }, patch || {}); }
+KIT_TESTS.add("veille : préparation — catégories présentes sauf catégorie exclue", function () { var cs = [ficheVeilleTest("a", { category: "Client" }), ficheVeilleTest("b", { category: "Partenaire personnalisé" }), ficheVeilleTest("c", { category: "Avocat / EC" }), ficheVeilleTest("d", { category: "Client" })], r = KIT_PURE.categoriesPreparationVeille(cs); kitAssert(JSON.stringify(r) === JSON.stringify(["Client", "Partenaire personnalisé"]), JSON.stringify(r)); });
+KIT_TESTS.add("veille : écran de préparation — quatre sections et textes", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut && tranche.length > 3500, "tranche renderVeille non vide"); ["Choix des " + "catégories", "Liste nominative des " + "destinataires", "Fiches écartées et leur " + "motif", "Compte de ce qui " + "partira", "Décocher retire durablement la personne de vos envois de " + "veille, jusqu'à ce que vous la recochiez.", "Aucune fiche n'est désignée pour la " + "veille. Cochez les personnes à qui vous voulez écrire, ici ou depuis leur fiche."].forEach(function (texte) { kitAssert(tranche.indexOf(texte) >= 0, texte); }); });
+KIT_TESTS.add("veille : écran de préparation — aucun hook imbriqué", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut && tranche.length > 3500, "tranche renderVeille non vide"); ["use" + "State", "use" + "Memo", "use" + "Ref", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
+KIT_TESTS.add("veille : écran de préparation — état avant récupération", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')), debut = babel.indexOf("function App" + "(props)"), app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); kitAssert(app.indexOf("veilleCategories" + "Exclues") >= 0 && app.indexOf("setVeilleCategories" + "Exclues") >= 0, "état des catégories avant la garde"); });
+KIT_TESTS.add("veille : production — choix, aperçu et garde nominative", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); ["Sans aucun " + "nom", "Le fichier ne contient ni nom, ni entreprise, ni adresse : seulement des situations d'entreprise " + "numérotées.", "Avec les " + "identités", "Le fichier contient aussi prénom, nom, entreprise, fonction et lieu. Vos notes et vos échanges n'en font jamais partie, quel que soit le " + "mode.", "Voir ce qui va " + "sortir", "Produire le " + "fichier", "Ce fichier contient des éléments nominatifs alors que le mode choisi l'interdit :", "Corrigez les fiches concernées avant de produire le " + "fichier."].forEach(function (texte) { kitAssert(tranche.indexOf(texte) >= 0, texte); }); kitAssert(tranche.indexOf("local" + "Storage") === -1 && tranche.indexOf("session" + "Storage") === -1, "mode jamais mémorisé par le rendu"); ["fetch", "XMLHttp" + "Request", "navigator.send" + "Beacon"].forEach(function (reseau) { kitAssert(tranche.indexOf(reseau) === -1, reseau); }); kitAssert(tranche.indexOf("disabled={!veilleApercuVisible || fuitesVeille.length > " + "0}") >= 0, "production après aperçu et sans fuite"); });
+KIT_TESTS.add("veille : production — états avant récupération et aucun hook imbriqué", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')), debutApp = babel.indexOf("function App" + "(props)"), avantGarde = babel.slice(debutApp, babel.indexOf("if (recu" + "peration) return", debutApp)), debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); ["veille" + "Mode", "setVeille" + "Mode", "veilleApercu" + "Visible", "setVeilleApercu" + "Visible"].forEach(function (etat) { kitAssert(avantGarde.indexOf(etat) >= 0, etat + " avant la garde"); }); kitAssert(tranche.length > 6500 && tranche.length < 18000, "longueur bornée du rendu"); ["use" + "State", "use" + "Memo", "use" + "Ref", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
+KIT_TESTS.add("veille : lancement — registre complet et identifiants distincts", function () { var profils = [{ numero: 1, ids: ["a", "b"] }, { numero: 2, ids: ["c"] }], un = KIT_PURE.composeLancementVeille(profils, "restreint", 3, "2026-09-11T10:20:30.000Z"), deux = KIT_PURE.composeLancementVeille(profils, "restreint", 3, "2026-09-11T10:20:30.000Z"); kitAssert(un.id && deux.id && un.id !== deux.id, "identifiants distincts"); kitAssert(un.date === "2026-09-11T10:20:30.000Z" && un.mode === "restreint" && un.nombreProfils === 2 && un.nombreDestinataires === 3 && un.etat === "ouvert-production", "métadonnées du lancement"); kitAssert(JSON.stringify(un.profils) === JSON.stringify([{ numero: 1, ficheIds: ["a", "b"] }, { numero: 2, ficheIds: ["c"] }]), "correspondance complète"); });
+KIT_TESTS.add("veille : écran de préparation — moteurs partagés et règles non recopiées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("KIT_PURE.aptitude" + "Veille") >= 0 && tranche.indexOf("KIT_PURE.profils" + "Veille") >= 0, "moteurs appelés"); kitAssert(tranche.indexOf("Avocat / " + "EC") === -1, "catégorie non comparée dans le rendu"); ["fiche arch" + "ivée", "en transition :", "pas d'adresse " + "électronique", "convention collective " + "manquante", "effectif " + "inconnu"].forEach(function (motif) { kitAssert(tranche.indexOf(motif) === -1, "motif non recopié : " + motif); }); });
+KIT_TESTS.add("veille : écran de préparation — routeur et navigation", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var route = '{view === "' + 'veille" ? renderVeille() : null}', nav = 'navBtn("' + 'veille", "Veille")', bas = '{ id: "' + 'veille", label: "Veille"'; kitAssert(KIT_SOURCE_HTML.indexOf(route) >= 0, "route veille"); kitAssert(KIT_SOURCE_HTML.indexOf(nav) >= 0 && KIT_SOURCE_HTML.indexOf(bas) >= 0, "navigation veille"); });
+KIT_TESTS.add("veille : écran de préparation — exclusion affichée si présente", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Veille("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Nav(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("ecartees.length > " + "0 ?") >= 0, "bloc conditionné par les fiches écartées"); });
+KIT_TESTS.add("veille : profils — regroupement distingue registre et seuil", function () { var p = KIT_PURE.profilsVeille([ficheVeilleTest("alpha"), ficheVeilleTest("beta"), ficheVeilleTest("gamma", { registre: "tu" }), ficheVeilleTest("delta", { seuilEffectif: "300" })]); kitAssert(p.length === 3 && p.some(function (x) { return x.nombreDestinataires === 2; })); });
+KIT_TESTS.add("veille : profils — activité relue et libellé officiel divergent", function () { var p = KIT_PURE.profilsVeille([ficheVeilleTest("alpha"), ficheVeilleTest("beta", { activiteRelue: "" })]); kitAssert(p.length === 2 && p.some(function (x) { return x.valeurs.activite === "Libellé officiel synthétique"; })); });
+KIT_TESTS.add("veille : profils — activités non relues regroupées sur l'officiel", function () { var p = KIT_PURE.profilsVeille([ficheVeilleTest("alpha", { activite: "Saisie une", activiteRelue: "" }), ficheVeilleTest("beta", { activite: "Saisie deux", activiteRelue: "" })]); kitAssert(p.length === 1 && p[0].nombreDestinataires === 2); });
+KIT_TESTS.add("veille : profils — effectif exact réduit à sa tranche", function () { var c = ficheVeilleTest("alpha", { effectifTranche: "", effectifPrecis: 312 }), p = KIT_PURE.profilsVeille([c]), s = JSON.stringify(KIT_PURE.serialiseProfils(p, "restreint", {})); kitAssert(p[0].valeurs.effectif === "250-499 sal." && s.indexOf("312") === -1); });
+KIT_TESTS.add("veille : profils — branche avec IDCC ou libellé seul", function () { var avec = KIT_PURE.valeursTransmises(ficheVeilleTest("alpha")), sans = KIT_PURE.valeursTransmises(ficheVeilleTest("beta", { sector: "Industries électriques et gazières (IEG)" })), hors = KIT_PURE.valeursTransmises(ficheVeilleTest("gamma", { sector: "Convention synthétique hors liste" })); kitAssert(avec.branche.idcc === "3248" && sans.branche.libelle && !sans.branche.idcc && hors.branche.libelle === "Convention synthétique hors liste"); });
+KIT_TESTS.add("veille : profils — seuil absent explicitement inconnu", function () { kitAssert(KIT_PURE.valeursTransmises(ficheVeilleTest("alpha", { seuilEffectif: "" })).seuil === "seuil inconnu"); });
+KIT_TESTS.add("veille : profils — date de veille absente puis la plus récente", function () { var a = ficheVeilleTest("alpha"), b = ficheVeilleTest("beta"); kitAssert(KIT_PURE.profilsVeille([a])[0].derniereVeille === "aucune"); a.interactions = [{ type: KIT_PURE.TYPE_INTERACTION_VEILLE, date: "2026-02-01" }, { type: "email", date: "2026-09-01" }]; b.interactions = [{ type: KIT_PURE.TYPE_INTERACTION_VEILLE, date: "2026-06-03" }]; kitAssert(KIT_PURE.profilsVeille([a, b])[0].derniereVeille === "2026-06-03"); });
+KIT_TESTS.add("veille : profils — numérotation déterministe par valeurs transmises", function () { var a = ficheVeilleTest("alpha", { registre: "tu" }), b = ficheVeilleTest("beta", { seuilEffectif: "300" }), un = KIT_PURE.profilsVeille([a, b]), deux = KIT_PURE.profilsVeille([b, a]); kitAssert(JSON.stringify(un) === JSON.stringify(deux), "tri lexicographique de la représentation JSON canonique"); });
+KIT_TESTS.add("veille : profils — mode restreint sans fuite sur six fiches", function () { var cs = [], map = {}, i; for (i = 1; i <= 6; i += 1) { var c = ficheVeilleTest("fiche-synthetique-" + i, { firstName: "PrenomUnique" + i, lastName: "NomUnique" + i, company: "EntrepriseUnique" + i, email: "boiteunique" + i + "@exemple.test", address: i + " avenue Fictive" }); cs.push(c); map[c.id] = c; } kitAssert(KIT_PURE.fuiteNominative(KIT_PURE.serialiseProfils(KIT_PURE.profilsVeille(cs), "restreint", map), cs).length === 0); });
+KIT_TESTS.add("veille : profils — garde détecte une entreprise dans l'activité", function () { var c = ficheVeilleTest("alpha", { company: "Entreprise Licorne Synthétique", activite: "Conseil pour Entreprise Licorne Synthétique", activiteRelue: "Conseil pour Entreprise Licorne Synthétique" }); kitAssert(KIT_PURE.fuiteNominative(KIT_PURE.serialiseProfils(KIT_PURE.profilsVeille([c]), "restreint", {}), [c]).length > 0); });
+KIT_TESTS.add("veille : profils — mode étendu à liste close", function () { var c = ficheVeilleTest("alpha", { firstName: "Alix", lastName: "Fictif", company: "Atelier Boréal", jobTitle: "Responsable", workLocation: "Site Azur", notes: "SECRET_NOTES", metAt: "SECRET_RENCONTRE", nextAction: "SECRET_ACTION", origin: "SECRET_ORIGINE", followUpNote: "SECRET_RELANCE", tags: ["SECRET_ETIQUETTE"], interactions: [{ type: "email", date: "2026-05-01", comment: "SECRET_COMMENTAIRE" }] }), sortie = KIT_PURE.serialiseProfils(KIT_PURE.profilsVeille([c]), "etendu", { alpha: c }), d = sortie.profils[0].destinataires[0], texte = JSON.stringify(sortie); kitAssert(JSON.stringify(Object.keys(d)) === JSON.stringify(["prenom", "nom", "entreprise", "fonction", "lieuExercice", "categorie", "dernierEchange"])); ["SECRET_NOTES", "SECRET_RENCONTRE", "SECRET_ACTION", "SECRET_ORIGINE", "SECRET_RELANCE", "SECRET_ETIQUETTE", "SECRET_COMMENTAIRE"].forEach(function (secret) { kitAssert(texte.indexOf(secret) === -1, secret); }); });
+KIT_TESTS.add("veille : profils — entrées limites sans exception", function () { [[], null].forEach(function (x) { kitAssert(KIT_PURE.profilsVeille(x).length === 0); }); var sansId = ficheVeilleTest("", {}), doublons = [ficheVeilleTest("meme"), ficheVeilleTest("meme")]; kitAssert(KIT_PURE.profilsVeille([sansId])[0].ids.length === 0); kitAssert(KIT_PURE.profilsVeille(doublons)[0].nombreDestinataires === 2); kitAssert(KIT_PURE.serialiseProfils(null, null, null).profils.length === 0 && KIT_PURE.fuiteNominative(null, null).length === 0); });
+KIT_TESTS.add("veille : valeurs initiales d'une fiche créée", function () { var v = KIT_PURE.champsVeilleInit({}); kitAssert(v.recoitVeille === false && v.seuilEffectif === "" && v.activiteRelue === ""); });
+KIT_TESTS.add("veille : seuil limité aux six valeurs prévues", function () { ["", "-11", "11", "50", "300", "1000"].forEach(function (v) { kitAssert(KIT_PURE.normaliseSeuilEffectif(v) === v, v); }); kitAssert(KIT_PURE.normaliseSeuilEffectif("250") === ""); });
+KIT_TESTS.add("veille : champs synchronisés sans date de veille", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var d = KIT_SOURCE_HTML.indexOf("var MERGE_" + "FIELDS = ["); kitAssert(d >= 0, "déclaration des champs synchronisés"); var liste = KIT_SOURCE_HTML.slice(d, KIT_SOURCE_HTML.indexOf("];", d)); ["recoitVeille", "seuilEffectif", "activiteRelue"].forEach(function (champ) { kitAssert(liste.indexOf(String.fromCharCode(34) + champ + String.fromCharCode(34)) >= 0, champ); }); kitAssert(liste.indexOf("dateVeille") === -1 && liste.indexOf("veilleDate") === -1, "aucune date de veille synchronisée comme champ de fiche"); });
+KIT_TESTS.add("veille : relecture d'activité — seules les fiches sœurs au texte exact", function () { var contacts = [{ id: "source", company: "ATELIER BORÉAL", activite: "Conseil ciblé" }, { id: "meme-1", company: "atelier-boreal", activite: "Conseil ciblé" }, { id: "meme-2", company: "  ATELIER   BORÉAL ", activite: "Conseil ciblé" }, { id: "different", company: "ATELIER BORÉAL", activite: "Conseil général" }, { id: "autre", company: "AUTRE SOCIÉTÉ", activite: "Conseil ciblé" }, { company: "ATELIER BORÉAL", activite: "Conseil ciblé" }], ids = KIT_PURE.idsActiviteRelue(contacts, "source", "ATELIER BORÉAL", "Conseil ciblé", "Conseil ciblé", ""); kitAssert(JSON.stringify(ids) === JSON.stringify(["meme-1", "meme-2"]), JSON.stringify(ids)); });
+KIT_TESTS.add("veille : relecture d'activité — marque strictement égale", function () { kitAssert(KIT_PURE.activiteEstRelue("Conseil ciblé", "Conseil ciblé") === true); kitAssert(KIT_PURE.activiteEstRelue("Conseil ciblé", "Conseil cible") === false); kitAssert(KIT_PURE.activiteEstRelue("Conseil ciblé ", "Conseil ciblé") === false); kitAssert(KIT_PURE.activiteEstRelue("", "") === false); kitAssert(KIT_PURE.valeursTransmises(ficheVeilleTest("espace", { activite: "Conseil ciblé ", activiteRelue: "Conseil ciblé" })).activite === "Libellé officiel synthétique", "l'espace final invalide aussi la transmission"); });
+KIT_TESTS.add("veille : relecture d'activité — câblage après l'annonce de partage", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf('"ACTIVITÉ DE L\'ENTREPRISE"'), fin = KIT_SOURCE_HTML.indexOf('"LIEU D\'EXERCICE"', debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), annonce = tranche.indexOf("Activité partagée avec "), bouton = tranche.indexOf("Bon à transmettre à la " + "veille"), mention = tranche.indexOf("Activité relue, transmise telle quelle à la " + "veille."), retrait = tranche.indexOf('"Ret' + 'irer"'), aide = tranche.indexOf("Tant qu'une activité n'est pas relue, la veille transmet le libellé officiel INSEE à sa " + "place."); kitAssert(debut >= 0 && fin > debut && tranche.length > 1500, "ancres et longueur du champ activité"); [bouton, mention, retrait, aide].forEach(function (position) { kitAssert(position > annonce, "élément de relecture après l'annonce"); }); });
+KIT_TESTS.add("veille : relecture d'activité — câblage de la propagation", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function submit" + "Form("), fin = KIT_SOURCE_HTML.indexOf("function export" + "Excel(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), decision = tranche.indexOf("KIT_PURE.ids" + "ActiviteRelue(contacts"), source = tranche.indexOf("updContact(existingId, " + "payload)"), marque = tranche.indexOf("idsRelus.for" + "Each(function (id)"), patch = tranche.indexOf("{ activiteRelue: payload." + "activiteRelue }"); kitAssert(debut >= 0 && fin > debut && tranche.length > 3000, "ancres et longueur de submitForm"); kitAssert(decision >= 0 && decision < source && source < marque && marque < patch, "décision avant les écritures chaînées de la marque"); });
+KIT_TESTS.add("veille : chargement et payload des trois champs", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var init = app.slice(app.indexOf("function init" + "Form("), app.indexOf("function submit" + "Form(")); var submitStart = app.indexOf("function submit" + "Form("); var submit = app.slice(submitStart, app.indexOf("function export" + "Excel(", submitStart)); ["recoitVeille", "seuilEffectif", "activiteRelue"].forEach(function (champ) { kitAssert(init.indexOf(champ) >= 0, "chargement " + champ); kitAssert(submit.indexOf(champ) >= 0, "payload " + champ); }); });
+KIT_TESTS.add("veille : états déclarés avant les retours conditionnels", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var debut = babel.indexOf("function App" + "(props)"); var app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); ["fRecoit" + "Veille", "fSeuil" + "Effectif", "fActivite" + "Relue", "fReg" + "istre"].forEach(function (etat) { kitAssert(app.indexOf(etat) >= 0, etat); }); });
+KIT_TESTS.add("veille : filtre tableau de bord — libellé et options", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf('placeholder="Recher' + 'cher…"'), fin = KIT_SOURCE_HTML.indexOf("{filtered.length === " + "0 ?", debut), barre = KIT_SOURCE_HTML.slice(debut, fin); ["VEI" + "LLE", "Tou" + "tes", "Reçoit la " + "veille", "Ne reçoit " + "pas"].forEach(function (libelle) { kitAssert(barre.indexOf(libelle) >= 0, libelle); }); });
+KIT_TESTS.add("veille : filtre tableau de bord — état avant les retours", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var babel = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')), debut = babel.indexOf("function App" + "(props)"), app = babel.slice(debut, babel.indexOf("if (recu" + "peration) return", debut)); kitAssert(app.indexOf("fVe" + "ille") >= 0 && app.indexOf("setF" + "Veille") >= 0 && app.indexOf('useState("' + 'all")') >= 0, "état du filtre avant la garde de récupération"); });
+KIT_TESTS.add("veille : filtre tableau de bord — clause combinée", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var filtered = contacts." + "filter(function (c) {"), fin = KIT_SOURCE_HTML.indexOf("return " + "true;", debut), filtre = KIT_SOURCE_HTML.slice(debut, fin), precedent = 'if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return ' + 'false;', oui = 'if (fVeille === "oui" && c.recoitVeille !== true) return ' + 'false;', non = 'if (fVeille === "non" && c.recoitVeille === true) return ' + 'false;', recherche = "if (se" + "arch) {"; kitAssert(filtre.indexOf(precedent) >= 0 && filtre.indexOf(oui) > filtre.indexOf(precedent) && filtre.indexOf(non) > filtre.indexOf(oui) && filtre.indexOf(recherche) > filtre.indexOf(non), "clauses indépendantes dans la chaîne des filtres"); });
+KIT_TESTS.add("veille : filtre tableau de bord — six filtres conservés", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf('placeholder="Recher' + 'cher…"'), fin = KIT_SOURCE_HTML.indexOf("{filtered.length === " + "0 ?", debut), barre = KIT_SOURCE_HTML.slice(debut, fin); ["setF" + "Comp", "Caté" + "gorie", "Sta" + "tut", "Prio" + "rité", "T" + "ag", "CCN de " + "branche"].forEach(function (marqueur) { kitAssert(barre.indexOf(marqueur) >= 0, marqueur); }); });
+KIT_TESTS.add("veille : formulaire câblé sans hook imbriqué", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var tranche = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Form("), KIT_SOURCE_HTML.indexOf("function render" + "Detail(")); kitAssert(tranche.length > 5000); kitAssert(tranche.indexOf("Reçoit la veille " + "juridique") >= 0 && tranche.indexOf("Vouvoie" + "ment") >= 0 && tranche.indexOf("Tutoie" + "ment") >= 0); ["use" + "State", "use" + "Memo", "use" + "Ref", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
+KIT_TESTS.add("veille : seuil dans la seule modale d'effectif", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function renderManual" + "EffectifModal("), KIT_SOURCE_HTML.indexOf("function render" + "LogModal(")); var panneauStart = KIT_SOURCE_HTML.indexOf("showEffectifs" + "Panel ?"); var panneau = KIT_SOURCE_HTML.slice(panneauStart, KIT_SOURCE_HTML.indexOf("showMeeting" + "Settings ?", panneauStart)); kitAssert(modal.indexOf("seuil" + "Effectif") >= 0 && modal.indexOf("L'effectif INSEE ne dit pas si un seuil est " + "franchi") >= 0); kitAssert(panneau.indexOf("seuil" + "Effectif") === -1); });
+KIT_TESTS.add("veille : registre vide lu comme vous partout", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var app = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var voeuxStart = app.indexOf("function openVoeux" + "Modal("); var inviteStart = app.indexOf("function openInvite" + "ModalNow("); var voeux = app.slice(voeuxStart, voeuxStart + 1000); var invite = app.slice(inviteStart, inviteStart + 1000); var lecture = 'c.registre === "tu" ? "tu" : "vous"'; kitAssert(voeux.indexOf(lecture) >= 0); kitAssert(invite.indexOf(lecture) >= 0); });
+KIT_TESTS.add("veille : aptitude — fiche complète retenue", function () { var r = KIT_PURE.aptitudeVeille({ recoitVeille: true, category: "Client", archived: false, inTransition: false, email: "contact@example.test", sector: "Métallurgie", effectifTranche: "21" }); kitAssert(JSON.stringify(r) === JSON.stringify({ retenue: true, motif: "", libelle: "" })); });
+KIT_TESTS.add("veille : aptitude — chacun des sept motifs et son libellé", function () { var base = { recoitVeille: true, category: "Client", archived: false, inTransition: false, email: "contact@example.test", sector: "Métallurgie", effectifTranche: "21" }, cas = [{ patch: { recoitVeille: false }, motif: "non-designee", libelle: "pas désignée pour la veille" }, { patch: { category: "Avocat / EC" }, motif: "categorie-exclue", libelle: "catégorie Avocat / EC" }, { patch: { archived: true }, motif: "archivee", libelle: "fiche archivée" }, { patch: { inTransition: true }, motif: "en-transition", libelle: "en transition : l'entreprise inscrite n'est plus la sienne" }, { patch: { email: "" }, motif: "sans-courriel", libelle: "pas d'adresse électronique" }, { patch: { sector: "" }, motif: "sans-branche", libelle: "convention collective manquante" }, { patch: { effectifTranche: "" }, motif: "sans-effectif", libelle: "effectif inconnu" }]; cas.forEach(function (item) { var r = KIT_PURE.aptitudeVeille(Object.assign({}, base, item.patch)); kitAssert(r.retenue === false && r.motif === item.motif && r.libelle === item.libelle, item.motif + " : " + JSON.stringify(r)); }); });
+KIT_TESTS.add("veille : aptitude — priorités catégorie puis archivage", function () { var base = { recoitVeille: true, category: "Client", archived: false, inTransition: false, email: "contact@example.test", sector: "Métallurgie", effectifTranche: "21" }, avocatCoche = KIT_PURE.aptitudeVeille(Object.assign({}, base, { category: "Avocat / EC" })), avocatNonCoche = KIT_PURE.aptitudeVeille(Object.assign({}, base, { category: "Avocat / EC", recoitVeille: false })), archiveeSansCourriel = KIT_PURE.aptitudeVeille(Object.assign({}, base, { archived: true, email: "" })); kitAssert(avocatCoche.motif === "categorie-exclue" && avocatNonCoche.motif === "categorie-exclue", "la catégorie exclue prime toujours sur le marqueur"); kitAssert(archiveeSansCourriel.motif === "archivee", "l'archivage prime sur l'absence de courriel"); });
+KIT_TESTS.add("veille : aptitude — branches particulières", function () { var base = { recoitVeille: true, category: "Client", email: "contact@example.test", effectifTranche: "21" }; kitAssert(KIT_PURE.aptitudeVeille(Object.assign({}, base, { sector: "Établissement public" })).retenue === true); ["Autre", "Sans CCN"].forEach(function (sector) { var r = KIT_PURE.aptitudeVeille(Object.assign({}, base, { sector: sector })); kitAssert(r.motif === "sans-branche", sector); }); });
+KIT_TESTS.add("veille : aptitude — effectif sentinelle ou exact", function () { var base = { recoitVeille: true, category: "Client", email: "contact@example.test", sector: "Métallurgie" }; kitAssert(KIT_PURE.aptitudeVeille(Object.assign({}, base, { effectifTranche: "NN" })).motif === "sans-effectif"); kitAssert(KIT_PURE.aptitudeVeille(Object.assign({}, base, { effectifTranche: "", effectifPrecis: 37 })).retenue === true); });
+KIT_TESTS.add("veille : aptitude — seuil sans effet sur la retenue", function () { var base = { recoitVeille: true, category: "Client", email: "contact@example.test", sector: "Métallurgie", effectifTranche: "21" }; [undefined, "", "-11", "11", "50", "300", "1000"].forEach(function (seuil) { var r = KIT_PURE.aptitudeVeille(Object.assign({}, base, { seuilEffectif: seuil })); kitAssert(r.retenue === true, String(seuil)); }); });
+KIT_TESTS.add("veille : aptitude — entrées limites sans exception", function () { [null, undefined, {}, { recoitVeille: false }].forEach(function (contact) { var r = KIT_PURE.aptitudeVeille(contact); kitAssert(r && r.retenue === false && !!r.motif, String(contact)); }); });
 KIT_TESTS.add("effectifs ordre complet et inconnus", function () { var codes = ["00", "01", "02", "03", "11", "12", "21", "22", "31", "32", "41", "42", "51", "52", "53"]; codes.forEach(function (code, i) { kitAssert(KIT_PURE.trancheRank(code) === i, code); }); kitAssert(KIT_PURE.trancheRank("NN") === -1 && KIT_PURE.trancheRank() === -1 && KIT_PURE.trancheRank("XX") === -1); });
 KIT_TESTS.add("effectifs libellés exacts", function () { var expected = { "00": "0 sal.", "01": "1-2 sal.", "02": "3-5 sal.", "03": "6-9 sal.", "11": "10-19 sal.", "12": "20-49 sal.", "21": "50-99 sal.", "22": "100-199 sal.", "31": "200-249 sal.", "32": "250-499 sal.", "41": "500-999 sal.", "42": "1000-1999 sal.", "51": "2000-4999 sal.", "52": "5000-9999 sal.", "53": "10000+ sal." }; Object.keys(expected).forEach(function (code) { kitAssert(KIT_PURE.trancheLabel(code) === expected[code], code); }); kitAssert(KIT_PURE.trancheLabel("NN") === ""); });
 KIT_TESTS.add("effectifs dérivation aux bornes", function () { var pairs = [[0,"00"],[1,"01"],[2,"01"],[3,"02"],[5,"02"],[6,"03"],[9,"03"],[10,"11"],[19,"11"],[20,"12"],[49,"12"],[50,"21"],[99,"21"],[100,"22"],[199,"22"],[200,"31"],[249,"31"],[250,"32"],[499,"32"],[500,"41"],[999,"41"],[1000,"42"],[1999,"42"],[2000,"51"],[4999,"51"],[5000,"52"],[9999,"52"],[10000,"53"]]; pairs.forEach(function (pair) { kitAssert(KIT_PURE.trancheFromCount(pair[0]) === pair[1], String(pair[0])); }); });
@@ -788,7 +916,7 @@ KIT_TESTS.add("sections du récapitulatif plafonnées sans mutation", function (
 KIT_TESTS.add("semis du récapitulatif hebdomadaire", function () { var s = { updatedAt: "2026-01-02T03:04:05.000Z" }; kitAssert(KIT_PURE.seedRecapHebdo(s) === true && s.recapHebdo === true && s.updatedAt === "2026-01-02T03:04:05.000Z"); var f = { recapHebdo: false }; kitAssert(KIT_PURE.seedRecapHebdo(f) === false && f.recapHebdo === false); var t = { recapHebdo: true }; kitAssert(KIT_PURE.seedRecapHebdo(t) === false && t.recapHebdo === true); kitAssert(KIT_PURE.seedRecapHebdo(null) === false); });
 KIT_TESTS.add("migration branche le semis du récapitulatif", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.seedRecapHebdo\(d\.settings\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("porte du récapitulatif hebdomadaire", function () { kitAssert(KIT_PURE.recapGate(true, true, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, false, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, true, true, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(false, true, false, null, "2026-W32", 5) === false); kitAssert(KIT_PURE.recapGate(true, undefined, false, null, "2026-W32", 5) === true); kitAssert(KIT_PURE.recapGate(true, true, false, "2026-W32", "2026-W32", 5) === false); });
-KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.5\.12["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v54["']/.test(KIT_SOURCE_SW)); });
+KIT_TESTS.add("version applicative du document", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /var APP_VERSION = ["']1\.6\.0["']/.test(KIT_SOURCE_HTML)); kitAssert(typeof KIT_SOURCE_SW === "undefined" || /var CACHE_NAME = ["']kit-crm-v55["']/.test(KIT_SOURCE_SW)); });
 KIT_TESTS.add("KIT_PURE : fonctions retirées", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("var KIT_" + "PURE"), fin = KIT_SOURCE_HTML.indexOf("var KIT_" + "TESTS", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut); kitAssert(tranche.indexOf("stats" + "Dossiers") === -1); kitAssert(tranche.indexOf("recipro" + "cite") === -1); kitAssert(tranche.indexOf("apporteurDepuis" + "Origine") === -1); });
 KIT_TESTS.add("stockage : niveaux et plafond", function () { kitAssert(JSON.stringify(KIT_PURE.niveauStockage(3650434)) === JSON.stringify({ pct: 70, niveau: "attention" })); kitAssert(KIT_PURE.niveauStockage(3093299).pct === 59 && KIT_PURE.niveauStockage(3093299).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage(3145728).pct === 60 && KIT_PURE.niveauStockage(3145728).niveau === "attention"); kitAssert(KIT_PURE.niveauStockage(4194304).pct === 80 && KIT_PURE.niveauStockage(4194304).niveau === "critique"); kitAssert(KIT_PURE.niveauStockage(50, 100).pct === 50 && KIT_PURE.niveauStockage(50, 100).niveau === "ok"); kitAssert(KIT_PURE.niveauStockage("x").pct === 0 && KIT_PURE.niveauStockage("x").niveau === "ok"); });
 KIT_TESTS.add("stockage : détection du quota dépassé", function () { kitAssert(KIT_PURE.estQuotaDepasse({ name: "QuotaExceededError" })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 22 })); kitAssert(KIT_PURE.estQuotaDepasse({ code: 1014 })); kitAssert(KIT_PURE.estQuotaDepasse({ name: "NS_ERROR_DOM_QUOTA_REACHED" })); kitAssert(!KIT_PURE.estQuotaDepasse({ name: "TypeError" })); kitAssert(!KIT_PURE.estQuotaDepasse(null)); kitAssert(!KIT_PURE.estQuotaDepasse("x")); });
@@ -915,7 +1043,10 @@ KIT_TESTS.add("câblage activité : champs fusionnables et horodatage groupé", 
 KIT_TESTS.add("câblage activité : capture SIRENE avec fiche cible", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function effectif" + "Patch("), fin = KIT_SOURCE_HTML.indexOf("function init" + "Form(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), panneauDebut = KIT_SOURCE_HTML.indexOf("Taille des " + "entreprises"), panneauFin = KIT_SOURCE_HTML.indexOf("function render" + "BottomNav(", panneauDebut), panneau = KIT_SOURCE_HTML.slice(panneauDebut, panneauFin), compte = panneau.indexOf("Compte rendu :"), activite = panneau.indexOf("Activité préremplie sur"); kitAssert(tranche.indexOf("KIT_PURE.patch" + "Activite(cible || {}, " + "candidate,") >= 0); kitAssert(tranche.indexOf("effectifPatch(" + "candidate)") === -1 && tranche.indexOf("effectifPatch(" + "match)") === -1); kitAssert(tranche.indexOf("ficheCourante(") >= 0 && tranche.indexOf("contactsRef." + "current") >= 0); kitAssert((tranche.match(/working\.filter\(function \(x\) \{ return x\.id === target\.id; \}\)\[0\]/g) || []).length >= 2); kitAssert((tranche.match(/report\.activites \+= 1/g) || []).length === 2); kitAssert(tranche.indexOf("cibleLot.activite !== p." + "activite") >= 0); kitAssert(tranche.indexOf("Activité " + "préremplie : «") >= 0 && tranche.indexOf("Activité conservée (votre " + "saisie)") >= 0); kitAssert(panneauDebut >= 0 && panneauFin > panneauDebut && compte >= 0 && compte < activite); kitAssert(panneau.indexOf("bulkReport.activites > " + "0") >= 0); kitAssert(panneau.indexOf("Ces actions mémorisent aussi le code d'activité " + "NAF") >= 0); });
 KIT_TESTS.add("câblage activité : création et formulaire", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var add = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function add" + "Contact("), KIT_SOURCE_HTML.indexOf("function upd" + "Contact(")), refreshDebut = KIT_SOURCE_HTML.indexOf("function refresh" + "Effectif("), refreshFin = KIT_SOURCE_HTML.indexOf("function prepare" + "BulkEffectifs(", refreshDebut), refresh = KIT_SOURCE_HTML.slice(refreshDebut, refreshFin); kitAssert(add.indexOf("activite: payload." + "activite") >= 0); var debut = KIT_SOURCE_HTML.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), formulaire = KIT_SOURCE_HTML.slice(debut, debut + 3000); kitAssert(formulaire.indexOf("maxLength: " + "200") >= 0 && formulaire.indexOf("CCN de " + "branche)") >= 0 && formulaire.indexOf("Reprendre le libellé " + "officiel") >= 0 && formulaire.indexOf("NAF 2025 ") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("activite: fAct.trim().slice(0, " + "200)") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("consensus(function (c) { return c." + "activite; })") >= 0); kitAssert(KIT_SOURCE_HTML.indexOf('setFAct(ex ? (ex.' + 'activite || "") : "")') >= 0); kitAssert(KIT_SOURCE_HTML.indexOf("if (act && !fAct." + "trim()) setFAct(act)") >= 0); kitAssert(formulaire.indexOf("fAct !== existing." + "nafLibelle") >= 0); kitAssert(refresh.indexOf("(l'activité que vous avez saisie est " + "conservée)") >= 0); });
 KIT_TESTS.add("câblage activité : fiche, candidats, Entreprises", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), detail = KIT_SOURCE_HTML.slice(debut, fin), act = detail.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), eff = detail.indexOf("EFFECTIF " + "ENTREPRISE"); kitAssert(act >= 0 && detail.indexOf("Activité non " + "renseignée") >= 0 && detail.indexOf("« Actualiser » l'effectif récupère le code " + "NAF.") >= 0 && act < eff); kitAssert(detail.indexOf("c.nafLibelle && c.nafLibelle !== c." + "activite ?") >= 0); kitAssert(detail.indexOf("{!c." + "nafCode ? <p") >= 0); kitAssert(detail.indexOf('{"ancien code " + c.' + 'nafRev2Code}') === -1); kitAssert(detail.indexOf('" · ancien code " + c.' + 'nafRev2Code') >= 0); var modal = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "EffectifModal("), debut); kitAssert(modal.indexOf('"Activité : " + ' + "lib") >= 0); var entreprises = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Companies("), KIT_SOURCE_HTML.indexOf("function render" + "Stats(")); kitAssert(entreprises.indexOf("c." + "activite || \"\").trim()") >= 0); });
-KIT_TESTS.add("câblage activité : export et import", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var exportDebut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), exportTranche = KIT_SOURCE_HTML.slice(exportDebut, exportDebut + 4000), nbInteractions = exportTranche.indexOf("Nb " + "interactions"), codeNaf = exportTranche.indexOf('"Code NAF ' + '2025"'); kitAssert(exportDebut >= 0 && nbInteractions >= 0 && nbInteractions < codeNaf); kitAssert(exportTranche.indexOf('"Nb interactions", "Activité", "Code NAF ' + '2025"]') >= 0); kitAssert(/EXPORT_COLW = \[[^\]]*, 40, 12\]/.test(KIT_SOURCE_HTML)); kitAssert(exportTranche.indexOf("c.activite || " + '"", c.nafCode || ""') >= 0); var importDebut = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("), importTranche = KIT_SOURCE_HTML.slice(importDebut, importDebut + 7000); kitAssert(importDebut >= 0 && importTranche.indexOf('=== "' + 'activite"') >= 0); kitAssert(importTranche.indexOf("if (iAct === iSect || iAct === " + "iEntr) iAct = -1") >= 0); kitAssert(importTranche.indexOf("activite: ((iAct >= 0 ? vals[iAct] : " + '"") || "").slice(0, 200)') >= 0); });
+KIT_TESTS.add("câblage activité : export et import", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var exportDebut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), exportTranche = KIT_SOURCE_HTML.slice(exportDebut, exportDebut + 4000), nbInteractions = exportTranche.indexOf("Nb " + "interactions"), codeNaf = exportTranche.indexOf('"Code NAF ' + '2025"'); kitAssert(exportDebut >= 0 && nbInteractions >= 0 && nbInteractions < codeNaf); kitAssert(exportTranche.indexOf('"Activité", "Code NAF 2025", "Reçoit la ' + 'veille"]') >= 0); kitAssert(/EXPORT_COLW = \[[^\]]*, 40, 12, 16\]/.test(KIT_SOURCE_HTML)); kitAssert(exportTranche.indexOf("c.activite || " + '"", c.nafCode || ""') >= 0); var importDebut = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("), importTranche = KIT_SOURCE_HTML.slice(importDebut, importDebut + 7000); kitAssert(importDebut >= 0 && importTranche.indexOf('=== "' + 'activite"') >= 0); kitAssert(importTranche.indexOf("if (iAct === iSect || iAct === " + "iEntr) iAct = -1") >= 0); kitAssert(importTranche.indexOf("activite: ((iAct >= 0 ? vals[iAct] : " + '"") || "").slice(0, 200)') >= 0); });
+KIT_TESTS.add("veille : export Excel et CSV — marqueur en dernière colonne", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function export" + "Excel("), fin = KIT_SOURCE_HTML.indexOf("async function buildStyled" + "Xlsx(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), entetes = tranche.slice(tranche.indexOf("var head" + "ers = ["), tranche.indexOf("];", tranche.indexOf("var head" + "ers = [")) + 2), lignes = tranche.slice(tranche.indexOf("return " + "["), tranche.indexOf("];", tranche.indexOf("return " + "[")) + 2); kitAssert(entetes.indexOf('"Activité", "Code NAF 2025", "Reçoit la ' + 'veille"]') >= 0, "la veille termine les en-têtes"); kitAssert(lignes.indexOf('c.activite || "", c.nafCode || "", c.recoitVeille ? "Oui" : "' + 'Non"') >= 0, "valeur Oui/Non en fin de ligne"); kitAssert(/EXPORT_COLW = \[[^\]]*, 40, 12, 16\]/.test(KIT_SOURCE_HTML), "largeur ajoutée en fin"); });
+KIT_TESTS.add("veille : import — détection et valeurs oui/non", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("), fin = KIT_SOURCE_HTML.indexOf("function handle" + "Import(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("var iVeille = findCol(hd, [\"ve" + "ille\"])") >= 0, "le mot-clé reconnaît Reçoit la veille, veille et Veille juridique indépendamment de l'ordre"); kitAssert(tranche.indexOf("stripAccents(String(vals[iVeille] || \"\")).toLowerCase() === \"o" + "ui\"") >= 0, "Oui, oui et OUI donnent vrai; Non, vide et toute autre valeur donnent faux"); });
+KIT_TESTS.add("veille : import — absence de colonne explicitement fausse à la création", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function processImport" + "Rows("), fin = KIT_SOURCE_HTML.indexOf("function handle" + "Import(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(tranche.indexOf("recoitVeille: iVeille >= 0 && stripAccents(String(vals[iVeille] || \"\")).toLowerCase() === \"o" + "ui\"") >= 0, "colonne absente : false, jamais undefined"); });
 KIT_TESTS.add("câblage activité : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("## Activité de l'" + "entreprise") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Reprendre le libellé " + "officiel") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Activité de l'entreprise (v1.5." + "10)") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("NAF " + "2025") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("(dit code APE, attribué par l'" + "INSEE)") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Le message « Activité conservée (votre saisie). » s'affiche lors du choix d'un " + "candidat") >= 0); });
 KIT_TESTS.add("câblage activité partagée : enregistrement et propagation", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function submit" + "Form("), fin = KIT_SOURCE_HTML.indexOf("function export" + "Excel(", debut), t = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut, "ancres submitForm"); var ordre = ["if (existingId) {", "var avant = ficheCourante(existingId, " + "contacts)", "var changement =", "KIT_PURE.cibles" + "Activite(", "updContact(existingId, payload)", "ids.forEach("]; for (var i = 1; i < ordre.length; i++) kitAssert(t.indexOf(ordre[i - 1]) >= 0 && t.indexOf(ordre[i]) > t.indexOf(ordre[i - 1]), "ordre " + ordre[i]); ["!fInTransition && changement && meme" + "Entreprise", ".trim() !== avant" + "Act", "cibles.conflits.length > " + "0", "cibles.conflits.slice(0, " + "5)", '" (archi' + 'vée)"', "Remplacer aussi", "Effacer aussi", "elle garde la " + "sienne", "elles gardent la " + "leur", '" ; et " + KIT_PURE.pluriel(cibles.conflits.length - 5', 'cibles.aAligner.length > 0 ? "\\nDans les deux cas', "Dans les deux cas votre fiche est " + "enregistrée"].forEach(function (motif) { kitAssert(t.indexOf(motif) >= 0, motif); }); var un = t.indexOf("KIT_PURE.cibles" + "Activite("); kitAssert(un >= 0 && t.indexOf("KIT_PURE.cibles" + "Activite(", un + 1) === -1, "un seul appel : aucune propagation à la création"); kitAssert(t.indexOf("var working = updContact(existingId, " + "payload);") >= 0 && t.indexOf("updContact(id, { activite: payload." + "activite }, null, working); });") >= 0, "chaînage working et patch réduit à l'activité"); kitAssert(t.indexOf("remplacer = confirm(payload." + "activite") >= 0, "la réponse de la question décide"); kitAssert(t.indexOf("remplacer = " + "true") === -1, "jamais de remplacement d'office"); kitAssert(t.indexOf("un ? \"porte\" : " + "\"portent\"") >= 0, "accord de la question"); kitAssert(t.indexOf("elle garde la " + "sienne") >= 0 && t.indexOf("elles gardent la " + "leur") >= 0, "les deux variantes d'accord"); kitAssert(t.indexOf("\" ; et \" + KIT_PURE.pluriel(cibles.conflits.length - " + "5") >= 0, "les fiches non nommées sont signalées"); kitAssert(t.indexOf("cibles.aAligner.length > 0 ? " + "\"\\nDans les deux cas") >= 0, "la phrase finale dépend des fiches à aligner"); var idsPurs = t.indexOf("KIT_PURE.ids" + "APropager(cibles, remplacer)"), boucle = t.indexOf("ids.forEach("), recap = t.indexOf("setPropagActiMsg({ id: existingId"), vue = t.indexOf('setView("contact")'); kitAssert(idsPurs >= 0 && idsPurs < boucle, "identifiants avant propagation"); kitAssert(recap > boucle && recap < vue, "compte rendu avant retour fiche"); kitAssert(t.indexOf("setPropagActiMsg({ id: existingId") >= 0 && t.indexOf("setPropagActiMsg({ id: existingId") < t.indexOf("setView(\"" + "contact\")"), "compte rendu posé avant le retour à la fiche"); });
 KIT_TESTS.add("câblage activité partagée : minuteur remplacé et hook avant les retours", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function submit" + "Form("), fin = KIT_SOURCE_HTML.indexOf("function export" + "Excel(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), annule = tranche.indexOf("clearTimeout(propagActiTimer." + "current)"), programme = tranche.indexOf("propagActiTimer.current = " + "setTimeout("); kitAssert(debut >= 0 && fin > debut && annule >= 0 && programme > annule); var appDebut = KIT_SOURCE_HTML.indexOf("function App(props)"), retour = KIT_SOURCE_HTML.indexOf("if (recu" + "peration) return", appDebut), app = KIT_SOURCE_HTML.slice(appDebut, retour); kitAssert(appDebut >= 0 && retour > appDebut && app.indexOf("var propagActiTimer = use" + "Ref(null);") >= 0); });
@@ -923,7 +1054,7 @@ KIT_TESTS.add("câblage activité partagée : compte rendu d'effacement", functi
 KIT_TESTS.add("câblage activité partagée : annonce du formulaire", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Form("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Detail(", debut), rf = KIT_SOURCE_HTML.slice(debut, fin), d = rf.indexOf("ACTIVITÉ DE L'" + "ENTREPRISE"), f = rf.slice(d, rf.indexOf("LIEU D'" + "EXERCICE", d)); kitAssert(rf.length > 5000, "tranche renderForm non vide"); kitAssert(debut >= 0 && fin > debut && d >= 0, "ancres activité"); kitAssert(f.indexOf("Activité partagée " + "avec ") >= 0); kitAssert(f.indexOf("si vous modifiez l'activité, l'enregistrement la " + "recopie") >= 0); kitAssert(f.indexOf("Reprendre le libellé " + "officiel") < f.indexOf("Activité partagée " + "avec "), "ligne en dernier dans le bloc du champ"); kitAssert(f.indexOf("pluriel(nActi, \"autre fiche\", " + "\"autres fiches\")") >= 0, "accord de la ligne"); kitAssert(rf.indexOf("KIT_PURE.denominationMatch(fCompany, existing." + "company") >= 0); kitAssert(rf.indexOf("KIT_PURE.cibles" + "Activite(contacts, existing.id, fCompany") >= 0); kitAssert(rf.indexOf("cActi.aAligner.length + cActi.conflits.length + cActi." + "identiques") >= 0, "les trois compartiments comptent"); kitAssert(rf.indexOf("cActi." + "archivees") >= 0, "les archivées viennent du moteur"); kitAssert(rf.indexOf("(existing && existing." + "effectifSiren) || \"\"") >= 0, "SIREN transmis au moteur"); kitAssert(rf.indexOf("var cActi = (existing && fCompany." + "trim()") >= 0, "aucun calcul à la création"); kitAssert(f.indexOf("nActi > 0 ? React." + "createElement") >= 0, "ligne masquée sans fiche sœur"); });
 KIT_TESTS.add("câblage activité partagée : renderForm sans hook", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var rf = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf("function render" + "Form("), KIT_SOURCE_HTML.indexOf("function render" + "Detail(")); kitAssert(rf.length > 5000, "tranche renderForm non vide"); ["use" + "Memo", "use" + "Ref", "use" + "State", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(rf.indexOf(hook) === -1, hook); }); });
 KIT_TESTS.add("câblage activité partagée : compte rendu affiché sur la fiche", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "Detail("), fin = KIT_SOURCE_HTML.indexOf("function render" + "Stats(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin); kitAssert(debut >= 0 && fin > debut && tranche.length > 5000, "ancres renderDetail"); kitAssert(tranche.indexOf("propagActiMsg && propagActiMsg.id === c." + "id") >= 0); ["use" + "Memo", "use" + "Ref", "use" + "State", "use" + "Effect", "use" + "Callback"].forEach(function (hook) { kitAssert(tranche.indexOf(hook) === -1, hook); }); });
-KIT_TESTS.add("câblage activité partagée : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("L'activité décrit l'entreprise, pas la " + "personne") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("jamais écrasée par une mise à jour " + "SIRENE") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("affiche v1.5.12 · kit-crm-" + "v54") >= 0, "recette à jour de la version"); kitAssert(KIT_SOURCE_DOCS.indexOf("Trois fiches « LA POSTE », deux sans " + "activité") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Cocher « En transition » après avoir saisi une " + "activité") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Une fiche sœur « En transition » n'est ni comptée dans la " + "ligne") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Sont alignées sans rien demander les fiches sans activité " + "propre") >= 0, "le LISEZMOI énonce la règle réelle"); });
+KIT_TESTS.add("câblage activité partagée : documentation", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("L'activité décrit l'entreprise, pas la " + "personne") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("jamais écrasée par une mise à jour " + "SIRENE") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("affiche v1.6.0 · kit-crm-" + "v55") >= 0, "recette à jour de la version"); kitAssert(KIT_SOURCE_DOCS.indexOf("Trois fiches « LA POSTE », deux sans " + "activité") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Cocher « En transition » après avoir saisi une " + "activité") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Une fiche sœur « En transition » n'est ni comptée dans la " + "ligne") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Sont alignées sans rien demander les fiches sans activité " + "propre") >= 0, "le LISEZMOI énonce la règle réelle"); });
 KIT_TESTS.add("câblage activité : scripts data référencés par le document", function () { kitAssert(typeof KIT_NAF === "object"); });
 KIT_TESTS.add("suivi : liens d'une fiche — tri stable et auto-exclusion", function () { var egales = KIT_PURE.liensFiche({ id: "T", interactions: [{ iid: "premier", type: "recommandation_donnee", date: "2026-08-01", lieId: "A" }, { iid: "second", type: "recommandation_donnee", date: "2026-08-01", lieId: "B" }] }, [{ id: "A" }, { id: "B" }]).recoDonnees; kitAssert(egales[0].iid === "premier" && egales[1].iid === "second"); kitAssert(KIT_PURE.liensFiche({ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }, [{ id: "S", interactions: [{ type: "recommandation_donnee", lieId: "S" }] }]).recommandePar.length === 0); });
 KIT_TESTS.add("câblage suivi : apporteur tapé non sélectionné", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var debut = KIT_SOURCE_HTML.indexOf("function render" + "LogModal("), fin = KIT_SOURCE_HTML.indexOf("function render" + "VoeuxModal(", debut), tranche = KIT_SOURCE_HTML.slice(debut, fin), suggestions = tranche.indexOf("function suggestions" + "Lie("), erreur = tranche.indexOf("Choisissez une fiche dans la " + "liste"), bouton = tranche.indexOf("Mettre à " + "jour"); kitAssert(suggestions >= 0 && erreur >= 0 && suggestions < bouton && erreur < bouton); });
@@ -961,6 +1092,7 @@ KIT_TESTS.add("retour : contacts sans id préservés séparément", function () 
 KIT_TESTS.add("retour : contact commun non modifié garde updatedAt maximal", function () { var courant = { contacts: [{ id: "A", updatedAt: "2026-09-02T00:00:00.000Z", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ id: "A", updatedAt: "2026-09-01T00:00:00.000Z", fieldsUpdatedAt: {}, interactions: [] }], deletedContacts: [] }; var r = KIT_PURE.revenirAVersion(courant, inst, "2026-09-03T11:00:00.000Z", []); kitAssert(r.data.contacts[0].updatedAt === "2026-09-02T00:00:00.000Z"); });
 KIT_TESTS.add("retour : aller-retour avec la fusion", function () { if (typeof mergeData === "undefined") return; var now = "2026-09-03T11:00:00.000Z"; var courant = { contacts: [{ id: "A", notes: "", updatedAt: now, fieldsUpdatedAt: { notes: "2026-09-03T10:00:00.000Z" }, interactions: [{ iid: "N", date: "2026-09-03" }] }], deletedContacts: [], deletedInteractions: [], categories: [] }; var inst = { contacts: [{ id: "A", notes: "Vieille note", updatedAt: "2026-09-01T00:00:00.000Z", fieldsUpdatedAt: { notes: "2026-09-01T00:00:00.000Z" }, interactions: [] }], deletedContacts: [] }; var retour = KIT_PURE.revenirAVersion(courant, inst, now, ["notes"]).data; [mergeData(retour, courant), mergeData(courant, retour)].forEach(function (fusion) { kitAssert(fusion.contacts[0].notes === "Vieille note" && fusion.contacts[0].interactions.length === 0); }); });
 KIT_TESTS.add("documentation : conduite à tenir cohérente", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("archi" + "vez") === -1); kitAssert(KIT_SOURCE_DOCS.indexOf("archiver ne libère pas d'espace") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Revenir à cette version") >= 0 && KIT_SOURCE_DOCS.indexOf("Restaurer cette copie") >= 0 && KIT_SOURCE_DOCS.indexOf('category: "Client"') >= 0); });
+KIT_TESTS.add("documentation : veille juridique", function () { if (typeof KIT_SOURCE_DOCS === "undefined") return; kitAssert(KIT_SOURCE_DOCS.indexOf("L'application ne transmet rien à " + "personne.") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("Dans aucun mode, les notes ni les " + "échanges ne sortent.") >= 0); kitAssert(KIT_SOURCE_DOCS.indexOf("## Veille juridique " + "(v1.6.0)") >= 0); });
 KIT_TESTS.add("câblage récupération renforcé", function () { if (typeof KIT_SOURCE_HTML === "undefined") return; var KIT_APP = KIT_SOURCE_HTML.slice(KIT_SOURCE_HTML.indexOf('<script type="' + 'text/babel"')); var iApp = KIT_APP.indexOf("function App(props)"); var corpsApp = KIT_APP.slice(iApp, iApp + 400000); var r = corpsApp.indexOf("if (recu" + "peration) return"); var l = corpsApp.indexOf("if (loa" + "ding || !data)"); kitAssert(iApp > 0 && r > 0 && l > 0 && r < l); var d0 = corpsApp.indexOf("async function " + "load()"); var d1 = corpsApp.indexOf("load();", d0); var load = corpsApp.slice(d0, d1); kitAssert(load.indexOf("miroirPlusRecent") >= 0 && load.indexOf("!miroirPlusRecent") < load.indexOf('idbSet("data", mig.d)')); kitAssert(load.indexOf("Promise.all(") >= 0 && load.indexOf("Array.isArray(parsed.contacts)") >= 0 && load.indexOf('mode: "c"') >= 0); var continuer = KIT_APP.slice(KIT_APP.indexOf("function continuerSansRestaurer("), KIT_APP.indexOf("function repartirAVide(")); kitAssert(continuer.indexOf("mettreEnQuarantaine(") < continuer.indexOf("setRecuperation(null)")); var restaurer = KIT_APP.slice(KIT_APP.indexOf("function restaurerCopie("), KIT_APP.indexOf("function continuerSansRestaurer(")); kitAssert(restaurer.indexOf("localStorage.removeItem(STORAGE_KEY)") < restaurer.indexOf("save(")); var repartir = corpsApp.slice(corpsApp.indexOf("async function repartirAVide("), r); kitAssert(repartir.indexOf("await exporterCopie(") < repartir.indexOf("await mettreEnQuarantaine(") && repartir.indexOf("await mettreEnQuarantaine(") < repartir.indexOf("save(vide)")); kitAssert(repartir.indexOf("Export annulé") >= 0); var agenda = KIT_APP.slice(KIT_APP.indexOf("KIT_AGENDA.setRestoreHandler(function"), KIT_APP.indexOf("KIT_AGENDA.setCheckpointProvider", KIT_APP.indexOf("KIT_AGENDA.setRestoreHandler(function"))); kitAssert(agenda.indexOf("idbSet(") === -1); var ecran = KIT_APP.slice(KIT_APP.indexOf("function EcranRecuperation("), KIT_APP.indexOf("function App(props)")); kitAssert(ecran.indexOf("key={cand.cle || cand.source}") >= 0 && ecran.indexOf("cand.key") === -1 && ecran.indexOf("props.onRestaurer(") >= 0 && ecran.indexOf("props.onRepartirAVide") >= 0); });
 KIT_TESTS.add("restauration branche la normalisation du brouillon", function () { kitAssert(typeof KIT_SOURCE_HTML === "undefined" || /KIT_PURE\.normalizeCandidateResult\(payload\.candidateResult\)/.test(KIT_SOURCE_HTML)); });
 KIT_TESTS.add("brouillon en chargement normalisé en erreur", function () { var result = KIT_PURE.normalizeCandidateResult({ etat: "chargement", candidates: ["2026-08-03"] }); kitAssert(JSON.stringify(result) === JSON.stringify({ etat: "erreur", candidates: [] })); });
@@ -1294,13 +1426,13 @@ var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repa
 
 /* ── KIT_SYNC_HELPERS ── */
 const DEFAULT_CATS = ["Client", "Prospect", "Avocat / EC"];
-var APP_VERSION = "1.5.12";
+var APP_VERSION = "1.6.0";
 var RECUPERATION_DELAI_MS = 3000;
 var RECUPERATION_INDISPO = { indisponible: true };
 var TS_BASE = "2000-01-01T00:00:00.000Z";
 function nowTS() { return new Date().toISOString(); }
 function detHash(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = ((h << 5) + h + s.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
-var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "activite", "nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
+var MERGE_FIELDS = ["lastName", "firstName", "name", "inTransition", "category", "priority", "metAt", "notes", "sector", "nextAction", "followUpDate", "followUpNote", "tags", "keyDates", "birthday", "company", "jobTitle", "workLocation", "email", "phonePro", "phonePerso", "address", "linkedin", "origin", "snoozedUntil", "awaitingUntil", "archived", "registre", "recoitVeille", "seuilEffectif", "activiteRelue", "effectifTranche", "effectifAnnee", "effectifSiren", "effectifSource", "effectifDate", "effectifPrecis", "effectifsSecondaires", "activite", "nafCode", "nafLibelle", "nafRev2Code", "nafSource", "nafDate", "procedureEtat", "procedureNature", "procedureDate", "procedureTribunal", "procedureCheckISO"];
 function fieldTS(c, f) { return (c.fieldsUpdatedAt && c.fieldsUpdatedAt[f]) || TS_BASE; }
 function contactLabel(c) { return (((c.lastName || "") + " " + (c.firstName || "")).trim()) || c.name || "(sans nom)"; }
 var MAIL_SUBJECT = "{entreprise} - Proposition de {type}";
@@ -1446,7 +1578,7 @@ function mergeData(localData, importedData) {
 
 /* ═══════ EXPORT FORMAT (forme maison) ═══════ */
 // Largeurs de colonnes (forme maison) ; null = largeur Excel par défaut
-var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null, 40, 12];
+var EXPORT_COLW = [29.71, 29.71, 13.57, 12.29, 46.43, 17.14, 39.14, 13.57, null, null, 41.57, 13.57, 6.71, 13.57, 16.14, 16.14, 13.57, null, null, null, 14.57, 13.57, null, null, 14, null, 10, null, 40, 12, 16];
 // Listes déroulantes : { colonne Excel : formule } ; la CCN de branche pointe vers l'onglet CCN de branche
 var EXPORT_DV = {
   M: '"Nulle,Faible,Moyen,Élevé"',
@@ -2117,6 +2249,10 @@ function App(props) {
   var [fSec, setFSec] = useState("all");
   var [search, setSearch] = useState("");
   var [fComp, setFComp] = useState("all");
+  var [fVeille, setFVeille] = useState("all");
+  var [veilleCategoriesExclues, setVeilleCategoriesExclues] = useState([]);
+  var [veilleMode, setVeilleMode] = useState("restreint");
+  var [veilleApercuVisible, setVeilleApercuVisible] = useState(false);
   var [persistOk, setPersistOk] = useState(null);
   var [lastExport, setLastExport] = useState(function () { try { return localStorage.getItem(LAST_EXPORT_KEY) || ""; } catch (e) { return ""; } });
   var [updReady, setUpdReady] = useState(false);
@@ -2201,6 +2337,7 @@ function App(props) {
   var [manualEffectif, setManualEffectif] = useState(null);
   var [manualEffectifPrecis, setManualEffectifPrecis] = useState("");
   var [manualEffectifTranche, setManualEffectifTranche] = useState("21");
+  var [manualSeuilEffectif, setManualSeuilEffectif] = useState("");
   var [bulkIncludeManual, setBulkIncludeManual] = useState(false);
   var [bulkPreview, setBulkPreview] = useState(null);
   var [bulkProgress, setBulkProgress] = useState(null);
@@ -2220,6 +2357,10 @@ function App(props) {
   var [fNxt, setFNxt] = useState("");
   var [fFollowDate, setFFollowDate] = useState("");
   var [fFollowNote, setFFollowNote] = useState("");
+  var [fRecoitVeille, setFRecoitVeille] = useState(false);
+  var [fSeuilEffectif, setFSeuilEffectif] = useState("");
+  var [fActiviteRelue, setFActiviteRelue] = useState("");
+  var [fRegistre, setFRegistre] = useState("vous");
   var [fTagsStr, setFTagsStr] = useState("");
   var [fKdLabel, setFKdLabel] = useState("");
   var [fKdDate, setFKdDate] = useState("");
@@ -2521,6 +2662,10 @@ function App(props) {
     setLoading(false);
   }
 
+  useEffect(function () {
+    if (view !== "veille") { setVeilleMode("restreint"); setVeilleApercuVisible(false); }
+  }, [view]);
+
   if (recuperation) return <EcranRecuperation recuperation={recuperation} onRestaurer={restaurerCopie} onExporter={exporterCopie} onContinuer={continuerSansRestaurer} onRepartirAVide={repartirAVide} />;
   if (loading || !data) {
     return React.createElement("div", {
@@ -2565,6 +2710,7 @@ function App(props) {
   /* ── CRUD ── */
   function addContact(payload) {
     var id = makeId();
+    var veille = KIT_PURE.champsVeilleInit(payload);
     var nc = {
       id: id, name: payload.name, lastName: payload.lastName || "", firstName: payload.firstName || "",
       inTransition: payload.inTransition || false,
@@ -2578,7 +2724,8 @@ function App(props) {
       workLocation: payload.workLocation || "",
       email: payload.email || "", phonePro: payload.phonePro || "", phonePerso: payload.phonePerso || "",
       address: payload.address || "", linkedin: payload.linkedin || "", origin: payload.origin || "",
-      registre: "",
+      registre: payload.registre === "tu" ? "tu" : "vous",
+      recoitVeille: veille.recoitVeille, seuilEffectif: veille.seuilEffectif, activiteRelue: veille.activiteRelue,
       interactions: [], createdAt: todayStr(), updatedAt: nowTS(), fieldsUpdatedAt: {}, archived: false
     };
     save({ contacts: contacts.concat([nc]), categories: categories });
@@ -2771,6 +2918,7 @@ function App(props) {
     setManualEffectif(c);
     setManualEffectifPrecis(c.effectifPrecis == null ? "" : String(c.effectifPrecis));
     setManualEffectifTranche(c.effectifTranche && c.effectifTranche !== "NN" ? c.effectifTranche : "21");
+    setManualSeuilEffectif(KIT_PURE.normaliseSeuilEffectif(c.seuilEffectif));
   }
 
   function saveManualEffectif() {
@@ -2784,7 +2932,8 @@ function App(props) {
       effectifSiren: manualEffectif.effectifSiren || "",
       effectifSource: "manuel",
       effectifDate: todayStr(),
-      effectifPrecis: hasCount ? count : null
+      effectifPrecis: hasCount ? count : null,
+      seuilEffectif: KIT_PURE.normaliseSeuilEffectif(manualSeuilEffectif)
     });
     setManualEffectif(null);
   }
@@ -3061,7 +3210,7 @@ function App(props) {
     var c = contacts.find(function (x) { return x.id === id; });
     if (!c) return;
     var defaultIdf = KIT_PURE.idfDefaultFor(c, data.settings || {});
-    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.registre === "vous" ? "vous" : "tu");
+    setInviteId(id); setInviteType("dejeuner"); setInviteRegister(c.registre === "tu" ? "tu" : "vous");
     setInviteCanal(c.email ? "mail" : (inviteMobile(c) ? "whatsapp" : "mail"));
     setInviteStep("options"); setInviteDates([]); setInviteDate(""); setInviteCandidateResult({ etat: "non-connecte", candidates: [] }); setInviteCandidateDates([]); setInviteManualDates([]); setInviteIdf(defaultIdf); setInviteCoord(""); setShowInvite(true);
   }
@@ -3236,6 +3385,10 @@ function App(props) {
     setFNxt(ex ? (ex.nextAction || "") : "");
     setFFollowDate(ex ? (ex.followUpDate || "") : "");
     setFFollowNote(ex ? (ex.followUpNote || "") : "");
+    setFRecoitVeille(ex ? ex.recoitVeille === true : false);
+    setFSeuilEffectif(ex ? KIT_PURE.normaliseSeuilEffectif(ex.seuilEffectif) : "");
+    setFActiviteRelue(ex ? (ex.activiteRelue || "") : "");
+    setFRegistre(ex && ex.registre === "tu" ? "tu" : "vous");
     setFTagsStr(ex ? (ex.tags || []).join(", ") : "");
     setFKds(ex ? (ex.keyDates || []) : []);
     setFBday(ex ? (ex.birthday || "") : "");
@@ -3257,6 +3410,7 @@ function App(props) {
   function submitForm(existingId) {
     if (!fLastName.trim()) return;
     var tagsArr = fTagsStr.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+    var activiteRelueSauvee = KIT_PURE.activiteEstRelue(fAct, fActiviteRelue) && fAct === fAct.trim().slice(0, 200) ? fActiviteRelue : "";
     var payload = {
       lastName: fLastName.trim(), firstName: fFirstName.trim(),
       name: (fFirstName.trim() + " " + fLastName.trim()).trim(),
@@ -3265,9 +3419,10 @@ function App(props) {
       metAt: fMet, notes: fNotes,
       sector: fSec2, nextAction: fNxt, tags: tagsArr, keyDates: fKds,
       followUpDate: fFollowDate, followUpNote: fFollowNote,
+      recoitVeille: fRecoitVeille, seuilEffectif: KIT_PURE.normaliseSeuilEffectif(fSeuilEffectif), activiteRelue: activiteRelueSauvee,
       birthday: fBday, company: fCompany, activite: fAct.trim().slice(0, 200), jobTitle: fJobTitle, workLocation: fWorkLoc,
       email: fEmail, phonePro: fPhonePro, phonePerso: fPhonePerso,
-      address: fAddress, linkedin: fLinkedin, origin: fOrigin
+      address: fAddress, linkedin: fLinkedin, origin: fOrigin, registre: fRegistre
     };
     if (existingId) {
       var avant = ficheCourante(existingId, contacts);
@@ -3295,8 +3450,10 @@ function App(props) {
           : combien + " une activité : " + noms + ".\n\nEffacer aussi " + possessif + " activité ?\n\nOK : " + possessif + " activité est effacée. Annuler : " + garde + ".\nDans les deux cas votre fiche est enregistrée sans activité.");
       }
       var ids = KIT_PURE.idsAPropager(cibles, remplacer);
+      var idsRelus = KIT_PURE.idsActiviteRelue(contacts, existingId, payload.company, payload.activite, payload.activiteRelue, (avant && avant.effectifSiren) || "");
       var working = updContact(existingId, payload);
       ids.forEach(function (id) { working = updContact(id, { activite: payload.activite }, null, working); });
+      idsRelus.forEach(function (id) { working = updContact(id, { activiteRelue: payload.activiteRelue }, null, working); });
       if (ids.length || (cibles.conflits.length && !remplacer)) {
         var vide = String(payload.activite || "").trim() === "";
         var recap = ids.length ? (vide ? "Activité effacée sur " : "Activité recopiée sur ") + KIT_PURE.pluriel(ids.length, "autre fiche", "autres fiches") + " de « " + entreprise + " »." : "";
@@ -3313,7 +3470,7 @@ function App(props) {
 
   /* ── CSV Export ── */
   function exportExcel() {
-    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions", "Activité", "Code NAF 2025"];
+    var headers = ["Nom", "Prénom", "En transition", "Fonction", "Entreprise", "Lieu d'exercice", "Email", "Tél. pro", "Tél. perso", "LinkedIn", "Adresse postale", "Catégorie", "Priorité", "CCN de branche", "Dernière rencontre", "Type de rencontre", "Dernier contact", "Type de contact", "Anniversaire", "Tags", "Prochaine action", "Lieu rencontre", "Notes", "Dates clés", "Origine", "Statut", "Archivé", "Nb interactions", "Activité", "Code NAF 2025", "Reçoit la veille"];
     var rows = contacts.map(function (c) {
       var kdStr = (c.keyDates || []).map(function (k) { return k.label + ": " + k.date; }).join("; ");
       var lastRdvInt = null, lastContactInt = null;
@@ -3331,7 +3488,7 @@ function App(props) {
         c.birthday || "", (c.tags || []).join("; "),
         c.nextAction || "", c.metAt || "", c.notes || "", kdStr, c.origin || "",
         statusLabel(getStatus(c)), c.archived ? "Oui" : "Non", (c.interactions || []).length,
-        c.activite || "", c.nafCode || ""
+        c.activite || "", c.nafCode || "", c.recoitVeille ? "Oui" : "Non"
       ];
     });
 
@@ -3747,6 +3904,7 @@ function App(props) {
     var iLastContact = findCol(hd, ["dernier contact", "last contact"]);
     var iContactType = findCol(hd, ["type de contact", "type contact", "format contact"]);
     var iKeyDates = findCol(hd, ["dates cles", "key dates"]);
+    var iVeille = findCol(hd, ["veille"]);
 
     var nc = [];
     for (var i = 0; i < dataRows.length; i++) {
@@ -3810,6 +3968,7 @@ function App(props) {
         priority: parsePriority(iPrio >= 0 ? vals[iPrio] : ""),
         sector: (iSect >= 0 ? vals[iSect] : "") || "",
         activite: ((iAct >= 0 ? vals[iAct] : "") || "").slice(0, 200),
+        recoitVeille: iVeille >= 0 && stripAccents(String(vals[iVeille] || "")).toLowerCase() === "oui",
         birthday: birthdayVal,
         tags: tagsArr,
         nextAction: (iNext >= 0 ? vals[iNext] : "") || "",
@@ -3902,6 +4061,8 @@ function App(props) {
     if (fTag !== "all" && (c.tags || []).indexOf(fTag) === -1) return false;
     if (fSec !== "all" && c.sector !== fSec) return false;
     if (fComp !== "all" && norm(c.company || "") !== norm(fComp)) return false;
+    if (fVeille === "oui" && c.recoitVeille !== true) return false;
+    if (fVeille === "non" && c.recoitVeille === true) return false;
     if (search) {
       var q = norm(search);
       var hay = KIT_PURE.contactHaystack(c);
@@ -4156,6 +4317,12 @@ function App(props) {
         <select disabled={manualEffectifPrecis !== ""} value={manualEffectifPrecis !== "" && countValid ? KIT_PURE.trancheFromCount(Number(manualEffectifPrecis)) : manualEffectifTranche} onChange={function (e) { setManualEffectifTranche(e.target.value); }} style={{ width: "100%", padding: 9, margin: "5px 0 16px", border: "1px solid " + bd, borderRadius: 8 }}>
           {trancheCodes.map(function (code) { return <option key={code} value={code}>{KIT_PURE.trancheLabel(code)}</option>; })}
         </select>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B" }}>SEUIL D'EFFECTIF FRANCHI</label>
+        <select value={manualSeuilEffectif} onChange={function (e) { setManualSeuilEffectif(KIT_PURE.normaliseSeuilEffectif(e.target.value)); }} data-field="seuilEffectif" style={{ width: "100%", padding: 9, margin: "5px 0 0", border: "1px solid " + bd, borderRadius: 8 }}>
+          <option value="">Je ne sais pas</option><option value="-11">Moins de 11 salariés</option><option value="11">Seuil de 11 franchi</option><option value="50">Seuil de 50 franchi</option><option value="300">Seuil de 300 franchi</option><option value="1000">Seuil de 1 000 franchi</option>
+        </select>
+        <p style={{ margin: "5px 0 4px", fontSize: 11.5, color: "#6E6A64" }}>L'effectif INSEE ne dit pas si un seuil est franchi : le décompte obéit à ses propres règles, et le franchissement ne s'apprécie pas de la même manière selon le dispositif. Renseignez ce que vous savez du dossier.</p>
+        <p style={{ margin: "0 0 16px", fontSize: 11, color: "#6E6A64" }}>Textes : <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000019353569" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>décompte (C. trav. L. 1111-2)</a> · <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000031565369" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>exclusions (L. 1111-3)</a> · <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000035609353" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>CSE, douze mois consécutifs (L. 2311-2)</a> · <a href="https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000051287151" target="_blank" rel="noopener noreferrer" style={{ color: "#235C68" }}>décompte annuel, cinq années civiles (CSS L. 130-1)</a></p>
         {!countValid ? <p role="alert" style={{ color: "#9A3115", fontSize: 12 }}>Saisissez un nombre entier positif.</p> : null}
         <div style={{ display: "flex", gap: 8 }}><button disabled={!countValid} onClick={saveManualEffectif} style={{ background: ac, color: "#fff", border: "none", borderRadius: 8, padding: "9px 14px", cursor: countValid ? "pointer" : "not-allowed", fontFamily: ff }}>Enregistrer</button><button onClick={function () { setManualEffectif(null); }} style={{ background: "#fff", color: "#64748B", border: "1px solid " + bd, borderRadius: 8, padding: "9px 14px", cursor: "pointer", fontFamily: ff }}>Annuler</button></div>
       </div>
@@ -4406,6 +4573,16 @@ function App(props) {
               <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (fInTransition ? "#786078" : bd), display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{fInTransition ? React.createElement("span", { style: { width: 10, height: 10, borderRadius: "50%", background: "#786078" } }) : null}</span>
               {"En transition"}
             </label>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#64748B", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+              <input type="checkbox" checked={fRecoitVeille} onChange={function (e) { setFRecoitVeille(e.target.checked); }} /> Reçoit la veille juridique
+            </label>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 }}>REGISTRE DE POLITESSE</label>
+            <select value={fRegistre} onChange={function (e) { setFRegistre(e.target.value === "tu" ? "tu" : "vous"); }} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1.5px solid " + bd, fontSize: 14, fontFamily: ff, boxSizing: "border-box" }}>
+              <option value="vous">Vouvoiement</option><option value="tu">Tutoiement</option>
+            </select>
           </div>
 
           {!fInTransition ? React.createElement("div", null,
@@ -4437,7 +4614,13 @@ function App(props) {
               nActi > 0 ? React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } },
                 "Activité partagée avec " + KIT_PURE.pluriel(nActi, "autre fiche", "autres fiches") + " de « " + fCompany.trim() + " »"
                 + (nArchActi ? " (dont " + KIT_PURE.pluriel(nArchActi, "fiche archivée", "fiches archivées") + ")" : "")
-                + " : si vous modifiez l'activité, l'enregistrement la recopie sur celles qui n'ont pas d'activité propre — champ vide, libellé officiel INSEE, ou le texte que cette fiche portait avant votre correction — et vous demande avant de remplacer une autre activité saisie.") : null
+                + " : si vous modifiez l'activité, l'enregistrement la recopie sur celles qui n'ont pas d'activité propre — champ vide, libellé officiel INSEE, ou le texte que cette fiche portait avant votre correction — et vous demande avant de remplacer une autre activité saisie.") : null,
+              fAct ? (KIT_PURE.activiteEstRelue(fAct, fActiviteRelue)
+                ? React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } },
+                    "Activité relue, transmise telle quelle à la veille. ",
+                    React.createElement("button", { type: "button", onClick: function () { setFActiviteRelue(""); }, style: { background: "none", border: "none", color: abl, fontSize: 11.5, cursor: "pointer", fontFamily: ff, padding: 0 } }, "Retirer"))
+                : React.createElement("button", { type: "button", onClick: function () { setFActiviteRelue(fAct); }, style: { background: "none", border: "none", color: abl, fontSize: 12, cursor: "pointer", fontFamily: ff, padding: 0, marginTop: 5 } }, "Bon à transmettre à la veille")) : null,
+              React.createElement("p", { style: { fontSize: 11.5, color: "#6E6A64", margin: "5px 0 0" } }, "Tant qu'une activité n'est pas relue, la veille transmet le libellé officiel INSEE à sa place.")
             ),
             React.createElement("div", { style: { marginBottom: 16 } },
               React.createElement("label", { style: { display: "block", fontSize: 12, fontWeight: 600, color: "#64748B", marginBottom: 5 } }, "LIEU D'EXERCICE"),
@@ -5093,6 +5276,93 @@ function App(props) {
     );
   }
 
+  function renderVeille() {
+    var categoriesDisponibles = KIT_PURE.categoriesPreparationVeille(contacts);
+    var categoriesRetenues = categoriesDisponibles.filter(function (categorie) { return veilleCategoriesExclues.indexOf(categorie) === -1; });
+    var fichesDesCategories = contacts.filter(function (fiche) { return categoriesRetenues.indexOf(String(fiche.category || "").trim()) >= 0; });
+    var fichesAvecAptitude = fichesDesCategories.map(function (fiche) { return { fiche: fiche, aptitude: KIT_PURE.aptitudeVeille(fiche) }; });
+    var nominatives = fichesAvecAptitude.filter(function (item) { return item.aptitude.retenue || item.aptitude.motif === "non-designee"; });
+    var ecartees = fichesAvecAptitude.filter(function (item) { return item.fiche.recoitVeille === true && !item.aptitude.retenue && item.aptitude.motif !== "non-designee"; });
+    var retenues = fichesAvecAptitude.filter(function (item) { return item.aptitude.retenue; }).map(function (item) { return item.fiche; });
+    var designees = fichesDesCategories.filter(function (fiche) { return fiche.recoitVeille === true; });
+    var profils = KIT_PURE.profilsVeille(retenues);
+    var contactsParId = {};
+    retenues.forEach(function (fiche) { if (fiche.id) contactsParId[fiche.id] = fiche; });
+    var sortieVeille = KIT_PURE.serialiseProfils(profils, veilleMode, contactsParId);
+    var fuitesVeille = veilleMode === "restreint" ? KIT_PURE.fuiteNominative(sortieVeille, retenues) : [];
+    var texteApercuVeille = JSON.stringify(sortieVeille, null, 2);
+    nominatives.sort(function (a, b) { return KIT_PURE.nomCourant(a.fiche).localeCompare(KIT_PURE.nomCourant(b.fiche)); });
+    ecartees.sort(function (a, b) { return KIT_PURE.nomCourant(a.fiche).localeCompare(KIT_PURE.nomCourant(b.fiche)); });
+    function basculerCategorie(categorie, cochee) {
+      setVeilleApercuVisible(false);
+      if (cochee) setVeilleCategoriesExclues(veilleCategoriesExclues.filter(function (x) { return x !== categorie; }));
+      else setVeilleCategoriesExclues(veilleCategoriesExclues.concat([categorie]));
+    }
+    function produireFichierVeille() {
+      var lancement;
+      if (!veilleApercuVisible || fuitesVeille.length > 0) return;
+      lancement = KIT_PURE.composeLancementVeille(profils, veilleMode, retenues.length, nowTS());
+      if (!save({ lancementsVeille: (data.lancementsVeille || []).concat([lancement]) }, { verify: function (d) { return (d.lancementsVeille || []).some(function (item) { return item && item.id === lancement.id; }); } })) { alert("Impossible d'enregistrer le lancement. Le fichier n'a pas été produit."); return; }
+      downloadJSON(sortieVeille, lancement.id + ".json");
+    }
+    return (
+      <div>
+        {renderNav()}
+        <button type="button" style={{ background: "transparent", color: ac, border: "1.5px solid " + bd, borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff, marginBottom: 18 }} onClick={function () { setView("dashboard"); }}>← Retour</button>
+        <h2 style={{ margin: "0 0 6px", fontSize: 22, color: ac }}>Veille</h2>
+        <p style={{ margin: "0 0 22px", color: "#64748B", fontSize: 14 }}>Préparez les destinataires et mesurez le nombre de textes nécessaires.</p>
+
+        <section className="kit-card" style={{ background: "#fff", border: "1px solid #ECE9E3", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 12px", color: ac, fontSize: 16 }}>Choix des catégories</h3>
+          {categoriesDisponibles.length > 0 ? <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 18px" }}>
+            {categoriesDisponibles.map(function (categorie) {
+              var cochee = categoriesRetenues.indexOf(categorie) >= 0;
+              return <label key={categorie} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14 }}><input type="checkbox" checked={cochee} onChange={function (e) { basculerCategorie(categorie, e.target.checked); }} /><span>{categorie}</span></label>;
+            })}
+          </div> : <p style={{ margin: 0, color: "#64748B", fontSize: 13 }}>Aucune catégorie n'est encore présente dans votre carnet.</p>}
+        </section>
+
+        <section className="kit-card" style={{ background: "#fff", border: "1px solid #ECE9E3", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 12px", color: ac, fontSize: 16 }}>Liste nominative des destinataires</h3>
+          {designees.length === 0 ? <p style={{ margin: "0 0 14px", padding: "10px 12px", borderRadius: 8, background: "#FAF0D4", color: "#77520B", fontSize: 13 }}>Aucune fiche n'est désignée pour la veille. Cochez les personnes à qui vous voulez écrire, ici ou depuis leur fiche.</p> : null}
+          {nominatives.length > 0 ? <div>
+            {nominatives.map(function (item, index) {
+              var fiche = item.fiche;
+              return <label key={fiche.id || String(index)} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 2px", borderTop: index > 0 ? "1px solid " + bd : "none", cursor: "pointer" }}>
+                <input type="checkbox" checked={fiche.recoitVeille === true} onChange={function (e) { setVeilleApercuVisible(false); updContact(fiche.id, { recoitVeille: e.target.checked }); }} />
+                <span style={{ minWidth: 0 }}><strong style={{ display: "block", fontSize: 14, color: "#1B1B24" }}>{KIT_PURE.nomCourant(fiche)}</strong><span style={{ display: "block", marginTop: 2, color: "#64748B", fontSize: 12.5 }}>{fiche.company || "Entreprise non renseignée"}</span></span>
+              </label>;
+            })}
+          </div> : <p style={{ margin: 0, color: "#64748B", fontSize: 13 }}>Aucune fiche dans les catégories retenues.</p>}
+          <p style={{ margin: "13px 0 0", paddingTop: 12, borderTop: "1px solid " + bd, color: "#64748B", fontSize: 12.5 }}>Décocher retire durablement la personne de vos envois de veille, jusqu'à ce que vous la recochiez.</p>
+        </section>
+
+        {ecartees.length > 0 ? <section className="kit-card" style={{ background: "#FFF8F5", border: "1px solid #F4D6CB", borderRadius: 14, padding: 18, marginBottom: 14 }}>
+          <h3 style={{ margin: "0 0 5px", color: "#9A3115", fontSize: 16 }}>Fiches écartées et leur motif</h3>
+          <p style={{ margin: "0 0 10px", color: "#9A3115", fontSize: 13, fontWeight: 700 }}>{String(ecartees.length) + " fiches désignées ne peuvent pas être traitées"}</p>
+          {ecartees.map(function (item, index) { return <div key={item.fiche.id || String(index)} style={{ padding: "8px 0", borderTop: index > 0 ? "1px solid #F4D6CB" : "none", fontSize: 13 }}><strong>{KIT_PURE.nomCourant(item.fiche)}</strong><span style={{ color: "#64748B" }}>{" — " + item.aptitude.libelle}</span></div>; })}
+        </section> : null}
+
+        <section className="kit-card" style={{ background: "#EAF3F5", border: "1px solid #C7E0E6", borderRadius: 14, padding: 18 }}>
+          <h3 style={{ margin: "0 0 7px", color: ac, fontSize: 16 }}>Compte de ce qui partira</h3>
+          <p style={{ margin: 0, color: "#235C68", fontSize: 15, fontWeight: 700 }}>{String(retenues.length) + (retenues.length > 1 ? " personnes recevront" : " personne recevra") + " la veille · " + String(profils.length) + (profils.length > 1 ? " textes distincts" : " texte distinct")}</p>
+
+          <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid #C7E0E6" }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 9, marginBottom: 12, cursor: "pointer" }}><input type="radio" name="veille-mode" value="restreint" checked={veilleMode === "restreint"} onChange={function () { setVeilleMode("restreint"); setVeilleApercuVisible(false); }} /><span><strong style={{ display: "block", fontSize: 14 }}>Sans aucun nom</strong><span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 11.5 }}>Le fichier ne contient ni nom, ni entreprise, ni adresse : seulement des situations d'entreprise numérotées.</span></span></label>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer" }}><input type="radio" name="veille-mode" value="etendu" checked={veilleMode === "etendu"} onChange={function () { setVeilleMode("etendu"); setVeilleApercuVisible(false); }} /><span><strong style={{ display: "block", fontSize: 14 }}>Avec les identités</strong><span style={{ display: "block", marginTop: 3, color: "#475569", fontSize: 11.5 }}>Le fichier contient aussi prénom, nom, entreprise, fonction et lieu. Vos notes et vos échanges n'en font jamais partie, quel que soit le mode.</span></span></label>
+          </div>
+
+          <button type="button" onClick={function () { setVeilleApercuVisible(true); }} style={{ marginTop: 16, background: "#fff", color: ac, border: "1.5px solid " + ac, borderRadius: 8, padding: "9px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: ff }}>Voir ce qui va sortir</button>
+          {veilleApercuVisible ? <div style={{ marginTop: 14 }}>
+            <pre style={{ margin: 0, maxHeight: 330, overflow: "auto", whiteSpace: "pre-wrap", overflowWrap: "anywhere", background: "#17212B", color: "#E8F1F2", borderRadius: 9, padding: 14, fontSize: 11.5, lineHeight: 1.5, fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>{texteApercuVeille}</pre>
+            {fuitesVeille.length > 0 ? <div role="alert" style={{ marginTop: 12, padding: "11px 12px", borderRadius: 8, background: "#FFF1ED", border: "1px solid #F4B9A7", color: "#9A3115", fontSize: 13 }}>Ce fichier contient des éléments nominatifs alors que le mode choisi l'interdit : {fuitesVeille.join(", ")}. Corrigez les fiches concernées avant de produire le fichier.</div> : null}
+          </div> : null}
+          <button type="button" disabled={!veilleApercuVisible || fuitesVeille.length > 0} onClick={produireFichierVeille} style={{ display: "block", marginTop: 14, background: veilleApercuVisible && fuitesVeille.length === 0 ? ac : "#CBD5E1", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: veilleApercuVisible && fuitesVeille.length === 0 ? "pointer" : "not-allowed", fontFamily: ff }}>Produire le fichier</button>
+        </section>
+      </div>
+    );
+  }
+
   // ─── NAV ───
   function renderNav() {
     function navBtn(id, label) {
@@ -5109,6 +5379,7 @@ function App(props) {
         {navBtn("week", "À suivre (" + String(followUpList.length + awaitingList.length + retryList.length + rencontreList.length) + ")")}
         {navBtn("stats", "Stats")}
         {navBtn("companies", "Entreprises")}
+        {navBtn("veille", "Veille")}
       </div>
     );
   }
@@ -5380,6 +5651,14 @@ function App(props) {
               {allSectors.map(function (s) { return <option key={s} value={s}>{s}</option>; })}
             </select>
           ) : null}
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "#64748B" }}>
+            VEILLE
+            <select style={{ padding: "8px 10px", borderRadius: 8, border: "1.5px solid " + bd, fontSize: 12, fontFamily: ff }} value={fVeille} onChange={function (e) { setFVeille(e.target.value); }}>
+              <option value="all">Toutes</option>
+              <option value="oui">Reçoit la veille</option>
+              <option value="non">Ne reçoit pas</option>
+            </select>
+          </label>
         </div>
 
         {filtered.length === 0 ? (
@@ -5441,7 +5720,8 @@ function App(props) {
     { id: "dashboard", label: "Contacts", icon: "👤" },
     { id: "week", label: "À suivre", icon: "🔔", badge: followUpList.length + awaitingList.length + retryList.length + rencontreList.length },
     { id: "stats", label: "Stats", icon: "📊" },
-    { id: "companies", label: "Entreprises", icon: "🏢" }
+    { id: "companies", label: "Entreprises", icon: "🏢" },
+    { id: "veille", label: "Veille", icon: "✉️" }
   ];
   var KIT_CSS = ".kit-card{transition:box-shadow .16s ease,transform .16s ease}.kit-card:hover{box-shadow:0 6px 18px rgba(16,24,40,.10);transform:translateY(-1px)}.kit-row:hover{background:#F6F5F2}.kit-btn{transition:opacity .15s ease,background .15s ease,border-color .15s ease}.kit-btn:hover{opacity:.88}.kit-fade{animation:kitfade .28s ease both}@keyframes kitfade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}.kit-bottomnav{display:none}@media(max-width:640px){.kit-topnav{display:none!important}.kit-bottomnav{display:flex!important}.kit-shell{padding-bottom:84px!important}}.kit-stats{display:grid;gap:10px;grid-template-columns:repeat(5,1fr);margin-bottom:18px}@media(max-width:640px){.kit-stats{grid-template-columns:repeat(6,1fr)}.kit-stats>div{grid-column:span 2}.kit-stats>div:nth-child(4){grid-column:2/span 2}.kit-stats>div:nth-child(5){grid-column:4/span 2}}";
 
@@ -5484,6 +5764,7 @@ function App(props) {
       {view === "stats" ? renderStats() : null}
       {view === "contact" ? renderDetail() : null}
       {view === "companies" ? renderCompanies() : null}
+      {view === "veille" ? renderVeille() : null}
       {view === "newContact" ? renderForm() : null}
       {view === "editContact" ? renderForm() : null}
       {updReady ? (
