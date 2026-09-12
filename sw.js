@@ -1,4 +1,4 @@
-var CACHE_NAME = "kit-crm-v55";
+var CACHE_NAME = "kit-crm-v56";
 var PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -59,7 +59,9 @@ self.addEventListener("fetch", function (event) {
 });
 
 /* ═══════ NOTIFICATIONS DE RELANCE (Periodic Background Sync) ═══════ */
+/* ── KIT_SW_RELANCE ── */
 var RENCONTRE_TYPES = ["petitdej", "dejeuner", "diner", "verre", "formation_repas", "conference_repas"];
+var SUIVI_TYPES = ["dossier", "recommandation_recue", "recommandation_donnee", "veille"];
 var RENCONTRE_OVERDUE_MONTHS = 12;
 var FOLLOWUP_DAYS = 14;
 var FOLLOWUP_RETRY_DAYS = 21;
@@ -80,7 +82,7 @@ function _lastRencontre(c) {
 }
 function _latest(c) {
   var best = null;
-  (c.interactions || []).forEach(function (x) { if (!best || x.date > best.date) best = x; });
+  (c.interactions || []).forEach(function (x) { if (SUIVI_TYPES.indexOf(x.type) < 0 && (!best || x.date > best.date)) best = x; });
   return best;
 }
 function _isSnoozed(c) { return !!(c.snoozedUntil && c.snoozedUntil > _today()); }
@@ -121,6 +123,7 @@ function _computeDue(contacts) {
   });
   return info;
 }
+/* ── KIT_SW_RELANCE_END ── */
 function _notifBody(info) {
   var parts = [];
   if (info.retard) parts.push(info.retard + " en retard");

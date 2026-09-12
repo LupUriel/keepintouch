@@ -148,6 +148,11 @@ sur une fiche non rattachée, « Compléter les effectifs » pour les entreprise
 Les actions groupées montrent toujours la liste complète des dénominations ou SIREN avant
 leur lancement.
 
+Dans « Rattacher l'entreprise » ou « Ajouter une entreprise du groupe », recherchez une
+entreprise par son nom, son sigle ou son numéro SIREN, même si son nom diffère de la fiche.
+« Ajouter une entreprise » reste grisé tant que l'entreprise principale n'a pas été identifiée
+avec « Rechercher l'effectif » ; le bouton vous en indique la raison.
+
 Les recherches par dénomination sont affinées avec le code postal trouvé dans l'adresse, puis
 les résultats sont classés localement selon leur proximité avec l'adresse de la fiche. Le
 bouton « Élargir la recherche » permet de retirer ce filtre quand il est appliqué.
@@ -160,6 +165,8 @@ groupées et une actualisation depuis la fiche demande une confirmation avant de
 Limite résiduelle entre appareils : lors d'une fusion, la donnée la plus récente gagne champ
 par champ. Une actualisation API plus récente réalisée sur l'autre appareil peut donc
 supplanter une saisie manuelle ; le rapport de fusion signale ce conflit.
+La rubrique « VALEURS LOCALES CONSERVÉES » indique aussi les valeurs plus récentes de cet
+appareil qui ont été gardées à la place de celles, plus anciennes, du fichier.
 
 ## Activité de l'entreprise
 
@@ -213,8 +220,11 @@ Si vous décochez cette case, la personne est durablement retirée des envois.
 
 L'écran Veille montre les catégories, sans jamais proposer « Avocat / EC », la liste des
 destinataires et les fiches écartées. Il explique pourquoi chaque fiche est écartée : elle est
-archivée, en transition, sans courriel, sans convention collective ou sans effectif. Il indique
-aussi le nombre de textes distincts à relire.
+archivée, en transition, sans courriel, sans effectif, ou porte le motif « convention
+collective manquante ». Ce dernier motif ne vise qu'un champ CCN vide ou réglé sur « Autre ».
+Une entreprise qui n'applique aucune convention collective (« Sans CCN ») est bien retenue :
+cette information est transmise telle quelle. L'écran indique aussi le nombre de textes
+distincts à relire.
 
 Le fichier propose deux modes. « Sans aucun nom », proposé par défaut et à choisir à chaque
 fois, ne contient que des situations d'entreprise numérotées : branche, effectif présenté par
@@ -235,8 +245,20 @@ Le seuil d'effectif se renseigne à la main dans la fenêtre de saisie de l'effe
 INSEE ne dit pas si un seuil est franchi et les règles de franchissement diffèrent selon les
 dispositifs.
 
-La validation dans l'application et l'ouverture des courriels arriveront dans la prochaine
-version. D'ici là, recopiez à la main les textes rédigés dans votre messagerie.
+Quand la rédaction est terminée, déposez le fichier de retour. L'application le vérifie, puis
+présente les projets un par un avec leurs destinataires. Vous pouvez corriger un projet pour
+tous ses destinataires, le valider ou le refuser. Une fiche devenue inapte est nommée et
+retirée. Si vous fermez l'application, le dépôt du même fichier reprend au projet suivant.
+Déposez le retour de préférence sur l'appareil qui a préparé l'envoi ; sur un autre appareil,
+l'application retrouve les destinataires depuis ses propres fiches et vous le dit.
+
+Après validation, « Préparer les courriels » propose chaque destinataire séparément. Avant
+chaque clic, une ligne annonce l'ouverture de votre messagerie ou la copie du texte long dans
+le presse-papiers. Dans ce dernier cas, l'objet à recopier s'affiche. Chaque préparation ajoute
+« Veille préparée le » à la fiche, sans compter comme un échange ni modifier les relances,
+le dernier échange ou les rappels. L'application ne sait jamais si un courriel est parti :
+c'est vous qui l'envoyez depuis votre messagerie. Le menu ⋯ › « Journal de la veille » permet
+de relire chaque lancement, son état et les nombres de textes validés, refusés ou restants.
 
 ## Procédures collectives
 
